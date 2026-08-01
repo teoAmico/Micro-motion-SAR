@@ -63,6 +63,9 @@ agreement is blind to artefacts produced by the processing rather than the scene
 gate derived from window geometry refused correct measurements. Each cost hours to establish
 and none is recoverable from the code.
 
+[`docs/DATASETS.md`](docs/DATASETS.md) lists open phase-preserving SAR datasets suitable for
+experiments, with direct catalogue links and notes on their limitations.
+
 ## Build
 
 ```sh

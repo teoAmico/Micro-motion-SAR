@@ -6,52 +6,62 @@ One radar pass is cut into sub-apertures — snapshots of the same ground at dif
 instants — and what moves between them is tracked and turned into a per-window vibration
 spectrum. No second pass, no interferometric stack, no repeat cycle.
 
-## What this is not
+## Why single-pass
 
-It is not a fork of [ResonarSat](../ResonarSat) in aim. That project exists to replicate a
-specific published claim about structures beneath the Great Pyramid, and is bound to
-implement the method as the paper and patent describe it — including where the published
-geometry defeats itself. This project inherits the working parts of that codebase and none
-of the obligation.
+Repeat-pass interferometry measures millimetres per year over days to years. This measures
+millimetres per second within a single dwell, in the band where structures actually resonate.
+They are different instruments for different questions, and almost no open software does the
+second one.
 
-Concretely, it is free to choose things ResonarSat cannot:
-
-- a sub-aperture layout that spans the whole dwell, so `df = 1/T` and the frequency bins do
-  not land on nulls of the averaging response;
-- any reference and any estimator, on merit rather than fidelity;
-- the depth stage: dropped entirely. `rs_tomo_*`, the `paper` and `pair` sub-aperture modes,
-  `--patent-exact` and the assumed-constant depth axis are all gone.
+The targets are stable man-made structures — bridges, dams, towers — under long-dwell
+spotlight coverage, whose dominant modes project usefully onto the satellite line of sight.
+That last condition is a real constraint and no software can check it for you.
 
 ## Status: baseline only
 
-The chain is being rebuilt a stage at a time, each verified before the next is trusted.
-What has been carried over and passes its tests:
+The chain is being built a stage at a time, each verified before the next is trusted. What
+exists and passes its tests:
 
 - readers for CPHD (32-bit float and 16-bit integer samples), SICD and UAVSAR
 - time-domain backprojection
 - sub-aperture decomposition, coregistration, phase linking
-- `validate` — thirteen arithmetic checks on whether a collect can support a measurement
-- the null machinery, `rs_track_fit()`, the consensus statistic and the per-window evidence file
+- `validate` — thirteen arithmetic checks on whether a collect can support the measurement
+  you intend, before any of it is processed
+- null-test machinery, `rs_track_fit()`, a cross-window consensus statistic, and a
+  per-window evidence file written beside every result
 
-19 tests pass. **Nothing here has yet been shown to recover a vibration frequency it was
-not told.** That is the whole of the work ahead.
+19 tests pass. **Nothing here has yet been shown to recover a vibration frequency it was not
+told.** That is the whole of the work ahead, and no output should be read as a demonstrated
+sensitivity until it is.
 
 ## The bar
 
 A result counts when it recovers an injected frequency with **slope near 1 and rms under
 half a bin**, pooled over independent clutter realisations, on real clutter, with a static
-control through identical processing. Not "implements the published method", and not a
-single frequency matched once — that criterion produced five withdrawn conclusions in the
-project this came from.
+control through identical processing.
+
+Not a single frequency matched once. A chain that emits one fixed spurious frequency passes
+a per-point test wherever that value happens to fall near the injection, which is why the
+criterion is a fit across a sweep rather than a comparison at a point.
+
+## A wrong setting does not fail loudly
+
+This is the difficulty that shapes everything here. Ask for a measurement a collect cannot
+support and you do not get an error — you get a complete, well-formed spectrum with a
+confident peak in it, produced by the processing rather than by the ground. A motionless
+scene run through the same settings produces one too, sometimes a stronger one.
+
+Hence `validate` before processing, a null control beside every result, and a consensus
+statistic that can report disagreement instead of a number.
 
 ## Read this before starting
 
-[`docs/FOLLOW-UPS.md`](docs/FOLLOW-UPS.md) is the map of dead ends, carried over deliberately.
-It records, with measurements, that the sub-look images are correct while the tracker does
-not read them; that the reference scheme is not the binding constraint though it looks like
-it; that cross-window agreement is blind to common-mode artefacts; and that a
-geometrically-derived gate refused correct measurements. Each cost hours. None is
-recoverable from the code.
+[`docs/FOLLOW-UPS.md`](docs/FOLLOW-UPS.md) is the map of dead ends. It records, with
+measurements, that sub-look images can be correct while the tracker fails to read them; that
+the reference scheme looks like the binding constraint and is not; that cross-window
+agreement is blind to artefacts produced by the processing rather than the scene; and that a
+gate derived from window geometry refused correct measurements. Each cost hours to establish
+and none is recoverable from the code.
 
 ## Build
 
@@ -61,5 +71,11 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-No external dependencies. C11 and CMake; the FFT is vendored. OpenMP is optional and
-silently absent on macOS unless Homebrew's `libomp` is found — read the configure line.
+No external dependencies. C11 and CMake; the FFT is vendored. `ctest` passes on a fresh
+clone with no data — every test builds its own fixture.
+
+Two build facts that bite: OpenMP is optional and silently absent on macOS unless Homebrew's
+keg-only `libomp` is found, so read the configure line rather than assuming; and
+`-ffast-math` is deliberately absent, because it permits reassociation and flushes denormals,
+which perturbs the sub-pixel correlation peaks and interferometric phase this project
+measures.

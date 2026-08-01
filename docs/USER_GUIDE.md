@@ -19,8 +19,10 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-19 tests, about a minute. No external dependencies and no data needed — every
-test builds its own fixture, so a fresh clone should be green.
+21 tests, about three minutes — `test_cullsweep` is two of those on its own,
+running some sixty full chain passes across two fixture families. No external
+dependencies and no data needed: every test builds its own fixture, so a fresh
+clone should be green.
 
 Watch the configure line for one message:
 

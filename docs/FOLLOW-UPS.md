@@ -1352,3 +1352,81 @@ cell; a persistent dominant scatterer per cell, which is what a built structure
 actually presents; or a physical sub-resolution model. Until one exists, every
 number in items 12a to 12e rests on one fixture family and the coherence gate's
 default has never been tested by anything.
+
+### 12f. The second fixture family is built, and it DISPROVES item 12e's specification
+
+Item 12e specified what a second fixture family had to do -- reach coherence of
+order 0.85 at high overlap -- and said it was "a scene-content change, not a
+parameter", naming a persistent dominant scatterer per cell as the candidate.
+`rs_sim_dominant_patch()` implements exactly that: an 8x8 lattice of dominant
+scatterers, jittered within their cells, over 256 diffuse Rayleigh scatterers
+whose per-cell power is 1/`dominance` of a dominant's.
+
+**The specification was wrong, and the fixture is what proves it.** Coherence
+does not move with dominance at any overlap:
+
+```
+overlap   dominance    predicted    measured min / med / max
+  0.00        0          0.000       0.054 / 0.075 / 0.113
+  0.00        1          0.500       0.054 / 0.074 / 0.121
+  0.00        6          0.857       0.055 / 0.073 / 0.113
+  0.00       30          0.968       0.056 / 0.072 / 0.108
+  0.90        0..30      0.0..0.97   0.145 / 0.19  / 0.31
+  0.98        0..30      0.0..0.97   0.267 / 0.33  / 0.49
+```
+
+Dominance moves the median coherence by **0.022** across a range of 0 to 30.
+Overlap moves it by **0.267** over the same runs -- twelve times more. The
+prediction is wrong by up to a factor of thirteen.
+
+**WHY, AND IT IS THE USEFUL PART.** The model `gamma ~ A^2/(A^2 + S^2)` describes
+decorrelation caused by SPECKLE: the changing interference of comparable
+scatterers within one resolution cell as aspect sweeps. `rs_sim_scene()` has no
+speckle to suppress. Every scatterer is an ideal point carrying analytically
+exact propagation phase, so a scene of 320 of them is exactly as DETERMINISTIC as
+a scene of one, and two sub-looks of it differ only in which aspects were used to
+form them. A dominant scatterer suppresses a random component that was never
+there.
+
+So the coherence this simulator reports is a property of the SUB-LOOK SEPARATION
+and of nothing else a fixture can vary. That is sharper than
+`test_tracking.c`'s standing note that the generator has no sub-resolution
+scatterer model: it means **no fixture built on `rs_sim_scene()` can exercise the
+coherence gate at all**, because the gate's input is invariant to everything such
+a fixture can change. Item 12e's remaining candidates -- more scatterers per
+cell, a physical sub-resolution model -- are not equivalent: the first is
+disproven here along with dominance, and only the second could work, because only
+it introduces the random aspect-dependent component the whole mechanism needs.
+
+**What a third attempt would have to change.** `rs_sim_scene()` itself, not the
+target list. It needs a per-scatterer phase that varies randomly with aspect over
+a finite correlation angle -- which is what a real resolution cell's unresolved
+sub-structure produces -- so that coherence falls off with aspect separation for
+a physical reason rather than a processing one. That is a change to the
+propagation model and it will invalidate the coherence figures of every existing
+test, which is the honest cost of having one.
+
+**THE FIXTURE IS KEPT ANYWAY, on different grounds than it was built for.** Run
+through the same sweep as the clutter family, 6 frequencies x 3 seeds:
+
+```
+                clutter fixture              dominant fixture
+policy      ans  dist  slope    rms      ans  dist  slope    rms
+best         18    6   0.811   0.2360     18    6   0.802   0.8248
+consensus    18    6   1.080   0.3667     18    6   1.596   0.6077
+cull          5    2   1.008   0.0035      3    2   1.008   0.0052
+static answers by the cull: 0 of 3          0 of 3
+```
+
+The structured scene is HARDER for the two spectrum-only policies -- `best`'s rms
+triples -- and the cull's profile is unchanged: it answers less, every answer
+stays inside half a bin, and it refuses every static control. That is the first
+evidence that the cull's precision and null behaviour are not artefacts of the
+fixture they were measured on, which is what items 12d and 12e both flagged as
+the standing weakness. It is now two fixture families, and still one scene
+generator.
+
+**Cost.** `test_cullsweep` runs about two minutes, most of `ctest`'s wall time.
+Deliberate: the alternative is one operating point on one seed, which is what
+items 12a and 12b did and which missed two formulation errors this file found in
+a single run.

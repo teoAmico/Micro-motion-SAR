@@ -27,6 +27,12 @@
  * does and what patch-level offset tracking is built to measure. A lone mover
  * inside static clutter is a detection problem, not a tracking one.
  *
+ * COST. About two minutes: some sixty runs of the whole chain -- focus, track,
+ * spectrum -- across two fixture families, three seeds and two swept thresholds.
+ * That is most of `ctest`'s wall time and it is deliberate. The alternative is
+ * measuring one operating point on one seed, which is what items 12a and 12b did
+ * and which missed two formulation errors that this file found in a single run.
+ *
  * THE BAR, from README.md: slope near 1 and rms under half a bin, pooled over
  * independent clutter realisations, with a static control through identical
  * processing. All four parts are here. What this file ASSERTS is deliberately
@@ -75,6 +81,14 @@ static const double SNR_FACTORS[N_FACTOR] = {
 };
 
 #define N_CLUTTER 96u
+/* The dominant fixture: an 8x8 lattice of dominants over the same 24 m patch,
+ * on 256 diffuse scatterers. The lattice spacing of 3 m is finer than the
+ * sub-look resolution, so a resolution cell holds a few dominants rather than
+ * a fraction of one -- coarser than that and most cells would contain no
+ * dominant at all and the fixture would be its own background. */
+#define N_DOM_SIDE 8u
+#define N_DIFFUSE  256u
+#define N_SCAT     (N_DOM_SIDE * N_DOM_SIDE + N_DIFFUSE)
 #define GRID_N    96u
 #define CELL_M    0.5
 #define N_LOOKS   128u
@@ -150,15 +164,23 @@ static void make_clutter(rs_sim_tgt_t *tg, size_t n, unsigned seed,
  * under test are the cull's, and leaving a second mask in front of them would
  * confound the two.
  */
-static resonarsat_status_t run_once_ov(double freq, double amp, unsigned seed,
-                                       int isolated, double overlap, rs_run_t *out)
+/* Which scene the run builds. RS_FIX_DOMINANT is the second fixture family --
+ * see rs_sim_dominant_patch(). */
+typedef enum { RS_FIX_CLUTTER = 0, RS_FIX_ISOLATED, RS_FIX_DOMINANT } rs_fixture_t;
+
+static resonarsat_status_t run_full(double freq, double amp, unsigned seed,
+                                    rs_fixture_t fixture, double overlap,
+                                    double dominance, rs_run_t *out)
 {
     memset(out, 0, sizeof *out);
     out->best_hz = out->consensus_hz = out->cull_hz = -1.0;
 
-    rs_sim_tgt_t tg[N_CLUTTER];
+    rs_sim_tgt_t tg[N_SCAT];
     size_t n_tgt;
-    if (isolated) {
+    if (fixture == RS_FIX_DOMINANT) {
+        n_tgt = rs_sim_dominant_patch(tg, N_SCAT, N_DOM_SIDE, N_DIFFUSE,
+                                      24.0, dominance, seed, freq, amp);
+    } else if (fixture == RS_FIX_ISOLATED) {
         /* The operating point test_nullmotion.c already demonstrates a
          * recovery at: one target on empty background. It is here as the
          * CONTROL FOR THE POLICIES THEMSELVES -- see the header. */
@@ -169,6 +191,7 @@ static resonarsat_status_t run_once_ov(double freq, double amp, unsigned seed,
         make_clutter(tg, N_CLUTTER, seed, freq, amp);
         n_tgt = N_CLUTTER;
     }
+    if (n_tgt == 0) return RS_ERR_ARG;
 
     rs_cphd_t c;
     resonarsat_status_t st = rs_sim_scene(&c, tg, n_tgt, 20.0, 400.0, 256, 0.5);
@@ -315,7 +338,16 @@ static resonarsat_status_t run_once_ov(double freq, double amp, unsigned seed,
     return RS_OK;
 }
 
-/* The zero-overlap call every row of the sweep uses. */
+/* The zero-overlap calls every row of the sweeps above uses. */
+static resonarsat_status_t run_once_ov(double freq, double amp, unsigned seed,
+                                       int isolated, double overlap,
+                                       rs_run_t *out)
+{
+    return run_full(freq, amp, seed,
+                    isolated ? RS_FIX_ISOLATED : RS_FIX_CLUTTER,
+                    overlap, 0.0, out);
+}
+
 static resonarsat_status_t run_once(double freq, double amp, unsigned seed,
                                     int isolated, rs_run_t *out)
 {
@@ -830,6 +862,131 @@ int main(void)
          * gate on this fixture means anything. When a fixture that can reach it
          * exists, this fails and forces the finding to be revisited. */
         RS_CHECK(reach < 0.4);
+    }
+
+    RS_CASE("the dominant-scatterer fixture reaches the coherence regime");
+    {
+        /* THE POINT OF THE SECOND FIXTURE FAMILY, and the only claim that
+         * justifies its existence: it must reach a coherence the first one
+         * cannot. The first tops out at 0.323 with 95 percent overlap; the
+         * gate's default is 0.4 and a real collect measures 0.85.
+         *
+         * Dominance is swept rather than set, because a fixture with one
+         * hand-picked ratio is a fixture tuned to give an answer. The
+         * prediction from rs_sim_dominant_patch()'s derivation is
+         * gamma ~ A^2/(A^2 + S^2), i.e. gamma = dominance/(1 + dominance), and
+         * the measured column is what says whether that model describes this
+         * scene or merely sounds like it. */
+        printf("    dominant fixture, zero overlap, coherence min/med/max:\n");
+        const double doms[] = { 0.0, 1.0, 6.0, 30.0 };
+        const double ovs2[] = { 0.0, 0.9, 0.98 };
+        double reach = 0.0, dom_spread = 0.0, ov_spread = 0.0;
+        double med_at_ov0 = 0.0, med_at_ovhi = 0.0;
+        for (size_t j = 0; j < sizeof ovs2 / sizeof ovs2[0]; j++) {
+            double lo_med = 1e9, hi_med = -1e9;
+            for (size_t i = 0; i < sizeof doms / sizeof doms[0]; i++) {
+                rs_run_t r;
+                RS_CHECK_OK(run_full(0.5, amp, 7u, RS_FIX_DOMINANT, ovs2[j],
+                                     doms[i], &r));
+                const double pred = doms[i] / (1.0 + doms[i]);
+                printf("      ov %.2f  dom %5.1f  predict %.3f   %.3f / %.3f / %.3f\n",
+                       ovs2[j], doms[i], pred, r.q_lo, r.q_med, r.q_hi);
+                if (r.q_med > reach) reach = r.q_med;
+                if (r.q_med < lo_med) lo_med = r.q_med;
+                if (r.q_med > hi_med) hi_med = r.q_med;
+            }
+            /* The spread the DOMINANCE produces at one overlap, against the
+             * spread the OVERLAP produces. If the first is small and the second
+             * is not, scene content is not what sets this number. */
+            if (hi_med - lo_med > dom_spread) dom_spread = hi_med - lo_med;
+            if (j == 0) med_at_ov0 = hi_med;
+            med_at_ovhi = hi_med;
+        }
+        ov_spread = med_at_ovhi - med_at_ov0;
+        printf("    highest MEDIAN coherence reached: %.3f "
+               "(clutter fixture: 0.244 at 95%% overlap)\n", reach);
+
+        /* THE RESULT IS NEGATIVE AND IT IS ASSERTED AS SUCH.
+         *
+         * Coherence does not move with dominance at any overlap -- 0.075 at
+         * zero, 0.19 at 0.90, 0.23 at 0.95, 0.33 at 0.98, the same to within
+         * noise across a dominance range of 0 to 30. The prediction column is
+         * wrong by up to a factor of thirteen, and it is wrong because its
+         * premise is wrong: gamma ~ A^2/(A^2+S^2) describes decorrelation
+         * caused by SPECKLE, the changing interference of comparable scatterers
+         * within a cell. rs_sim_scene() has no speckle to suppress. Every
+         * scatterer is an ideal point with analytically exact phase, so a scene
+         * of 320 of them is exactly as deterministic as a scene of one, and two
+         * sub-looks of it differ only in which aspects were used to form them.
+         *
+         * So the coherence this simulator reports is a property of the SUB-LOOK
+         * SEPARATION and of nothing else a fixture can vary. That is a stronger
+         * statement than "there is no sub-resolution model", which
+         * test_tracking.c already made: it means NO fixture built on this scene
+         * generator can exercise the coherence gate, because the gate's input is
+         * invariant to everything such a fixture can change.
+         *
+         * Both halves are asserted so the day the generator gains a random
+         * aspect-dependent component, this fails and forces the finding to be
+         * rewritten. */
+        RS_CHECK(reach < 0.4);
+        RS_CHECK(fabs(dom_spread) < 0.05);
+        printf("    coherence spread across dominance 0..30 at fixed overlap: "
+               "%.4f (overlap moves it by %.3f)\n", dom_spread, ov_spread);
+        RS_CHECK(ov_spread > 4.0 * fabs(dom_spread));
+    }
+
+    RS_CASE("what the dominant fixture changes for the SELECTION policies");
+    {
+        /* It cannot test the coherence gate. The question left is whether it is
+         * worth keeping for anything else -- specifically whether a scene with
+         * SPATIAL STRUCTURE, dominants on a lattice rather than a uniform
+         * speckle patch, changes what the three policies do. It should if
+         * anything does: gate 3 is a spatial test, and the clutter patch gives
+         * the window grid nothing to lock onto. */
+        double d_inj[32], d_best[32], d_cons[32], d_cull[32];
+        size_t nd = 0, d_static = 0;
+        printf("    dominance 6, zero overlap, %zu freqs x %zu seeds:\n",
+               n_freq, n_seed);
+        for (size_t si = 0; si < n_seed; si++) {
+            for (size_t fi = 0; fi < n_freq; fi++) {
+                rs_run_t r;
+                RS_CHECK_OK(run_full(freqs[fi], amp, seeds[si],
+                                     RS_FIX_DOMINANT, 0.0, 6.0, &r));
+                d_inj[nd] = freqs[fi];
+                d_best[nd] = r.best_hz;
+                d_cons[nd] = r.consensus_hz;
+                d_cull[nd] = r.cull_hz;
+                nd++;
+            }
+        }
+        for (size_t si = 0; si < n_seed; si++) {
+            rs_run_t r;
+            RS_CHECK_OK(run_full(0.0, 0.0, seeds[si], RS_FIX_DOMINANT,
+                                 0.0, 6.0, &r));
+            if (r.cull_hz >= 0.0) d_static++;
+        }
+
+        double a1 = 0, r1 = 0, a2 = 0, r2 = 0, a3 = 0, r3 = 0;
+        size_t k1 = 0, k2 = 0, k3 = 0;
+        const size_t m1 = fit_policy(d_inj, d_best, nd, &a1, &r1, &k1);
+        const size_t m2 = fit_policy(d_inj, d_cons, nd, &a2, &r2, &k2);
+        const size_t m3 = fit_policy(d_inj, d_cull, nd, &a3, &r3, &k3);
+        printf("    %-10s %8s %9s %10s %9s\n",
+               "policy", "answers", "distinct", "slope", "rms Hz");
+        print_fit("best",      m1, k1, a1, r1);
+        print_fit("consensus", m2, k2, a2, r2);
+        print_fit("cull",      m3, k3, a3, r3);
+        printf("    cull answered %zu of %zu static scenes\n", d_static, n_seed);
+        printf("    (clutter fixture, same sweep: best 18/6 slope 0.811 rms "
+               "0.2360; cull 5/2)\n");
+
+        /* The null behaviour has to survive the change of fixture, or the
+         * policy was fitted to the first one. That is the assertion; the rest
+         * of the comparison is printed, because which fixture is HARDER is not
+         * something to assert from three seeds. */
+        RS_CHECK(d_static == 0);
+        RS_CHECK(nd == n_freq * n_seed);
     }
 
     RS_CASE("the fit criterion can still reject a fixed answer");

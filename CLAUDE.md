@@ -19,7 +19,7 @@ code, and several conclusions in it reversed after further measurement.
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
-ctest --test-dir build --output-on-failure          # 19 tests
+ctest --test-dir build --output-on-failure          # 21 tests, ~3 min
 ```
 
 ```sh
@@ -170,9 +170,17 @@ about any constant.
 
 `tests/test_cullsweep.c` also measures what this fixture family can reach: coherence tops
 out at 0.323 even at 95% overlap, against a `--coherence` default of 0.4 and a real
-collect's 0.85. **The coherence gate has never been tested by anything**, and a second
-fixture family that reaches ~0.85 at high overlap is the prerequisite for testing it —
-a scene-content change, not a parameter (item 12e).
+collect's 0.85. **The coherence gate has never been tested by anything**, and item 12f shows why no
+fixture built on `rs_sim_scene()` can test it: every scatterer carries analytically
+exact phase, so coherence there is set by sub-look separation alone and is invariant
+to scene content — a dominant-scatterer fixture was built and moves it by 0.022 where
+overlap moves it by 0.267. Testing that gate needs a change to the propagation model
+itself, not to the target list.
+
+`tests/rs_sim.h` now carries two fixture families: `make_clutter`-style uniform speckle
+and `rs_sim_dominant_patch()`, dominants on a lattice over a diffuse background. The
+second is harder for the spectrum-only policies and leaves the cull's profile unchanged,
+which is the only cross-fixture evidence any of this has.
 
 `--reference pair` and `--reference adjacent` do not recover a frequency on the
 synthetic fixture and are exposed because the sources describe them, not because they

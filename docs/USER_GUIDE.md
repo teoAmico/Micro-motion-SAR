@@ -375,6 +375,85 @@ the visible peak is legible at a glance. A peak that barely clears its
 neighbours, or a marker sitting beside a taller bin, tells you more than the
 frequency does.
 
+### Reading the axes and colour bars
+
+Each figure labels its own units — `HZ`, `0-1`, and `POWER, (M/S)^2/HZ` or
+`POWER, M^2/HZ` depending on the estimator. What each axis means, and what it
+does not say:
+
+**`PREFIX_spectrum.png`.** One window's spectrum, the one named in the title.
+
+- *x, `FREQUENCY, HZ`* — spans 0 to the Nyquist of the **sub-look rate**, not the
+  PRF: `fs = 1/dt` with `dt` the time between sub-apertures, so the axis ends at
+  `fs/2` and the bin spacing is `df = fs/n_looks`, printed in the header of
+  `PREFIX_windows.csv` as `df_hz`. Nothing about the collect's pulse rate
+  appears here. Bins below `--fmin` are still drawn but are excluded from
+  peak-picking, so a tall spike at the far left can be one the picker was told to
+  ignore.
+- *y, `POWER, (M/S)^2/HZ`* — the one-sided **power spectral density** of that
+  window's tracked series: `|X(f)|²` normalised by the Hann window's power and by
+  `fs`, with interior bins doubled for the one-sided fold. Summing the curve
+  times `df` returns the variance of the detrended series, which fixes the units.
+  Which series it is depends on the estimator, and so does the label:
+
+  | estimator | series transformed | y axis label |
+  |---|---|---|
+  | `correlation` (default), `splitband` | line-of-sight **velocity**, `v_r = dx·V/R` | `POWER, (M/S)^2/HZ` |
+  | `phase` | line-of-sight **displacement**, `d = -ψλ/4π` | `POWER, M^2/HZ` |
+
+  So the figure states which observable produced it, and `mmotion` also prints a
+  line saying so when the estimator is `phase`. The split is deliberate: `phase` measures
+  displacement directly, and taking its spectrum through velocity would
+  differentiate the series first, multiplying every component by its own
+  frequency and tilting a flat noise floor blue. Measured on the Giza control,
+  that put the median dominant frequency at 20.7 Hz with 47 of 49 windows above
+  12 Hz, against 0.53 Hz and none above 12 Hz through displacement. The 20.7 Hz
+  was an artefact of differencing.
+- *The absolute height is not calibrated.* Read ratios inside one plot, never the
+  number itself and never a height against another run's. Patch size biases the
+  tracked magnitude systematically, and `--reference adjacent`/`lag` are first
+  differences whose `|2·sin(π·f·lag·dt)|` response rescales the axis as a
+  function of frequency. This is the same limitation that makes the `amplitude`
+  field qualitative — see `microm.h`. What the axis is *for* is prominence: peak
+  over the surrounding floor, which is the statistic `rs_spectrum_best_window()`
+  selects on. That is why y starts at zero rather than at min(y); a cropped
+  baseline would manufacture prominence the data does not contain.
+- *The red dashed line* is the picked bin, not the truth.
+
+**`PREFIX_freq.png`.** Dominant frequency per window, colour bar in Hz.
+
+- Rows run along **azimuth**, columns along **range**; window `w` in the CSV and
+  in the spectrum title is at row `w / n_win_rg`, column `w % n_win_rg`, matching
+  the `iaz`,`irg` columns of `PREFIX_windows.csv`.
+- The bar is **autoscaled to this map's own min and max**, so an identical colour
+  in two runs means nothing — always read the numbers on the bar. Viridis runs
+  dark purple at the low end to yellow at the high end.
+- **Every window is coloured, including the ones the gates and the consensus
+  rejected.** The map is not a filtered result and it is not the answer; a
+  patchwork of unrelated colours across the grid is what a failed measurement
+  normally looks like. `passed_gates` and `agrees_with_consensus` in the CSV are
+  what separates them.
+- A non-finite value clamps to the bottom of the ramp, so the darkest block can
+  be a genuine minimum or a window with no answer at all. The CSV disambiguates.
+- **A window masked by `--coherence` has its series zeroed, not marked absent.**
+  Its spectrum is then flat zero and the peak-picker returns the lowest
+  admissible bin, so masked windows all report exactly `df_hz` (or the first bin
+  above `--fmin`). A patch of identical low-frequency cells at that one value is
+  a mask, not a measurement — check `quality` and `passed_gates` in the CSV. The
+  same thing happens to the whole map if the collect carried no usable geometry:
+  the azimuth-shift-to-velocity conversion is skipped rather than guessed when
+  `az_spacing`, platform speed or slant range is missing, which leaves every
+  velocity series zero.
+
+**`PREFIX_quality.png`.** Mean correlation-peak value per window, in [0,1]. This
+bar is **fixed at 0–1**, not autoscaled, so unlike the frequency map it is
+comparable across runs. It is the quantity the `--coherence` gate thresholds.
+
+**The caption under both maps** — `7 X 7 WINDOWS, 60 PX EACH` — gives the grid
+size and how many *screen* pixels one window block was drawn as. The 60 is a zoom
+factor chosen to make the figure legible; it is not the correlation patch size
+and not a resolution. The patch size is `--win`.
+
 The CSV is the one to keep. Every earlier result in this project kept the answer
 and discarded what produced it, so later questions about the selection policy
 could not be asked without reprocessing the collect. It costs one small text file
@@ -447,6 +526,11 @@ peak, and runs serially. Backprojection is bitwise identical either way.
   those differ by half a swath. See `docs/FOLLOW-UPS.md` item 5.
 - **The amplitude field is qualitative.** Frequencies recover where relative
   amplitudes do not. Label it as such wherever it is presented.
+- **The frequency map's colour bar is autoscaled to that map**, so the same
+  colour in two runs is not the same frequency, and a window masked by
+  `--coherence` reports the lowest bin rather than being marked absent. The
+  spectrum's y axis carries its units, but its absolute height is uncalibrated —
+  read prominence, not amplitude. Section 8 has the details.
 - **`-ffast-math` must stay out of the build.** It permits reassociation and
   flushes denormals, which perturbs exactly the sub-pixel correlation peaks and
   interferometric phase this project measures.

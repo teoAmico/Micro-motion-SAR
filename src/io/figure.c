@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* A 5x7 fixed font covering ASCII 32 ('space') through 90 ('Z').
+/* A 5x7 fixed font covering ASCII 32 ('space') through 95 ('_').
  *
  * Column-major: each glyph is five bytes, one per column left to right, and
  * within a byte bit 0 is the top row and bit 6 the bottom. This is the layout
@@ -13,8 +13,13 @@
  * is not -- it is the one form of this table that can be checked against a
  * published reference rather than redrawn by eye.
  *
+ * The range runs past 'Z' to '_' for one reason: axis units. A power spectral
+ * density is (M/S)^2/HZ, and with the table stopping at 'Z' the caret rendered
+ * as the missing-glyph box, which left the only two honest ways to write the
+ * label as an ASCII approximation or no units at all. See rs_cmd_mmotion().
+ *
  * Index with (c - 32) after the range check in rs_fig_glyph(). */
-static const unsigned char rs_font5x7[59][RS_FIG_GLYPH_W] = {
+static const unsigned char rs_font5x7[64][RS_FIG_GLYPH_W] = {
     { 0x00, 0x00, 0x00, 0x00, 0x00 },   /* space */
     { 0x00, 0x00, 0x5F, 0x00, 0x00 },   /* ! */
     { 0x00, 0x07, 0x00, 0x07, 0x00 },   /* " */
@@ -73,7 +78,12 @@ static const unsigned char rs_font5x7[59][RS_FIG_GLYPH_W] = {
     { 0x3F, 0x40, 0x38, 0x40, 0x3F },   /* W */
     { 0x63, 0x14, 0x08, 0x14, 0x63 },   /* X */
     { 0x07, 0x08, 0x70, 0x08, 0x07 },   /* Y */
-    { 0x61, 0x51, 0x49, 0x45, 0x43 }    /* Z */
+    { 0x61, 0x51, 0x49, 0x45, 0x43 },   /* Z */
+    { 0x00, 0x7F, 0x41, 0x41, 0x00 },   /* [ */
+    { 0x02, 0x04, 0x08, 0x10, 0x20 },   /* backslash */
+    { 0x00, 0x41, 0x41, 0x7F, 0x00 },   /* ] */
+    { 0x04, 0x02, 0x01, 0x02, 0x04 },   /* ^ */
+    { 0x40, 0x40, 0x40, 0x40, 0x40 }    /* _ */
 };
 
 /* The glyph a character renders as, after upcasing.
@@ -86,7 +96,7 @@ static const unsigned char *rs_fig_glyph(char c)
     static const unsigned char box[RS_FIG_GLYPH_W] = { 0x7F, 0x7F, 0x7F, 0x7F, 0x7F };
 
     if (c >= 'a' && c <= 'z') c = (char)(c - ('a' - 'A'));
-    if (c < 32 || c > 90) return box;
+    if (c < 32 || c > 95) return box;
     return rs_font5x7[(unsigned char)c - 32u];
 }
 

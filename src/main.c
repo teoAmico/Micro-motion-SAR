@@ -1712,9 +1712,17 @@ static int rs_cmd_mmotion(int argc, char **argv)
                      "SPECTRUM OF WINDOW %zu (MOST PROMINENT OF %zu)",
                      best, spec.n_win);
             snprintf(path, sizeof path, "%s_spectrum.png", prefix);
+            /* The y unit follows the observable, and the figure has to say
+             * which. It is a one-sided density, so the axis is the square of
+             * the transformed series per hertz: velocity for every estimator
+             * but 'phase', which measures displacement directly. A bare "POWER"
+             * left the two indistinguishable in a saved figure, and nothing in
+             * the picture recorded which estimator produced it. */
+            const char *y_label = (src == RS_SPEC_DISPLACEMENT)
+                                ? "POWER, M^2/HZ" : "POWER, (M/S)^2/HZ";
             rs_raster_write_plot(spec.freq, spec.psd + best * spec.n_freq,
                                  spec.n_freq, path, plot_title,
-                                 "FREQUENCY, HZ", "POWER",
+                                 "FREQUENCY, HZ", y_label,
                                  spec.dominant_freq[best]);
         }
 

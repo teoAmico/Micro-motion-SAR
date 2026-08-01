@@ -16,12 +16,14 @@
  * font. The cost is that this is a rasteriser with no anti-aliasing, no
  * kerning, and no glyph beyond the ones tabulated below.
  *
- * TEXT IS UPPERCASE. The font covers ASCII 32 to 90, space through 'Z' -- the
- * digits, the punctuation that appears in a number, and the capitals. Lowercase
- * input is upcased rather than dropped, so a caller may pass "quality" and get
- * "QUALITY"; anything outside the range renders as a filled box, which is
- * visible as a defect instead of silently vanishing. Restricting the range
- * halves the table and costs nothing a scientific figure needs. */
+ * TEXT IS UPPERCASE. The font covers ASCII 32 to 95, space through '_' -- the
+ * digits, the punctuation that appears in a number and in a unit, and the
+ * capitals. Lowercase input is upcased rather than dropped, so a caller may pass
+ * "quality" and get "QUALITY"; anything outside the range renders as a filled
+ * box, which is visible as a defect instead of silently vanishing. Restricting
+ * the range still halves the table and costs nothing a scientific figure needs.
+ * It stops at '_' rather than 'Z' so that '^' exists: an axis whose unit is
+ * (M/S)^2/HZ cannot be labelled without it. */
 
 #ifndef RS_IO_FIGURE_H
 #define RS_IO_FIGURE_H
@@ -77,7 +79,7 @@ void rs_fig_line(rs_fig_t *f, long x0, long y0, long x1, long y1,
  * 'scale' by 'scale' block. A scale below 1 is treated as 1.
  *
  * See the note at the top of this file: the text is rendered uppercase, and
- * characters outside ASCII 32-90 render as a filled box. */
+ * characters outside ASCII 32-95 render as a filled box. */
 void rs_fig_text(rs_fig_t *f, long x, long y, const char *s, int scale,
                  const unsigned char rgb[3]);
 

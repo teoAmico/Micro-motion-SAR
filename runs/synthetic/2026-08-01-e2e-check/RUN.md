@@ -69,6 +69,17 @@ than rebuilding it per trial. Not attempted here.
 `e2e_freq.png`, `e2e_quality.png`, `e2e_spectrum.png`, `e2e_windows.csv`,
 `stdout.log`, `stderr.log`.
 
+**`e2e_spectrum.png` was regenerated later the same day**, after the y axis
+learned to state its units: it read a bare `POWER` and now reads
+`POWER, (M/S)^2/HZ`, which is what the correlation estimator's observable
+actually is. Nothing else about it changed. The regeneration re-ran `sim_cphd`
+and the `mmotion` line above verbatim, minus `--null-static 5`, which touches no
+figure; `e2e_freq.png`, `e2e_quality.png` and `e2e_windows.csv` came back
+bit-for-bit identical and every number printed to stdout matched, so the plot
+below is this run's plot with a corrected label rather than a second run's.
+`stdout.log` and `stderr.log` are the originals and still carry the null-control
+trials, which were not repeated.
+
 The scene and its truth file are gitignored (`*.cphd`, `*.cphd.truth`);
 regenerate with the `sim_cphd` line above, which is deterministic under
 `--seed 7`.

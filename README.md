@@ -79,3 +79,9 @@ keg-only `libomp` is found, so read the configure line rather than assuming; and
 `-ffast-math` is deliberately absent, because it permits reassociation and flushes denormals,
 which perturbs the sub-pixel correlation peaks and interferometric phase this project
 measures.
+
+## Running it
+
+[`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) covers the four subcommands, the flags that
+decide whether a large collect fits in memory, and how to read what `mmotion` prints —
+including its two refusal paths, which are the output you should expect most often.

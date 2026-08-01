@@ -1798,11 +1798,42 @@ needs one, and then:
 - `RS_VALIDATE_PHASE_FLOOR` should be the sensitivity check for phase, and is
   already computed.
 
-Until that exists, a phase run has to read the findings individually and ignore
-the verdict, which is precisely the habit `validate` was built to make
-unnecessary. **Recorded rather than fixed** because the Giza run this was found on
-is the more urgent thing; but a validate that cries wolf will be ignored, and then
-it will be ignored on the day it is right.
+### Item 16, RESOLVED: `validate` takes an estimator
+
+`rs_validate_req_t` now carries one, `validate --estimator correlation|phase|
+splitband` sets it, and it defaults to correlation so that every result recorded
+before this change is reproduced exactly. On the Giza configuration of item 17:
+
+```
+                correlation                       phase
+observable band FAIL, averaging ceiling 0.304 Hz  PASS, sampling ceiling 3.042 Hz
+sensitivity     FAIL, 6.874 mm at a 7 px floor    UNKNOWN, defers to phase floor
+ambiguity       FAIL, ceiling below the floor     PASS, 2.00 mm is 0.19x the fold
+phase floor     PASS, "bounds only its phase refinement"
+                                                  PASS, "THE sensitivity bound"
+VERDICT         FAIL                              WARN
+```
+
+The remaining WARN is the observation ratio, which is a genuine warning at eta
+1.64 and is estimator-independent.
+
+**The ambiguity check reports rather than declines, and that was the interesting
+decision.** Returning UNKNOWN for the phase route would have been the easy fix and
+the wrong one: that route HAS an ambiguity, the lambda/4 line-of-sight fold, and
+it is far tighter than the pixel wrap. At Giza's 39.5 degree incidence it caps a
+vertical amplitude at 10.4 mm; the 20 mm the correlation fixtures inject is 1.9x
+that and now FAILS with the reason, which is exactly the mistake item 14's caveats
+warn about and could not previously be caught in advance.
+
+**Sensitivity returns UNKNOWN, not PASS.** The enum has three outcomes for a
+reason -- `validate.h` says UNKNOWN "is a different thing from a pass and is
+reported separately so it cannot be mistaken for one" -- and a check that cannot
+answer must not look like one that answered favourably. `WORST()` promotes only
+on FAIL and WARN, so an UNKNOWN never flatters a verdict.
+
+Three cases in `test_validate.c` pin it: the two estimators judged differently on
+one configuration with the correlation verdict asserted unchanged, the lambda/4
+fold passing at 2 mm and failing at 20, and the default staying correlation.
 
 ---
 

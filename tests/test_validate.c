@@ -398,5 +398,100 @@ int main(void)
         RS_CHECK_REL(amp[0], 2.0 * amp[1], 0.02);
     }
 
+    /* ------------------------------------------------------------------
+     * ESTIMATOR AWARENESS.
+     *
+     * Four checks answer differently for different observables. Before
+     * rs_validate_req_t.estimator existed they all answered for the correlator,
+     * and the Giza collect at 0.90 overlap therefore returned VERDICT: FAIL for
+     * a phase configuration on three checks stated in tracking pixels -- a
+     * quantity that estimator never forms. FOLLOW-UPS.md items 16 and 17.
+     * ------------------------------------------------------------------ */
+    RS_CASE("the same configuration is judged differently for phase and correlation");
+    {
+        /* The Giza operating point of runs/giza/2026-08-01-phase-highoverlap,
+         * which is the run that exposed this. */
+        rs_validate_req_t r;
+        giza(&r);
+        r.target_freq_hz = 1.0;
+        r.target_amp_m = 0.002;
+        r.overlap = 0.90;
+        r.alpha = 0.05;
+
+        r.estimator = RS_MICROM_EST_CORRELATION;
+        const rs_validate_level_t v_corr = rs_validate(&r, f, &n);
+        const rs_validate_level_t band_c = find(f, n, RS_VALIDATE_BAND)->level;
+        const rs_validate_level_t sens_c = find(f, n, RS_VALIDATE_SENSITIVITY)->level;
+        const rs_validate_level_t amb_c  = find(f, n, RS_VALIDATE_AMBIGUITY)->level;
+
+        r.estimator = RS_MICROM_EST_PHASE;
+        const rs_validate_level_t v_ph = rs_validate(&r, f, &n);
+        const rs_validate_level_t band_p = find(f, n, RS_VALIDATE_BAND)->level;
+        const rs_validate_level_t sens_p = find(f, n, RS_VALIDATE_SENSITIVITY)->level;
+        const rs_validate_level_t amb_p  = find(f, n, RS_VALIDATE_AMBIGUITY)->level;
+
+        printf("    correlation: band %s sensitivity %s ambiguity %s -> %s\n",
+               rs_validate_level_str(band_c), rs_validate_level_str(sens_c),
+               rs_validate_level_str(amb_c), rs_validate_level_str(v_corr));
+        printf("    phase:       band %s sensitivity %s ambiguity %s -> %s\n",
+               rs_validate_level_str(band_p), rs_validate_level_str(sens_p),
+               rs_validate_level_str(amb_p), rs_validate_level_str(v_ph));
+
+        /* The correlation verdict is the one every recorded result was produced
+         * under and must not move. */
+        RS_CHECK(band_c == RS_V_FAIL);
+        RS_CHECK(sens_c == RS_V_FAIL);
+        RS_CHECK(amb_c  == RS_V_FAIL);
+        RS_CHECK(v_corr == RS_V_FAIL);
+
+        /* And the phase route is no longer refused for the correlator's
+         * reasons. Sensitivity is UNKNOWN rather than PASS: the question is
+         * unanswered here, not answered favourably. */
+        RS_CHECK(band_p == RS_V_PASS);
+        RS_CHECK(sens_p == RS_V_UNKNOWN);
+        RS_CHECK(amb_p  == RS_V_PASS);
+        RS_CHECK(v_ph != RS_V_FAIL);
+    }
+
+    RS_CASE("the phase route's ambiguity is the lambda/4 fold, and it can fail");
+    {
+        /* Declining to answer would have been the easy fix and the wrong one:
+         * the phase route HAS an ambiguity, it is tighter than the pixel wrap,
+         * and a caller bringing a correlation-sized target needs to be told
+         * before spending an hour rather than after. */
+        rs_validate_req_t r;
+        giza(&r);
+        r.target_freq_hz = 1.0;
+        r.overlap = 0.90;
+        r.estimator = RS_MICROM_EST_PHASE;
+
+        r.target_amp_m = 0.002;                 /* 0.19x the fold */
+        rs_validate(&r, f, &n);
+        const rs_validate_finding_t *ok = find(f, n, RS_VALIDATE_AMBIGUITY);
+        RS_CHECK(ok != NULL && ok->level == RS_V_PASS);
+
+        r.target_amp_m = 0.020;                 /* the correlation fixtures' 20 mm */
+        rs_validate(&r, f, &n);
+        const rs_validate_finding_t *bad = find(f, n, RS_VALIDATE_AMBIGUITY);
+        RS_CHECK(bad != NULL && bad->level == RS_V_FAIL);
+        printf("    %s\n", bad->detail);
+
+        /* With no amplitude given it is a ceiling, not a verdict. */
+        r.target_amp_m = 0.0;
+        rs_validate(&r, f, &n);
+        const rs_validate_finding_t *none = find(f, n, RS_VALIDATE_AMBIGUITY);
+        RS_CHECK(none != NULL && none->level == RS_V_UNKNOWN);
+    }
+
+    RS_CASE("the default estimator is correlation, so old callers are unaffected");
+    {
+        /* rs_validate_req_default() must keep answering for the correlator: a
+         * caller that predates the field gets the behaviour its results were
+         * measured under, not a quietly different one. */
+        rs_validate_req_t r;
+        rs_validate_req_default(&r);
+        RS_CHECK(r.estimator == RS_MICROM_EST_CORRELATION);
+    }
+
     RS_TEST_END();
 }

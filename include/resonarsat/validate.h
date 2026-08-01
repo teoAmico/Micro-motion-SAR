@@ -27,6 +27,7 @@
 
 #include <stddef.h>
 
+#include "resonarsat/microm.h"
 #include "resonarsat/resonarsat.h"
 
 /* How much a finding should worry the caller.
@@ -93,6 +94,43 @@ typedef struct {
      * set them to check a specific configuration. */
     size_t win;
     double coherence_min;
+
+    /* WHICH OBSERVABLE THE RUN WILL USE, because four of the checks below mean
+     * different things for different ones and three of them were silently
+     * answering for the correlator alone.
+     *
+     * THE COST OF NOT HAVING THIS WAS MEASURED. The Giza collect at 0.90 overlap
+     * with the phase estimator returned VERDICT: FAIL on three checks -- the
+     * observable band, the sensitivity and the ambiguity -- all three of which
+     * are the correlation tracker's limits expressed in TRACKING PIXELS, a
+     * quantity an estimator reading pixel phase never forms. The one check
+     * written for that observable, the phase floor, passed with room to spare.
+     * A user following the documented order would have stopped on a refusal that
+     * was about a different estimator. See FOLLOW-UPS.md items 16 and 17.
+     *
+     * What changes with it:
+     *
+     *   RS_VALIDATE_BAND        the averaging ceiling 1/(2*t_sap) governs the
+     *                           correlation route, whose observable IS the
+     *                           sub-aperture-averaged position. The phase route
+     *                           reads sidebands the averaging moves energy into
+     *                           and is bounded by the SAMPLING ceiling 1/(2*dt)
+     *                           instead -- measured recovering an injection at a
+     *                           sub-aperture response of 0.055.
+     *   RS_VALIDATE_SENSITIVITY reports RS_V_UNKNOWN for the phase route and
+     *                           defers to the phase floor, which is the same
+     *                           question asked in the right units.
+     *   RS_VALIDATE_AMBIGUITY   the pixel wrap for the correlation route; the
+     *                           lambda/4 phase fold for the phase route, which
+     *                           is a real and much tighter limit rather than an
+     *                           inapplicable one.
+     *   RS_VALIDATE_PHASE_FLOOR is computed either way, and says which route it
+     *                           governs.
+     *
+     * Defaults to RS_MICROM_EST_CORRELATION, matching
+     * rs_microm_params_default(), so a caller that does not set it gets the
+     * behaviour every recorded result was produced under. */
+    rs_microm_estimator_t estimator;
 } rs_validate_req_t;
 
 /* One check's verdict, with the number behind it. */

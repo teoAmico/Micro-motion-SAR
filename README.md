@@ -37,7 +37,9 @@ exists and passes its tests:
 - time-domain backprojection
 - sub-aperture decomposition, coregistration, phase linking
 - `validate` — thirteen arithmetic checks on whether a collect can support the measurement
-  you intend, before any of it is processed
+  you intend, before any of it is processed, answered for the `--estimator` you will
+  actually run with: four of them mean different things for a correlation observable and
+  a phase one
 - null-test machinery, `rs_track_fit()`, a cross-window consensus statistic, an
   ampcor-style cull on what the correlation surfaces themselves say, and a
   per-window evidence file written beside every result
@@ -86,9 +88,11 @@ statistic that can report disagreement instead of a number.
 [`docs/FOLLOW-UPS.md`](docs/FOLLOW-UPS.md) is the map of dead ends. It records, with
 measurements, that sub-look images can be correct while the tracker fails to read them; that
 the reference scheme looks like the binding constraint and is not; that cross-window
-agreement is blind to artefacts produced by the processing rather than the scene; and that a
-gate derived from window geometry refused correct measurements. Each cost hours to establish
-and none is recoverable from the code.
+agreement is blind to artefacts produced by the processing rather than the scene; that a
+gate derived from window geometry refused correct measurements; and that the tool built to
+warn before an expensive run spent two years answering every question for one estimator, and
+so refused a configuration that was correct. Each cost hours to establish and none is
+recoverable from the code.
 
 [`docs/DATASETS.md`](docs/DATASETS.md) lists open phase-preserving SAR datasets suitable for
 experiments, with direct catalogue links and notes on their limitations.

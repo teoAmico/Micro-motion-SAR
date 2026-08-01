@@ -261,6 +261,20 @@ Every check is arithmetic on the geometry and costs milliseconds; only the file
 read is slow, and it keeps 8 range bins. Run it before committing to a job that
 takes an hour.
 
+**Pass the same `--estimator` you intend to run with.** Four checks answer
+differently for different observables, and the default is `correlation`:
+
+| check | correlation | phase |
+|---|---|---|
+| observable band | the sub-aperture **averaging** ceiling `1/(2·t_sap)` — its observable *is* the averaged position | the **sampling** ceiling `1/(2·dt)`, because it reads sidebands the averaging moves energy into |
+| sensitivity | a tracking-pixel artefact floor | **unknown** — that quantity is never formed; defers to the phase floor |
+| ambiguity | the pixel wrap ceiling against the artefact floor | the **λ/4 line-of-sight fold**, ~10 mm of vertical amplitude at 40° incidence |
+| phase floor | bounds only the phase refinement | *the* sensitivity bound |
+
+On the Giza collect at 90% overlap this is the difference between `VERDICT: FAIL`
+and `VERDICT: WARN` for the same configuration — three of the four failures were
+the correlator's limits in the correlator's units. `FOLLOW-UPS.md` items 16 and 17.
+
 ```sh
 ./build/micromotion validate --cphd "$C" --frequency 3.0
 ```

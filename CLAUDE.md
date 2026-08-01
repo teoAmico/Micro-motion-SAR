@@ -57,7 +57,9 @@ subcommands dispatched at the bottom of the file:
 
 - `info` — a product's geometry and timing
 - `validate` — thirteen arithmetic checks on whether a collect can support the
-  measurement asked for, before any processing (`src/core/validate.c`, `validate.h`)
+  measurement asked for, before any processing (`src/core/validate.c`, `validate.h`).
+  Takes `--estimator`: four of the checks answer differently for the phase route and
+  answering them for the correlator refused a valid Giza configuration (items 16, 17)
 - `focus` — time-domain backprojection to an image (`src/core/focus.c`)
 - `mmotion` — the measurement chain, and where nearly all the complexity is
 

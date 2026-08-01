@@ -2036,6 +2036,16 @@ static int rs_cmd_validate(int argc, char **argv)
                "                           [--amplitude MM] [--alpha F]\n"
                "                           [--overlap F] [--upsample N]\n"
                "                           [--cell M] [--size N]\n"
+               "                           [--estimator correlation|phase|splitband]\n"
+               "\n"
+               "--estimator picks which observable the checks are answered\n"
+               "for, and four of them differ. The band ceiling is the\n"
+               "sub-aperture averaging response for correlation and the\n"
+               "sampling rate for phase; sensitivity is a tracking-pixel floor\n"
+               "for correlation and is reported as unknown for phase, whose\n"
+               "bound is the phase floor instead; and the ambiguity is a pixel\n"
+               "wrap for correlation and the lambda/4 phase fold for phase.\n"
+               "Default is correlation, matching mmotion.\n"
                "\n"
                "Answers whether this collect can support the measurement you\n"
                "intend, before any of it is processed. Every check is arithmetic\n"
@@ -2072,6 +2082,24 @@ static int rs_cmd_validate(int argc, char **argv)
 
     rs_validate_req_t req;
     rs_validate_req_default(&req);
+
+    /* WHICH OBSERVABLE THE RUN WILL USE. Four checks answer differently for
+     * different estimators, and before this flag existed they all answered for
+     * the correlator -- which refused a valid phase configuration on the Giza
+     * collect, on three checks stated in tracking pixels. See
+     * rs_validate_req_t.estimator and FOLLOW-UPS.md items 16 and 17. Parsed the
+     * same way mmotion parses it, so a caller can copy the flag across from the
+     * run they are about to make. */
+    {
+        const char *est = rs_opt(argc, argv, "--estimator");
+        if (est) {
+            if (strcmp(est, "phase") == 0)            req.estimator = RS_MICROM_EST_PHASE;
+            else if (strcmp(est, "correlation") == 0) req.estimator = RS_MICROM_EST_CORRELATION;
+            else if (strcmp(est, "splitband") == 0)   req.estimator = RS_MICROM_EST_SPLITBAND;
+            else fprintf(stderr, "warning: unknown --estimator '%s'; "
+                                 "validating for correlation\n", est);
+        }
+    }
 
     if (is_sicd) {
         /* Metadata only. The pixels answer no question this command asks, and a

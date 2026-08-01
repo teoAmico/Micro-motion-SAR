@@ -132,6 +132,7 @@ void rs_validate_req_default(rs_validate_req_t *req)
     req->grid_n = 512;
     req->win = 32;
     req->coherence_min = 0.40;   /* rs_microm_params_default() */
+    req->estimator = RS_MICROM_EST_CORRELATION;   /* likewise */
 }
 
 /* Run every check and write the findings. */
@@ -210,16 +211,39 @@ rs_validate_level_t rs_validate(const rs_validate_req_t *req,
         const double d = (n_looks > 1.0)
                        ? (req->dwell_s - t_sap) / (n_looks - 1.0) : req->dwell_s;
         const double f_step = 1.0 / (2.0 * d);
-        const double f_max  = (t_sap > 0.0) ? 1.0 / (2.0 * t_sap) : f_step;
+        const double f_avg  = (t_sap > 0.0) ? 1.0 / (2.0 * t_sap) : f_step;
+
+        /* WHICH CEILING BINDS DEPENDS ON THE OBSERVABLE, and the paragraph above
+         * is the CORRELATION route's story. That route's observable IS the
+         * sub-aperture-averaged position, so the averaging response is its
+         * ceiling and overlap cannot buy past it -- measured across 25 sweep
+         * points, recovery there needs a response above about 0.5.
+         *
+         * The phase route does not read an averaged position. It reads the
+         * sidebands the averaging moves energy INTO, which is why the same
+         * literature recovers 36 Hz at an observation ratio of exactly 18 where
+         * the averaging model predicts zero. Measured here: at 0.90 overlap and
+         * t_sap 1.458 s a 1.3 Hz injection sits at a sub-aperture response of
+         * 0.055, a tenth of what the correlator needs, and phase recovers it at
+         * rms 0.0164 Hz. For that route the sampling ceiling is the real one. */
+        const int phase_route = (req->estimator == RS_MICROM_EST_PHASE);
+        const double f_max = phase_route ? f_step : f_avg;
         WORST(rs_v_add(out, &n, RS_VALIDATE_BAND,
               (f <= 0.0 || f < f_max) ? RS_V_PASS : RS_V_FAIL, "observable band",
               "alpha %.3f%% and overlap %.2f give %.0f sub-apertures. Each "
-              "averages over %.4f s, so the band reaches %.3f Hz; the %.4f s "
-              "step would suggest %.3f Hz, which overlap does not buy.%s",
-              100.0 * req->alpha, req->overlap, n_looks, t_sap, f_max, d, f_step,
+              "averages over %.4f s, so the averaging ceiling is %.3f Hz and the "
+              "%.4f s step gives a sampling ceiling of %.3f Hz. The %s route is "
+              "bounded by the %s one, so the band reaches %.3f Hz.%s",
+              100.0 * req->alpha, req->overlap, n_looks, t_sap, f_avg, d, f_step,
+              phase_route ? "phase" : "correlation",
+              phase_route ? "sampling" : "averaging", f_max,
               (f > 0.0 && f >= f_max)
-                ? " The target is ABOVE the band: past the sub-aperture's own "
-                  "averaging response, where a reported peak cannot be signal."
+                ? (phase_route
+                   ? " The target is ABOVE the band: the sub-look series does "
+                     "not sample it, and nothing downstream can recover what was "
+                     "not sampled."
+                   : " The target is ABOVE the band: past the sub-aperture's own "
+                     "averaging response, where a reported peak cannot be signal.")
                 : ""));
 
         /* The spectral route splits a focused image and needs twice as many
@@ -339,6 +363,23 @@ rs_validate_level_t rs_validate(const rs_validate_req_t *req,
          * here would overstate the sensitivity by the ratio printed below --
          * a factor of 57 at 1/40 px refinement -- and this project's whole
          * difficulty is that such a number looks like a demonstrated result. */
+        /* NOT THE PHASE ROUTE'S QUESTION. Every quantity below is in tracking
+         * pixels -- an artefact floor on a correlation surface, an interpolation
+         * limit from the sub-pixel refinement -- and an estimator that reads
+         * pixel phase forms none of them. Answering anyway is what made this
+         * check refuse a valid Giza configuration; see rs_validate_req_t.
+         * RS_V_UNKNOWN rather than a pass, because the question is unanswered
+         * here rather than answered favourably, and RS_VALIDATE_PHASE_FLOOR is
+         * where it IS answered. */
+        if (req->estimator == RS_MICROM_EST_PHASE) {
+            WORST(rs_v_add(out, &n, RS_VALIDATE_SENSITIVITY, RS_V_UNKNOWN,
+                  "sensitivity",
+                  "not applicable to the phase estimator: the floor below is a "
+                  "correlation-surface artefact measured in TRACKING PIXELS, "
+                  "which this observable never forms. Its sensitivity is the "
+                  "phase floor reported further down, in metres of "
+                  "line-of-sight noise per look."));
+        } else {
         const double floor_px = 0.5 * RS_TRACK_FLOOR_PX;
         const double interp_px = rs_validate_floor_px(req->upsample);
         /* A vertical displacement A at frequency f gives a radial velocity
@@ -374,6 +415,7 @@ rs_validate_level_t rs_validate(const rs_validate_req_t *req,
               "an interpolation limit, not a demonstrated sensitivity.",
               RS_TRACK_FLOOR_PX, req->cell_m, 1000.0 * a_min, f, verdict,
               req->upsample, interp_px, floor_px / interp_px));
+        }
     }
 
     /* ---- is there any target amplitude this configuration can see? ------- */
@@ -403,6 +445,52 @@ rs_validate_level_t rs_validate(const rs_validate_req_t *req,
          * Both bounds are measured, on one geometry and one cell size, in
          * runs/.../POSITIVE-CONTROL.md. The crossing test below is the robust
          * part: it depends on their ratio, not on either absolute value. */
+        /* THE PHASE ROUTE HAS AN AMBIGUITY TOO, and it is a tighter and more
+         * important one than the pixel wrap -- so this reports it rather than
+         * declining. disp_los = -psi*lambda/(4*pi) with psi in (-pi, pi], so the
+         * line-of-sight excursion from the series mean cannot exceed lambda/4,
+         * about 7.8 mm at X band. Beyond that the phase folds and the recovered
+         * series is nonsense rather than merely noisy.
+         *
+         * This is not a theoretical bound. The synthetic sweeps that recover a
+         * frequency inject 2.442 mm of vertical motion, a 0.81 radian swing;
+         * the 20 mm the correlation fixtures use is 6.6 radians, and the phase
+         * estimator fails on them completely and correctly. A caller who brings
+         * a correlation-sized target to this estimator needs to be told that
+         * before spending an hour, not after. */
+        if (req->estimator == RS_MICROM_EST_PHASE) {
+            const double proj_p = cos(req->incidence_rad);
+            const double a_max = 0.25 * req->lambda_m / (proj_p > 0.0 ? proj_p : 1.0);
+            rs_validate_level_t lvl_p = RS_V_UNKNOWN;
+            char verdict_p[220];
+            if (req->target_amp_m > 0.0) {
+                const double ratio = req->target_amp_m / a_max;
+                lvl_p = (ratio <= 0.5) ? RS_V_PASS
+                      : (ratio < 1.0)  ? RS_V_WARN : RS_V_FAIL;
+                snprintf(verdict_p, sizeof verdict_p,
+                         "The %.2f mm asked for is %.2fx that. %s",
+                         1000.0 * req->target_amp_m, ratio,
+                         (lvl_p == RS_V_PASS) ? "Comfortably inside the fold."
+                         : (lvl_p == RS_V_WARN)
+                           ? "Inside the fold but past half of it; the swing "
+                             "approaches pi and the series will be distorted."
+                           : "BEYOND the fold: the phase wraps and the recovered "
+                             "series is nonsense. Use the correlation estimator, "
+                             "which has no ambiguity at all.");
+            } else {
+                snprintf(verdict_p, sizeof verdict_p,
+                         "No target amplitude given, so this is the ceiling "
+                         "rather than a verdict.");
+            }
+            WORST(rs_v_add(out, &n, RS_VALIDATE_AMBIGUITY, lvl_p, "ambiguity",
+                  "phase folds beyond lambda/4 of line-of-sight motion, so at "
+                  "%.1f deg incidence the largest vertical amplitude this "
+                  "estimator can hold is %.3f mm. %s There is no lower bound "
+                  "here: unlike the correlation route the phase route has no "
+                  "artefact floor to clear, only the noise floor reported "
+                  "below.",
+                  req->incidence_rad * 180.0 / M_PI, 1000.0 * a_max, verdict_p));
+        } else {
         const double res_sap  = req->lambda_m * req->slant_range_m
                               / (2.0 * req->v_platform_ms * t_sap);
         const double ceil_px  = 2.0 * 0.75 * res_sap / req->cell_m;  /* p2p */
@@ -442,6 +530,7 @@ rs_validate_level_t rs_validate(const rs_validate_req_t *req,
               "sub-look resolution %.2f m over %.4f s gives a wrap ceiling of "
               "%.1f px p2p against a %.1f px artefact floor. %s",
               res_sap, t_sap, ceil_px, floor_px, verdict));
+        }
     }
 
     /* ---- can the coherence mask reject anything at all? -------------------
@@ -529,8 +618,12 @@ rs_validate_level_t rs_validate(const rs_validate_req_t *req,
         const rs_validate_level_t lvl = (n_ind <= 4.0) ? RS_V_WARN : RS_V_PASS;
         WORST(rs_v_add(out, &n, RS_VALIDATE_PHASE_FLOOR, lvl, "phase floor",
               "at the %.2f mask over %.0f independent samples the CRLB is "
-              "%.3f rad, a line-of-sight noise of %.4f mm per look.%s",
+              "%.3f rad, a line-of-sight noise of %.4f mm per look. %s%s",
               g, n_ind, sphi, 1000.0 * d_m,
+              (req->estimator == RS_MICROM_EST_PHASE)
+                ? "This is THE sensitivity bound for the estimator selected."
+                : "The selected estimator is not the phase route, so this "
+                  "bounds only its phase refinement, not what it reports.",
               (n_ind <= 4.0)
                 ? " Under 5 independent samples the bound does not hold and the"
                   " phase dispersion is unusable at any SNR."

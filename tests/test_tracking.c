@@ -1294,6 +1294,173 @@ int main(void)
         }
     }
 
+    RS_CASE("phase needs ONE dominant per resolution cell, not merely bright ones");
+    {
+        /* THE PRECONDITION, MEASURED. rs_microm_estimator_t has always said this
+         * estimator needs a persistent dominant scatterer. What that means
+         * quantitatively was not known, and getting it wrong produced both of
+         * FOLLOW-UPS.md item 14's open anomalies at once -- see item 15.
+         *
+         * A lattice of EQUAL dominants spaced more finely than the sub-look
+         * resolution cell puts several of them in every cell, and several equal
+         * scatterers in one cell is not a dominant scatterer. At 24 m over an
+         * 8.26 m sub-look cell, a 3x3 lattice gives about one per cell and an
+         * 8x8 gives 2.75. The first recovers and the second does not.
+         *
+         * Two configurations, one seed, four frequencies: enough to separate the
+         * two cases, with the full three-seed six-frequency measurement in item
+         * 15. */
+        const double cf[] = { 0.3, 0.5, 0.9, 1.3 };
+        const size_t cn = sizeof cf / sizeof cf[0];
+        const size_t sides[] = { 3, 8 };
+        double slope_at[2] = { 0.0, 0.0 }, rms_at[2] = { 0.0, 0.0 };
+        double last_df = 0.0;
+
+        for (size_t si = 0; si < 2; si++) {
+            double inj[8], got[8];
+            size_t n = 0;
+            for (size_t fi = 0; fi < cn; fi++) {
+                rs_sim_tgt_t tg[400];
+                const size_t n_tgt =
+                    rs_sim_dominant_patch(tg, 400, sides[si], 128, 24.0, 6.0,
+                                          7u, cf[fi], 0.002442);
+                RS_CHECK(n_tgt > 0);
+
+                rs_cphd_t c;
+                RS_CHECK_OK(rs_sim_scene(&c, tg, n_tgt, 20.0, 400.0, 256, 0.5));
+                /* 96 cells, not 64: the measurement in item 15 was made on a
+                 * 48 m grid and the result does not survive being cropped to
+                 * 32 m, which leaves 9 windows instead of 25. That is a caveat
+                 * on the finding rather than a detail of the test, and it is
+                 * recorded as one. */
+                rs_grid_t g = { .origin = {0,0,0}, .n_x = 96, .n_y = 96,
+                                .dx = 0.5, .dy = 0.5, .height = 0.0 };
+                rs_subap_params_t sp;
+                rs_subap_params_default(&sp);
+                sp.n_looks = 128;
+                sp.overlap = 0.0;
+                rs_subap_stack_t st;
+                RS_CHECK_OK(rs_subaperture_from_cphd(&c, &g, &sp, &st));
+
+                rs_microm_params_t mp;
+                rs_microm_params_default(&mp);
+                mp.estimator = RS_MICROM_EST_PHASE;
+                mp.win_az = mp.win_rg = 32;
+                mp.stride_az = mp.stride_rg = 16;
+                mp.coherence_min = 0.0;
+                rs_microm_t m;
+                RS_CHECK_OK(rs_microm_track(&st, &mp, &m));
+
+                rs_spectrum_t spec;
+                RS_CHECK_OK(rs_spectrum_compute(&m, RS_SPEC_VELOCITY, &spec));
+                last_df = spec.df;
+                size_t bw = 0; double prom = 0.0;
+                if (rs_spectrum_best_window(&spec, &bw, &prom, NULL) == RS_OK) {
+                    inj[n] = cf[fi]; got[n] = spec.dominant_freq[bw]; n++;
+                }
+                rs_spectrum_free(&spec);
+                rs_microm_free(&m);
+                rs_subap_stack_free(&st);
+                rs_cphd_free(&c);
+            }
+            double sl = 0.0, rm = 0.0;
+            RS_CHECK(rs_track_fit(inj, got, n, &sl, &rm) == 1);
+            slope_at[si] = sl; rms_at[si] = rm;
+            printf("    %zux%zu lattice (%.2f m spacing, ~%.2f dominants/cell): "
+                   "slope %+.3f rms %.4f Hz\n",
+                   sides[si], sides[si], 24.0 / (double)sides[si],
+                   8.26 / (24.0 / (double)sides[si]), sl, rm);
+        }
+        printf("    (half a bin is %.4f Hz)\n", 0.5 * last_df);
+
+        /* One per cell recovers. */
+        RS_CHECK_NEAR(slope_at[0], 1.0, 0.15);
+        RS_CHECK(rms_at[0] < 0.5 * last_df);
+        /* Several equal ones per cell do not -- asserted, because a change that
+         * makes the dense case work would mean the precondition is not what this
+         * says it is, and should fail here rather than pass unnoticed. */
+        RS_CHECK(rms_at[1] > 0.5 * last_df);
+    }
+
+    RS_CASE("phase recovery survives the high-overlap regime real data needs");
+    {
+        /* THE CONFIGURATION A REAL COLLECT HAS TO USE. rs_microm_estimator_t
+         * records sub-look coherence on a real X-band collect as very nearly the
+         * fraction of pulses two looks share -- 0.85 at 95 percent overlap and
+         * 0.07 at zero. The synthetic recovery in the cases above runs at ZERO
+         * overlap, which is the worst possible real setting, so it says nothing
+         * about whether a real run is configurable at all.
+         *
+         * Item 13 measured that overlap buys nothing for the CORRELATION
+         * estimator, because the sub-aperture response ceiling binds before the
+         * sampling one and recovery there needs a response above ~0.5. If that
+         * ceiling were the method's rather than the correlator's, phase would
+         * fail here too: at 0.90 overlap t_sap is 1.46 s, so a 1.3 Hz injection
+         * sits at a response of about 0.15, a third of what correlation needs.
+         * It recovers anyway, which is the reconciliation in item 13 measured
+         * rather than argued. */
+        const double cf[] = { 0.3, 0.5, 0.9, 1.3 };
+        const size_t cn = sizeof cf / sizeof cf[0];
+        double inj[8], got[8];
+        size_t n = 0;
+        double last_df = 0.0, t_sap = 0.0, coh = 0.0;
+
+        for (size_t fi = 0; fi < cn; fi++) {
+            rs_sim_tgt_t tg[400];
+            const size_t n_tgt = rs_sim_dominant_patch(tg, 400, 3, 128, 24.0,
+                                                       6.0, 7u, cf[fi], 0.002442);
+            rs_cphd_t c;
+            RS_CHECK_OK(rs_sim_scene(&c, tg, n_tgt, 20.0, 400.0, 256, 0.5));
+            rs_grid_t g = { .origin = {0,0,0}, .n_x = 64, .n_y = 64,
+                            .dx = 0.5, .dy = 0.5, .height = 0.0 };
+            rs_subap_params_t sp;
+            rs_subap_params_default(&sp);
+            sp.n_looks = 128;
+            sp.overlap = 0.90;
+            rs_subap_stack_t st;
+            RS_CHECK_OK(rs_subaperture_from_cphd(&c, &g, &sp, &st));
+            t_sap = st.t_sap;
+
+            rs_microm_params_t mp;
+            rs_microm_params_default(&mp);
+            mp.estimator = RS_MICROM_EST_PHASE;
+            mp.win_az = mp.win_rg = 32;
+            mp.stride_az = mp.stride_rg = 16;
+            mp.coherence_min = 0.0;
+            rs_microm_t m;
+            RS_CHECK_OK(rs_microm_track(&st, &mp, &m));
+
+            rs_spectrum_t spec;
+            RS_CHECK_OK(rs_spectrum_compute(&m, RS_SPEC_VELOCITY, &spec));
+            last_df = spec.df;
+            double qs = 0.0;
+            for (size_t w = 0; w < spec.n_win; w++) qs += spec.quality[w];
+            coh = spec.n_win ? qs / (double)spec.n_win : 0.0;
+            size_t bw = 0; double prom = 0.0;
+            if (rs_spectrum_best_window(&spec, &bw, &prom, NULL) == RS_OK) {
+                inj[n] = cf[fi]; got[n] = spec.dominant_freq[bw]; n++;
+            }
+            rs_spectrum_free(&spec);
+            rs_microm_free(&m);
+            rs_subap_stack_free(&st);
+            rs_cphd_free(&c);
+        }
+
+        double sl = 0.0, rm = 0.0;
+        RS_CHECK(rs_track_fit(inj, got, n, &sl, &rm) == 1);
+        printf("    overlap 0.90: t_sap %.3f s, mean quality %.3f, "
+               "slope %+.3f rms %.4f Hz (bound %.4f)\n",
+               t_sap, coh, sl, rm, 0.5 * last_df);
+        printf("    sub-aperture response at 1.3 Hz is %.3f -- far below the "
+               "~0.5 the correlator needs\n",
+               rs_spectrum_subaperture_response(t_sap, 1.3));
+        RS_CHECK_NEAR(sl, 1.0, 0.15);
+        RS_CHECK(rm < 0.5 * last_df);
+        /* The premise: this really is the low-response regime, or the case is
+         * not testing what it claims. */
+        RS_CHECK(rs_spectrum_subaperture_response(t_sap, 1.3) < 0.4);
+    }
+
     RS_CASE("phase displacement is bounded by lambda/4, i.e. does not accumulate");
     {
         /* THE INVARIANT AN ACCUMULATING IMPLEMENTATION CANNOT SATISFY.

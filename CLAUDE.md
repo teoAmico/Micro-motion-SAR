@@ -157,8 +157,15 @@ every injection and for motionless scenes alike, because it wrapped a geometric 
 of 1.1-1.9 rad per look instead of removing it first. Read item 14's caveats before quoting
 this: it is synthetic, `rs_sim_scene()` has no sub-look decorrelation to speak of, the
 observable wraps beyond ~lambda/4 so it needs a much smaller injected amplitude than the
-correlation fixtures use, and it fails on the dominant-scatterer fixture for reasons
-unknown.
+correlation fixtures use, and its precondition is one dominant scatterer per SUB-LOOK
+RESOLUTION CELL (item 15 — a lattice finer than that puts several equal scatterers in
+one cell and satisfies nothing, which is why it first appeared to fail on the
+dominant-scatterer fixture).
+
+Unlike `correlation`, **phase wants high `--overlap`**: recovery holds to 95%, and high
+overlap is what buys sub-look coherence on a real collect. Item 13's response ceiling is
+the correlator's, now measured — at 90% overlap a 1.3 Hz tone sits at a response of 0.055
+and phase still recovers it.
 
 Nothing has been shown to recover a frequency on REAL data. Every
 estimator and reference mode has failed at operating points this project's own

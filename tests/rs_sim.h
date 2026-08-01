@@ -144,6 +144,26 @@ static inline double rs_sim_u01(unsigned *state)
  * contribution and pessimistic about the background's, and the two do not
  * cancel. It reaches the coherence regime; it is not a physical model of one.
  *
+ * THE LATTICE SPACING MUST EXCEED THE SUB-LOOK RESOLUTION CELL, and getting that
+ * wrong is what made this fixture's first use useless. 'extent_m'/'n_side' is the
+ * spacing; the sub-look azimuth resolution is what a resolution cell spans. At
+ * 8x8 over 24 m the spacing is 3 m against an 8.26 m sub-look cell, so every cell
+ * held 2.75 dominants OF EQUAL BRIGHTNESS -- and a cell containing three equal
+ * scatterers has no dominant one, whatever the 'dominance' parameter says about
+ * the diffuse background. The parameter controls dominant-against-diffuse; it
+ * says nothing about dominant-against-dominant, and only the spacing does.
+ *
+ * Measured, phase estimator, 128 diffuse, seed 7, sub-look resolution 8.26 m:
+ *
+ *   n_side  spacing  dominants/cell   recovered?
+ *      2     12.0 m       0.69        yes, all three selection policies
+ *      3      8.0 m       1.03        yes, all three
+ *      4      6.0 m       1.38        yes, all three
+ *      8      3.0 m       2.75        NO -- every policy, every seed
+ *
+ * Choose 'n_side' from the sub-look resolution the stack will have, not from how
+ * many scatterers seem tidy.
+ *
  * LAYOUT. 'n_side' by 'n_side' dominant scatterers on a lattice spanning
  * 'extent_m', each jittered within its own cell so the set does not become a
  * periodic array with grating lobes of its own. 'n_diffuse' Rayleigh scatterers

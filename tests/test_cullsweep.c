@@ -81,11 +81,22 @@ static const double SNR_FACTORS[N_FACTOR] = {
 };
 
 #define N_CLUTTER 96u
-/* The dominant fixture: an 8x8 lattice of dominants over the same 24 m patch,
- * on 256 diffuse scatterers. The lattice spacing of 3 m is finer than the
- * sub-look resolution, so a resolution cell holds a few dominants rather than
- * a fraction of one -- coarser than that and most cells would contain no
- * dominant at all and the fixture would be its own background. */
+/* A DENSE EQUAL-BRIGHTNESS LATTICE, which is what this is, and NOT a
+ * dominant-scatterer fixture despite being built by rs_sim_dominant_patch().
+ *
+ * 8x8 over 24 m is a 3 m spacing against an 8.26 m sub-look azimuth cell, so
+ * every resolution cell holds about 2.75 dominants OF EQUAL BRIGHTNESS -- and a
+ * cell containing three equal scatterers has no dominant one, whatever the
+ * dominance parameter says about the diffuse background. That parameter controls
+ * dominant-against-diffuse and says nothing about dominant-against-dominant;
+ * only the spacing does. See rs_sim_dominant_patch(), whose header now carries
+ * the measured table, and FOLLOW-UPS.md item 15.
+ *
+ * KEPT AT 8x8 DELIBERATELY. The correlation-estimator numbers recorded in items
+ * 12f and 13 were all measured on this fixture, and changing its composition
+ * would silently invalidate them while every assertion here still passed. A
+ * fixture with a genuine dominant per cell is a different experiment and belongs
+ * beside the phase estimator, where the spacing was shown to matter. */
 #define N_DOM_SIDE 8u
 #define N_DIFFUSE  256u
 #define N_SCAT     (N_DOM_SIDE * N_DOM_SIDE + N_DIFFUSE)

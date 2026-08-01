@@ -671,10 +671,17 @@ data**; nothing works on real data. The honest summary is below.
   static controls outside the swept band. Closest to the published work that
   reports success. Three things to know before using it: the observable **wraps
   beyond about λ/4 of line-of-sight motion** (~8 mm at X band), so it needs a far
-  smaller motion than `correlation` and fails completely above that; it is
-  unvalidated on real data, where sub-look decorrelation the simulator cannot
-  produce is the obvious threat; and it fails on the dominant-scatterer fixture
-  for reasons not understood.
+  smaller motion than `correlation` and fails completely above that; it needs
+  **one dominant scatterer per sub-look resolution cell**, which is a real
+  constraint on the scene and not a formality (`FOLLOW-UPS.md` item 15); and it
+  is unvalidated on real data, where the sub-look decorrelation the simulator
+  cannot produce is the obvious threat.
+
+  **Use it with high `--overlap`**, unlike `correlation`. Recovery holds to 95%
+  overlap, and high overlap is what buys sub-look coherence on a real collect —
+  0.85 at 95% against 0.07 at zero. The response ceiling that makes overlap
+  useless for `correlation` does not bind here: at 90% overlap a 1.3 Hz tone sits
+  at a response of 0.055 and is still recovered.
 - `correlation` (default) — cross-correlation peak, sub-pixel refined. Has not
   been shown to recover a frequency on any fixture. Still the right choice for
   motion too large for phase, since it has no ambiguity at all.

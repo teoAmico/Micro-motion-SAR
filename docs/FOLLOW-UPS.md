@@ -1639,3 +1639,108 @@ recover a vibration frequency it was not told" is no longer true of the phase
 estimator on synthetic data. It remains true of the correlation estimator, and it
 remains true of everything on real data. The next thing is a real collect, and
 the caveats above say what to expect and what to check first.
+
+---
+
+## 15. Both of item 14's anomalies were one mistake, and the real-data configuration exists
+
+Item 14 recovered a frequency for the first time and left four caveats. Two were
+open questions rather than limitations: the estimator failed on the
+dominant-scatterer fixture built expressly to satisfy its stated precondition,
+and only the prominence policy recovered where consensus and the cull did not.
+They are the same mistake, and it was mine, in the fixture rather than the
+estimator.
+
+**SEPARATING DENSITY FROM DOMINANCE.** Uniform Rayleigh clutter, zero overlap,
+seed 7, phase estimator, `best` policy:
+
+```
+scatterers   per resolution cell   slope    rms Hz
+     64             0.92          -2.016   1.5162   no
+     96             1.38          +1.008   0.0070   YES
+    128             1.84          +1.008   0.0070   YES
+    200             2.87          -1.959   1.4871   no
+    320             4.59          -1.887   1.4351   no
+    640             9.18          -1.346   1.1614   no
+```
+
+and with EQUAL amplitudes instead of Rayleigh, at 64, 96 and 128, it never
+recovers. So the amplitude tail matters: with Rayleigh draws some cells get a
+scatterer clearly brighter than its neighbours, and that is what the estimator
+needs. Dominance as `rs_sim_dominant_patch()` parameterises it does not rescue a
+dense scene -- raising it from 6 to 100 to 1000 changes nothing.
+
+**THE MISTAKE.** `rs_sim_dominant_patch()`'s `dominance` controls
+dominant-against-DIFFUSE. It says nothing about dominant-against-DOMINANT, and
+only the lattice spacing does. Item 12f used 8x8 over 24 m, a 3 m spacing against
+an 8.26 m sub-look azimuth cell -- **2.75 equal dominants in every resolution
+cell**. Three equal scatterers in one cell is not a dominant scatterer. The
+fixture built to supply the precondition violated it.
+
+Spacing it from the resolution instead, with 128 diffuse behind it:
+
+```
+n_side  spacing  dominants/cell   best            consensus       cull
+   2     12.0 m       0.69       +1.008/0.0070   +1.008/0.0070   +1.008/0.0070
+   3      8.0 m       1.03       +1.008/0.0070   +1.008/0.0070   +1.008/0.0070
+   4      6.0 m       1.38       +1.008/0.0070   +1.008/0.0070   +1.008/0.0070
+   8      3.0 m       2.75        FAIL            FAIL            FAIL
+```
+
+**Both anomalies dissolve together.** On a fixture that actually has one dominant
+per cell, all three selection policies recover -- so item 14's "only prominence
+works" was a symptom of the marginal 96-scatterer fixture, not a property of the
+policies. Across three seeds at 3x3, consensus and cull recover at 3 of 3 and
+prominence at 2 of 3, which reverses the ranking again and vindicates the cull
+work of items 12a-12e. Static controls land at 2.0-3.2 Hz throughout, outside the
+0.3-1.3 Hz swept band.
+
+**AND THE REAL-DATA CONFIGURATION EXISTS.** This was the reason for doing the
+sweep. `rs_microm_estimator_t` records sub-look coherence on a real X-band
+collect as very nearly the fraction of pulses two looks share -- 0.85 at 95
+percent overlap, 0.07 at zero. Item 14's recovery ran at ZERO overlap, the worst
+possible real setting, so it said nothing about whether a real run could be
+configured at all. On the corrected fixture:
+
+```
+overlap  t_sap    quality   best            consensus       cull
+  0.00   0.155     0.748   +1.008/0.0070   +1.008/0.0070   +1.008/0.0070
+  0.50   0.310     0.887   +1.008/0.0070   +1.008/0.0070   +1.008/0.0070
+  0.90   1.458     0.902   +0.978/0.0162   +0.978/0.0162   +0.978/0.0162
+  0.95   2.720     0.949   +0.984/0.0181   +1.455/0.4491   +1.381/0.3783
+```
+
+Recovery holds to 95 percent overlap on the prominence policy, at rms well inside
+the half-bin bound throughout, while the quality metric climbs to 0.949. **The
+regime a real collect needs for coherence is a regime in which this estimator
+still works.**
+
+**IT ALSO CONFIRMS ITEM 13'S RECONCILIATION BY MEASUREMENT RATHER THAN ARGUMENT.**
+Item 13 established that overlap buys nothing for the CORRELATION estimator,
+because the sub-aperture response ceiling binds first and recovery there requires
+a response above about 0.5; it argued the ceiling was the correlator's rather
+than the method's, on the grounds that phase reads sidebands where correlation
+reads an averaged position. At 0.90 overlap here `t_sap` is 1.458 s, so a 1.3 Hz
+injection sits at a sub-aperture response of **0.055** -- a tenth of what the
+correlator needs -- and phase recovers it at rms 0.0164 Hz. The argument was
+right, and it is now a measurement.
+
+**WHAT IS STILL OPEN.**
+
+*Still synthetic.* Nothing here changes item 12f: `rs_sim_scene()` gives every
+scatterer analytically exact phase, so real sub-look decorrelation is absent and
+a phase observable is what it would hurt most. The quality figures above are
+amplitude stability, not interferometric coherence, and must not be read as the
+0.85 the real collect measures.
+
+*Grid-fragile at zero overlap.* The 3x3 result holds on a 96-cell grid and does
+NOT survive cropping to 64 cells, which leaves 9 windows instead of 25. The
+high-overlap case is not fragile that way. Unexplained, and asserted at the grid
+it was measured on so that the fragility cannot be forgotten.
+
+*The working density band is narrow* -- 96 to 128 uniform scatterers, or a
+lattice at one dominant per cell. Real clutter will not be tuned to it, which is
+precisely what the real collect will test.
+
+The next thing is the Giza collect, at high overlap, with `--estimator phase`,
+`--null-static` beside it, and this table as the read-out checklist.

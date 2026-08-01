@@ -235,6 +235,34 @@ typedef enum {
  *                              this file with published accelerometer
  *                              validation on this class of data.
  *
+ *                              ITS PRECONDITION IS ONE DOMINANT SCATTERER PER
+ *                              SUB-LOOK RESOLUTION CELL, and that is a
+ *                              quantitative statement, not the loose one this
+ *                              header used to make. A lattice of EQUAL bright
+ *                              scatterers spaced more finely than the resolution
+ *                              cell puts several in every cell and satisfies
+ *                              nothing: at 2.75 per cell the estimator fails at
+ *                              every seed and every selection policy, and at
+ *                              about one per cell all three policies recover.
+ *                              On uniform clutter the working band is narrow --
+ *                              96 to 128 scatterers over a 24 m patch at 8.26 m
+ *                              sub-look resolution, with RAYLEIGH amplitudes,
+ *                              whose tail is what gives some cell a scatterer
+ *                              clearly brighter than its neighbours. Equal
+ *                              amplitudes never work at any count. FOLLOW-UPS.md
+ *                              item 15 has the tables.
+ *
+ *                              HIGH OVERLAP IS FINE FOR THIS ESTIMATOR AND IS
+ *                              WHAT A REAL COLLECT NEEDS. Recovery holds to 95
+ *                              percent overlap. At 90 percent, t_sap of 1.458 s
+ *                              puts a 1.3 Hz injection at a sub-aperture
+ *                              response of 0.055 -- a tenth of what the
+ *                              correlation estimator needs, see
+ *                              rs_subap_params_t.overlap -- and it recovers
+ *                              anyway at rms 0.0164 Hz. That is the measurement
+ *                              behind the claim that the response ceiling is the
+ *                              CORRELATOR'S and not the method's.
+ *
  *                              IT IS ALSO THE ONLY ESTIMATOR HERE THAT HAS BEEN
  *                              SHOWN TO RECOVER AN INJECTED FREQUENCY. On the
  *                              synthetic fixtures, swept and pooled over seeds

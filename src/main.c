@@ -1063,6 +1063,14 @@ static resonarsat_status_t rs_null_static(const rs_cphd_t *ref, const rs_grid_t 
     return RS_OK;
 }
 
+/* Ascending comparison for qsort over doubles: the PRI percentiles in
+ * 'validate' and the amplitude-dispersion summary in 'mmotion'. */
+static int rs_cmp_double_asc(const void *a, const void *b)
+{
+    const double x = *(const double *)a, y = *(const double *)b;
+    return (x > y) - (x < y);
+}
+
 /* Run the full micro-motion chain on a phase-history file.
  *
  * Focus, decompose into sub-looks, track, and estimate spectra. Prints the
@@ -1513,6 +1521,45 @@ static int rs_cmd_mmotion(int argc, char **argv)
      * shows, so where it disagrees with the consensus the disagreement is
      * information -- see rs_spectrum_ampcor_window() in microm.h. Its status is
      * kept because a total cull is a result and must be printable as one. */
+    /* WHETHER THE SCENE MET THE PHASE ESTIMATOR'S PRECONDITION, which decides
+     * whether a null below means anything. See rs_microm_t.d_a: at Giza the best
+     * window reached an amplitude dispersion of 0.381 against a
+     * persistent-scatterer criterion of 0.25, so none qualified and the run
+     * could not have succeeded whatever the ground was doing -- and nothing in
+     * the output said so. */
+    double da_lo = RS_DA_MAX, da_med = RS_DA_MAX;
+    size_t n_ps = 0;
+    if (spec.d_a && spec.n_win) {
+        double *da_sorted = malloc(spec.n_win * sizeof *da_sorted);
+        if (da_sorted) {
+            memcpy(da_sorted, spec.d_a, spec.n_win * sizeof *da_sorted);
+            qsort(da_sorted, spec.n_win, sizeof *da_sorted, rs_cmp_double_asc);
+            da_lo = da_sorted[0];
+            da_med = da_sorted[spec.n_win / 2];
+            free(da_sorted);
+        }
+        for (size_t w = 0; w < spec.n_win; w++)
+            if (spec.d_a[w] <= RS_PS_DA_MAX) n_ps++;
+    }
+    printf("  amplitude dispersion: best %.3f, median %.3f; %zu of %zu windows "
+           "meet D_A <= %.2f\n", da_lo, da_med, n_ps, spec.n_win, RS_PS_DA_MAX);
+    if (n_ps == 0) {
+        printf("  %s: NO window holds a dominant scatterer by the "
+               "persistent-scatterer\n"
+               "           criterion, so the phase estimator's precondition is "
+               "unmet across\n"
+               "           this whole scene. %s\n",
+               (mp.estimator == RS_MICROM_EST_PHASE) ? "WARNING" : "note",
+               (mp.estimator == RS_MICROM_EST_PHASE)
+                 ? "A null below is what that guarantees, and is\n"
+                   "           NOT evidence about whether the ground moved."
+                 : "That bears on --estimator phase, not on this run.");
+        printf("           The 0.25 criterion is calibrated over independent "
+               "passes, not\n"
+               "           sub-looks; read it as a scale. See "
+               "rs_microm_t.d_a.\n");
+    }
+
     rs_spectrum_cull_t cull;
     const resonarsat_status_t cull_st = rs_spectrum_ampcor_window(&spec, &cull);
 
@@ -1895,8 +1942,10 @@ static int rs_cmd_mmotion(int argc, char **argv)
                     cull.n_snr_cull, cull.n_sigma_cull, cull.n_neigh_cull,
                     cull.snr_gate, spec.snr_null, cull.sigma_gate,
                     cull.gates_applied);
+            fprintf(wf, "# amplitude_dispersion best=%.12g median=%.12g "
+                        "n_meeting_%.2f=%zu\n", da_lo, da_med, RS_PS_DA_MAX, n_ps);
             fprintf(wf, "window,iaz,irg,dominant_hz,prominence,quality,"
-                        "excursion_px,snr,sigma_px,passed_gates,"
+                        "excursion_px,snr,sigma_px,d_a,passed_gates,"
                         "agrees_with_consensus,passed_cull\n");
             for (size_t w = 0; w < spec.n_win; w++) {
                 const double exc = spec.excursion_px ? spec.excursion_px[w] : 0.0;
@@ -1914,10 +1963,12 @@ static int rs_cmd_mmotion(int argc, char **argv)
                     (!cull.gates_applied ||
                      (snr_w >= cull.snr_gate &&
                       (cull.sigma_gate <= 0.0 || sig_w <= cull.sigma_gate)));
-                fprintf(wf, "%zu,%zu,%zu,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%d,%d,%d\n",
+                fprintf(wf, "%zu,%zu,%zu,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,"
+                            "%.12g,%d,%d,%d\n",
                         w, w / spec.n_win_rg, w % spec.n_win_rg,
                         spec.dominant_freq[w], spec.prominence[w],
                         spec.quality[w], exc, snr_w, sig_w,
+                        spec.d_a ? spec.d_a[w] : RS_DA_MAX,
                         passed, agrees, culled);
             }
             fclose(wf);
@@ -2008,12 +2059,6 @@ static size_t rs_parse_offsets(const char *spec, double *out, size_t cap)
  * the filtered fit rather than presenting a number it cannot support. */
 
 
-/* Ascending comparison for qsort over doubles, for the PRI percentiles. */
-static int rs_cmp_double_asc(const void *a, const void *b)
-{
-    const double x = *(const double *)a, y = *(const double *)b;
-    return (x > y) - (x < y);
-}
 
 /* Validate a collect against a measurement, before spending hours on it.
  *

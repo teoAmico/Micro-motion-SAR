@@ -20,6 +20,7 @@ void rs_spectrum_free(rs_spectrum_t *s)
     free(s->prominence);
     free(s->snr);
     free(s->sigma_px);
+    free(s->d_a);
     memset(s, 0, sizeof *s);
 }
 
@@ -94,9 +95,10 @@ resonarsat_status_t rs_spectrum_compute_opts(const rs_microm_t *m,
     out->prominence    = calloc(m->n_win, sizeof *out->prominence);
     out->snr           = calloc(m->n_win, sizeof *out->snr);
     out->sigma_px      = calloc(m->n_win, sizeof *out->sigma_px);
+    out->d_a           = calloc(m->n_win, sizeof *out->d_a);
     if (!out->psd || !out->freq || !out->dominant_freq || !out->amplitude ||
         !out->quality || !out->prominence || !out->excursion_px ||
-        !out->snr || !out->sigma_px) {
+        !out->snr || !out->sigma_px || !out->d_a) {
         rs_spectrum_free(out);
         return RS_ERR_ALLOC;
     }
@@ -215,6 +217,7 @@ resonarsat_status_t rs_spectrum_compute_opts(const rs_microm_t *m,
          * estimator has no surface" rather than as a window that failed. */
         if (m->snr)      out->snr[w] = m->snr[w];
         if (m->sigma_px) out->sigma_px[w] = m->sigma_px[w];
+        out->d_a[w] = m->d_a ? m->d_a[w] : RS_DA_MAX;
 
         /* Prominence: peak power against the mean of the rest. A window holding
          * a vibrating target concentrates its energy in one bin; a window of

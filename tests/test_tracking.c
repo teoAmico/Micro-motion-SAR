@@ -1382,6 +1382,78 @@ int main(void)
         RS_CHECK(rms_at[1] > 0.5 * last_df);
     }
 
+    RS_CASE("amplitude dispersion predicts whether the phase route can work");
+    {
+        /* THE PRECONDITION MADE MEASURABLE. Item 15 established that the phase
+         * route needs one dominant scatterer per sub-look resolution cell, and
+         * items 17 and 18 record why that mattered: at Giza the run returned a
+         * null, and nothing in the output distinguished "nothing moved" from
+         * "the estimator was never applicable here".
+         *
+         * rs_microm_t.d_a is the standard measure of that condition -- Ferretti
+         * et al.'s amplitude dispersion, criterion D_A <= 0.25. This asserts it
+         * SEPARATES the fixtures whose recovery is already established from the
+         * ones whose failure is, which is the only thing that makes it worth
+         * reporting. Measured across four fixtures it does so with no overlap:
+         * the recovering ones have windows at 0.079 and 0.084, the failing ones
+         * bottom out at 0.381 and 0.397.
+         *
+         * Two of the four here, chosen as the cheapest pair that brackets the
+         * boundary; the full table is in FOLLOW-UPS.md item 19. */
+        const size_t sides[] = { 3, 8 };     /* recovers, fails */
+        double best_da[2] = { 9.0, 9.0 };
+        size_t n_ps[2] = { 0, 0 };
+
+        for (size_t si = 0; si < 2; si++) {
+            rs_sim_tgt_t tg[400];
+            const size_t n_tgt =
+                rs_sim_dominant_patch(tg, 400, sides[si], 128, 24.0, 6.0,
+                                      7u, 0.5, 0.002442);
+            rs_cphd_t c;
+            RS_CHECK_OK(rs_sim_scene(&c, tg, n_tgt, 20.0, 400.0, 256, 0.5));
+            rs_grid_t g = { .origin = {0,0,0}, .n_x = 96, .n_y = 96,
+                            .dx = 0.5, .dy = 0.5, .height = 0.0 };
+            rs_subap_params_t sp;
+            rs_subap_params_default(&sp);
+            sp.n_looks = 128;
+            sp.overlap = 0.0;
+            rs_subap_stack_t st;
+            RS_CHECK_OK(rs_subaperture_from_cphd(&c, &g, &sp, &st));
+
+            rs_microm_params_t mp;
+            rs_microm_params_default(&mp);
+            mp.estimator = RS_MICROM_EST_PHASE;
+            mp.win_az = mp.win_rg = 32;
+            mp.stride_az = mp.stride_rg = 16;
+            mp.coherence_min = 0.0;
+            rs_microm_t m;
+            RS_CHECK_OK(rs_microm_track(&st, &mp, &m));
+
+            RS_CHECK(m.d_a != NULL);
+            for (size_t w = 0; w < m.n_win; w++) {
+                if (m.d_a[w] < best_da[si]) best_da[si] = m.d_a[w];
+                if (m.d_a[w] <= RS_PS_DA_MAX) n_ps[si]++;
+            }
+            printf("    %zux%zu lattice: best D_A %.3f, %zu of %zu windows meet "
+                   "%.2f\n", sides[si], sides[si], best_da[si], n_ps[si],
+                   m.n_win, RS_PS_DA_MAX);
+
+            rs_microm_free(&m);
+            rs_subap_stack_free(&st);
+            rs_cphd_free(&c);
+        }
+
+        /* The fixture that recovers has windows meeting the criterion; the one
+         * that does not, has none. If this ever stops holding the statistic has
+         * stopped predicting the thing it is reported for, and the warning
+         * mmotion prints on it becomes misleading rather than merely unhelpful. */
+        RS_CHECK(n_ps[0] > 0);
+        RS_CHECK(n_ps[1] == 0);
+        /* And the gap is wide, not marginal: the failing fixture's BEST window
+         * is well above the criterion rather than just over it. */
+        RS_CHECK(best_da[1] > 1.4 * RS_PS_DA_MAX);
+    }
+
     RS_CASE("phase recovery survives the high-overlap regime real data needs");
     {
         /* THE CONFIGURATION A REAL COLLECT HAS TO USE. rs_microm_estimator_t

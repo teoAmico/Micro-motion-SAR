@@ -177,6 +177,13 @@ data, which is the first evidence outside simulation that item 14's carrier remo
 holds. Nothing in that scene is known to move, so the null says nothing about
 sensitivity and is not a negative result about the method.
 
+Item 19 sharpens that null: `mmotion` now reports **amplitude dispersion** (`D_A`,
+Ferretti et al.'s persistent-scatterer statistic) per window, and at Giza 0 of 225 windows
+met `D_A <= 0.25` with the best at 0.381. The phase route's precondition was unmet across
+the whole scene, so that run could not have succeeded whatever the pyramid was doing. `D_A`
+separates the synthetic fixtures whose recovery and failure item 15 established, with no
+overlap, which is what makes it worth reporting.
+
 Nothing has been shown to DETECT REAL MOTION, and no collect available to this project
 contains motion known to be there. Every
 estimator and reference mode has failed at operating points this project's own

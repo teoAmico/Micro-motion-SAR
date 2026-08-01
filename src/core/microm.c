@@ -141,6 +141,7 @@ void rs_microm_free(rs_microm_t *m)
     free(m->quality);
     free(m->snr);
     free(m->sigma_px);
+    free(m->d_a);
     memset(m, 0, sizeof *m);
 }
 
@@ -218,8 +219,10 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
     out->quality  = calloc(n_win, sizeof *out->quality);
     out->snr      = calloc(n_win, sizeof *out->snr);
     out->sigma_px = calloc(n_win, sizeof *out->sigma_px);
+    out->d_a      = calloc(n_win, sizeof *out->d_a);
     if (!out->disp_az || !out->disp_rg || !out->vel_los || !out->disp_los ||
-        !out->phase || !out->quality || !out->snr || !out->sigma_px) {
+        !out->phase || !out->quality || !out->snr || !out->sigma_px ||
+        !out->d_a) {
         rs_microm_free(out);
         return RS_ERR_ALLOC;
     }
@@ -314,6 +317,51 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
 
                 if (rs_coreg_extract(ref_img, az0, rg0, win_az, win_rg, pref) != RS_OK)
                     continue;
+
+                /* AMPLITUDE DISPERSION, for every estimator, because it says
+                 * whether the SCENE supports the phase route rather than
+                 * whether this tracker happened to work. See rs_microm_t.d_a.
+                 *
+                 * Computed before the estimator branch so that a correlation run
+                 * also reports it: the most useful thing it can tell a caller is
+                 * "switch estimator", and a statistic only produced by the route
+                 * it recommends cannot say that. The brightest-pixel search is
+                 * repeated inside the phase branch rather than shared, which
+                 * costs one pass over the window and keeps this independent of
+                 * that branch's own reference choices. */
+                {
+                    size_t bi = 0;
+                    double ba = -1.0;
+                    for (size_t i = 0; i < win_az * win_rg; i++) {
+                        const double a = (double)cabsf(pref[i]);
+                        if (a > ba) { ba = a; bi = i; }
+                    }
+                    const size_t da_a = az0 + bi / win_rg;
+                    const size_t da_r = rg0 + bi % win_rg;
+
+                    double sum = 0.0, sq = 0.0;
+                    size_t cnt = 0;
+                    for (size_t k = 0; k < n_looks; k++) {
+                        const rs_slc_t *im = &stack->look[k];
+                        if (da_a >= im->n_az || da_r >= im->n_rg) break;
+                        const double a =
+                            (double)cabsf(im->data[da_a * im->n_rg + da_r]);
+                        sum += a;
+                        sq  += a * a;
+                        cnt++;
+                    }
+
+                    double da = RS_DA_MAX;
+                    if (cnt > 0) {
+                        const double mu = sum / (double)cnt;
+                        if (mu > 0.0) {
+                            const double var = sq / (double)cnt - mu * mu;
+                            da = (var > 0.0) ? sqrt(var) / mu : 0.0;
+                            if (da > RS_DA_MAX) da = RS_DA_MAX;
+                        }
+                    }
+                    out->d_a[(size_t)w] = da;
+                }
 
                 if (params->estimator == RS_MICROM_EST_PHASE) {
                     /* The dominant scatterer's phase, read from each sub-look.

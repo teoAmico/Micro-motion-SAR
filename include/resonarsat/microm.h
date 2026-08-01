@@ -538,6 +538,38 @@ typedef struct {
     double *snr;                /* [n_win] */
     double  snr_null;
 
+    /* [n_win] AMPLITUDE DISPERSION of the window's brightest pixel across the
+     * sub-look stack: sigma_A / mu_A, computed for EVERY estimator because it is
+     * a property of the scene rather than of the tracker.
+     *
+     * WHAT IT IS FOR. rs_microm_estimator_t states the phase route's
+     * precondition as one dominant scatterer per sub-look resolution cell, and
+     * FOLLOW-UPS.md item 15 measured that it is a real constraint rather than a
+     * formality -- at 2.75 equal scatterers per cell the estimator fails at
+     * every seed and every selection policy. Until this field existed there was
+     * no way to tell from a result whether the precondition had been met, which
+     * made a null uninterpretable: "nothing moved" and "the estimator was never
+     * applicable here" produce the same output.
+     *
+     * This is the standard measure of exactly that condition. Ferretti et al.
+     * (2001) select persistent scatterers by amplitude dispersion, taking
+     * D_A <= 0.25 as the criterion, and the quantity is the same one: a cell
+     * whose return is dominated by one scatterer holds its amplitude, while a
+     * cell of comparable scatterers fluctuates as their interference changes.
+     *
+     * THE THRESHOLD'S CALIBRATION IS NOT TRANSFERABLE AND THE FORM IS. That 0.25
+     * was established over INDEPENDENT PASSES, where each acquisition is a fresh
+     * realisation; sub-looks of one aperture share their scatterers and are not
+     * independent, so the null distribution differs and the number should be
+     * read as a scale rather than a bright line. Measured on the Giza collect at
+     * 0.90 overlap the best window reached 0.381 and the median 0.583, so ZERO
+     * of 225 windows met it -- a margin wide enough that the calibration
+     * question does not change the reading.
+     *
+     * Zero-amplitude windows report D_A = RS_DA_MAX rather than a division by
+     * zero: an empty window is maximally dispersed, not perfectly stable. */
+    double *d_a;                /* [n_win] */
+
     /* [n_win] rms over looks of the one-sigma offset uncertainty in AZIMUTH,
      * pixels, from the curvature of each look's correlation peak. Zero for the
      * estimators that form no correlation surface.
@@ -632,9 +664,26 @@ typedef struct {
     double *sigma_px;
     double  snr_null;
 
+    /* [n_win] amplitude dispersion, carried through from rs_microm_t so a
+     * selection policy and an evidence file can both report whether the phase
+     * estimator's precondition was met. See rs_microm_t.d_a. */
+    double *d_a;
+
     size_t n_win, n_win_az, n_win_rg, n_freq;
     double df;              /* Hz per spectral bin */
 } rs_spectrum_t;
+
+/* The amplitude-dispersion criterion for a persistent scatterer.
+ *
+ * Ferretti et al. (2001). See rs_microm_t.d_a for what it measures, and for why
+ * its calibration over independent passes does not transfer unexamined to
+ * sub-looks of one aperture. */
+#define RS_PS_DA_MAX 0.25
+
+/* The value reported for a window with no amplitude at all. Chosen above any
+ * physically meaningful dispersion so that an empty window sorts with the worst
+ * rather than, through a zero, with the best. */
+#define RS_DA_MAX 9.99
 
 /* Fill 'params' with the published working defaults described above. */
 void rs_microm_params_default(rs_microm_params_t *params);

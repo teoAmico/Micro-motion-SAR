@@ -337,6 +337,7 @@ Line by line, in the order it prints:
 | `sub-pixel refinement: 1/N px` | the **quantisation** of the reported series. An excursion under one step comes back as a two-level staircase whose energy sits at low frequency regardless of cause |
 | `tracked W windows; K pass the coherence mask` | K of 0 means nothing downstream is a measurement |
 | `spectra: B bins, df Hz` | `df` sets what "within half a bin" means |
+| `amplitude dispersion: best X, median Y; N of M windows meet D_A <= 0.25` | whether the scene can support `--estimator phase` at all — see below |
 | `consensus: f, agreed by A of V windows, D distinct, largest block C` | the detection statistic — see below |
 | `cull: f from A of N windows surviving (SNR x, sigma y, neighbours z removed)` | a **second, independent** selection policy — see below |
 | `sub-aperture response ... at an observation ratio of eta` | near-integer eta means the observable's response is near zero there |
@@ -389,6 +390,27 @@ The published campaigns *do* use ~99% overlap and are right to: they read pixel
 correlation` tracks displacement, which is exactly what the averaging attenuates.
 So high overlap is a reason to change `--estimator`, not a reason to raise `--n`.
 `FOLLOW-UPS.md` item 13 has the measurements.
+
+### The amplitude-dispersion line says whether a null means anything
+
+`--estimator phase` needs **one dominant scatterer per sub-look resolution cell**
+(`FOLLOW-UPS.md` item 15). Amplitude dispersion `D_A = σ_A/μ_A` of each window's
+brightest pixel is the standard measure of that — Ferretti et al.'s
+persistent-scatterer statistic, criterion `D_A ≤ 0.25`.
+
+It separates the synthetic fixtures cleanly: those where phase recovers reach
+0.079–0.084 and have windows meeting the criterion; those where it fails bottom
+out at 0.381–0.397 with none. **On the real Giza collect the best window was
+0.381 and none met the criterion** — so that null was what an unmet precondition
+guarantees, not evidence about the pyramid.
+
+So read this line first. `0 of M windows` under `--estimator phase` means a null
+below tells you nothing about the ground. It is reported for every estimator,
+because its most useful message is *switch estimator*.
+
+The 0.25 criterion was calibrated over independent passes, not sub-looks of one
+aperture, so read it as a scale rather than a bright line; the measured gap
+(0.084 against 0.381) is wide enough that the distinction has not yet mattered.
 
 ### The `cull` line reads different evidence
 

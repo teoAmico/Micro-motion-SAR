@@ -18,10 +18,6 @@ and the sub-look coherence measurement behind the phase estimator's
 non-accumulating design. They now live in `rs_microm_estimator_t`,
 `rs_spectrum_best_window()` and `rs_microm_track()`.
 
-Questions for the method's author are in
-[`CORE-QUESTIONS.md`](CORE-QUESTIONS.md), with the detailed working list in
-[`OPEN-QUESTIONS.md`](OPEN-QUESTIONS.md).
-
 ---
 
 ## 1. The quantisation floor is a per-window test with no multiplicity correction
@@ -2003,3 +1999,66 @@ qualified and the run could not have succeeded whatever the pyramid was doing.
 A bridge pylon or a masonry arch should score far lower, but nothing in the tool
 reports `D_A` against that criterion yet, so a null over Istanbul would be as
 uninterpretable as the null over Giza. That check is the thing to land next.
+
+---
+
+## 19. Amplitude dispersion, and item 17's null is a precondition failure
+
+Item 17 left the Giza null ambiguous: "nothing moved" and "the estimator was
+never applicable here" produce the same output, and nothing in the tool told them
+apart. Item 15 had already established the phase route's precondition -- one
+dominant scatterer per sub-look resolution cell -- but there was no way to check
+it against a real scene.
+
+`rs_microm_t.d_a` is that check. It is the **amplitude dispersion** of each
+window's brightest pixel across the sub-look stack, `sigma_A / mu_A`, which is
+Ferretti et al.'s (2001) persistent-scatterer statistic with its criterion of
+`D_A <= 0.25`. `mmotion` now reports the best, the median and the count meeting
+the criterion, and warns when none do. It is computed for **every** estimator,
+because the most useful thing it can say is "switch estimator", and a statistic
+produced only by the route it recommends cannot say that.
+
+**IT SEPARATES THE FIXTURES, WHICH IS THE ONLY THING THAT MAKES IT WORTH
+REPORTING.** Against cases whose recovery or failure item 15 already
+established, seed 7, zero overlap:
+
+```
+fixture                  phase recovers?   D_A best / median   windows <= 0.25
+96 uniform clutter       YES  1.008/0.0070    0.079 / 0.314           9
+3x3 dominant lattice     YES  1.008/0.0070    0.084 / 0.112          20
+8x8 dense lattice        no  -0.324/2.0519    0.381 / 0.483           0
+640 uniform clutter      no  -1.346/1.1614    0.397 / 0.477           0
+```
+
+No overlap, and the criterion falls in the gap: the recovering fixtures reach
+0.079 and 0.084, the failing ones bottom out at 0.381 and 0.397. `test_tracking.c`
+asserts the separation on the 3x3 and 8x8 pair, including that the failing
+fixture's BEST window is well clear of the criterion rather than marginally over
+it -- if that stops holding, the statistic has stopped predicting what it is
+reported for and the warning becomes misleading rather than merely unhelpful.
+
+**AND IT REINTERPRETS ITEM 17.** The Giza run's best window was **0.381** and its
+median 0.583, so **0 of 225 windows met the criterion**. Giza sits with the
+failing fixtures, not near the boundary. The null there was not evidence about
+the pyramid: it is what the precondition being unmet across the entire scene
+guarantees, and the run could not have succeeded whatever the ground was doing.
+Item 17's headline finding -- that the sawtooth artefact is gone on real data --
+is unaffected, because that rests on the flat frequency histogram rather than on
+the null being meaningful.
+
+**A caution recorded when it nearly caused an error.** The first check of this
+was run against a `sim_cphd` scene carrying 400 clutter scatterers, which
+returned a best `D_A` of 0.407 and looked like a counter-example to the whole
+idea -- a fixture "where phase recovers" scoring with the failures. It was not a
+counter-example: 400 scatterers is in the failing regime by item 15's own density
+table, and the recovering fixture has 96. The statistic was right and the fixture
+was misidentified. Anyone re-checking this should confirm which scene they are
+looking at before concluding the statistic does not work.
+
+**The calibration caveat stands.** 0.25 was established over independent passes,
+where each acquisition is a fresh realisation; sub-looks of one aperture share
+their scatterers and are not independent, so the null distribution differs. The
+measured gap here is 0.084 against 0.381, wide enough that the question does not
+change any of the readings above -- but the number should be read as a scale
+rather than a bright line, and the separating threshold for sub-looks has not
+been measured.

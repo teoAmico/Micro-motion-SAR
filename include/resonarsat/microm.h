@@ -1004,16 +1004,23 @@ resonarsat_status_t rs_spectrum_ampcor_window(const rs_spectrum_t *spec,
  * gate rather than closing it, so a caller can measure one gate's effect with
  * the other out of the way.
  *
- * EXPOSED SO THE CONSTANTS CAN BE SWEPT RATHER THAN ARGUED ABOUT. Both are
- * tuned -- there is no absolute scale for either quantity -- and a tuned
- * constant compiled into a selection policy is a claim nobody can check without
- * editing the source and rebuilding. tests/test_cullsweep.c sweeps 'snr_factor'
- * across one set of spectra, which is the only way to see what the choice costs
- * in recall and buys in precision. Gate 3 has no factor here because its
- * threshold is geometric rather than tuned; see above. */
+ * 'min_neighbours' is gate 3's threshold, in agreeing 4-neighbours; zero
+ * disables that gate. Unlike the other two this one is DERIVED rather than tuned
+ * -- two is the in-block neighbour count of a 2x2 block -- and it is exposed
+ * anyway, because a derivation is a claim about the world and a claim about the
+ * world can be checked. Sweeping it is how one finds out whether the geometry
+ * argument survives contact with a real window population, which is exactly what
+ * gate 3's first version did not (FOLLOW-UPS.md item 12c).
+ *
+ * EXPOSED SO THE CONSTANTS CAN BE SWEPT RATHER THAN ARGUED ABOUT. A constant
+ * compiled into a selection policy is a claim nobody can check without editing
+ * the source and rebuilding. tests/test_cullsweep.c sweeps these across ONE set
+ * of spectra, so the threshold is the only thing varying and any difference is
+ * attributable to it alone. */
 resonarsat_status_t rs_spectrum_ampcor_window_opts(const rs_spectrum_t *spec,
                                                    double snr_factor,
                                                    double sigma_factor,
+                                                   size_t min_neighbours,
                                                    rs_spectrum_cull_t *out);
 
 /* Return the observation ratio implied by a sub-aperture duration and a measured

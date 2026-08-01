@@ -843,27 +843,27 @@ int main(void)
         for (size_t w = 0; w < n_win; w++) {
             m.quality[w] = 1.0;         /* the coherence gate passes everyone */
 
-            double freq, amp, snr, sig;
+            double freq, w_amp, snr, sig;
             const int in_block = (w == 5 || w == 6 || w == 9 || w == 10);
             const int isolated = (w == 0);
             const int weak_snr = (w >= 12);
             if (in_block || isolated) {
-                freq = f_block; amp = 1.0; snr = 100.0; sig = 0.1;
+                freq = f_block; w_amp = 1.0; snr = 100.0; sig = 0.1;
             } else if (weak_snr) {
                 /* A clean, prominent peak behind a surface indistinguishable
                  * from noise. Nothing in the spectrum says so. */
-                freq = f_weak;  amp = 1.0; snr = 8.0;   sig = 0.1;
+                freq = f_weak;  w_amp = 1.0; snr = 8.0;   sig = 0.1;
             } else {
                 /* Well correlated and well determined, but the excursion is
                  * below three sigma of the offset noise, so the series is not
                  * a measurement however clean its periodogram looks. */
                 freq = 0.15625 * (double)(2 + (w % 3));
-                amp = 0.05; snr = 100.0; sig = 1.0;
+                w_amp = 0.05; snr = 100.0; sig = 1.0;
             }
             m.snr[w] = snr;
             m.sigma_px[w] = sig;
             for (size_t i = 0; i < k; i++) {
-                const double v = amp * sin(2.0 * M_PI * freq * m.dt * (double)i);
+                const double v = w_amp * sin(2.0 * M_PI * freq * m.dt * (double)i);
                 m.disp_az[w * k + i] = v;
                 m.vel_los[w * k + i] = v;
             }

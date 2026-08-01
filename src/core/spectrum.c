@@ -509,7 +509,31 @@ resonarsat_status_t rs_spectrum_consensus(const rs_spectrum_t *spec,
  * Geometric, not tuned: each cell of a 2x2 block has exactly two of its four
  * lattice neighbours inside the block, and a 2x2 block is the smallest footprint
  * a resolvable target can occupy given that windows overlap at the tracking
- * stride. See rs_spectrum_ampcor_window() in microm.h. */
+ * stride. See rs_spectrum_ampcor_window() in microm.h.
+ *
+ * SWEPT, AND THE DERIVED VALUE IS EXACTLY THE BOUNDARY. Over one set of spectra
+ * -- tests/test_cullsweep.c, FOLLOW-UPS.md item 12e:
+ *
+ *   min nbrs   clutter ans/correct/distinct   isolated   static answers
+ *      0             18 / 12 / 6                6 / 3      3   DISQUALIFIED
+ *      1             15 / 11 / 6                4 / 2      1   DISQUALIFIED
+ *      2              5 /  5 / 2                2 / 2      0
+ *      3              0 /  0 / 0                0 / 0      0
+ *      4              0 /  0 / 0                0 / 0      0
+ *
+ * Below two, a scene with nothing moving gets an answer -- at zero it gets one
+ * at every seed. Above two, nothing gets an answer at all. So two is not merely
+ * a defensible choice on a plateau, the way gate 1's factor is: it is the only
+ * value that both refuses every static control and answers anything, and the
+ * geometric argument predicted that boundary before it was measured.
+ *
+ * THE PRICE IS RECALL AND IT IS SEVERE. This gate is what holds the cull at 5
+ * answers of 18 -- disabled it answers all 18, and 12 of those are correct
+ * across all six distinct injections. The coverage a fit needs therefore EXISTS
+ * in the tracking, and it exists only together with static false positives.
+ * That is a statement about the operating point rather than about this constant:
+ * at these coherences the chain cannot both answer across the band and refuse a
+ * motionless scene, and no setting of this threshold changes that. */
 #define RS_CULL_MIN_NEIGHBOURS 2
 
 /* Select by culling on what the correlator knew, at the default factors.
@@ -518,13 +542,15 @@ resonarsat_status_t rs_spectrum_ampcor_window(const rs_spectrum_t *spec,
                                               rs_spectrum_cull_t *out)
 {
     return rs_spectrum_ampcor_window_opts(spec, RS_CULL_SNR_FACTOR,
-                                          RS_CULL_SIGMA_FACTOR, out);
+                                          RS_CULL_SIGMA_FACTOR,
+                                          RS_CULL_MIN_NEIGHBOURS, out);
 }
 
 /* Select by culling, with both tuned factors supplied. See microm.h. */
 resonarsat_status_t rs_spectrum_ampcor_window_opts(const rs_spectrum_t *spec,
                                                    double snr_factor,
                                                    double sigma_factor,
+                                                   size_t min_neighbours,
                                                    rs_spectrum_cull_t *out)
 {
     if (!out) return RS_ERR_ARG;
@@ -629,7 +655,9 @@ resonarsat_status_t rs_spectrum_ampcor_window_opts(const rs_spectrum_t *spec,
                               spec->n_win_az * spec->n_win_rg == spec->n_win);
     for (size_t w = 0; w < spec->n_win; w++) {
         if (state[w] != 2) continue;
-        if (!have_lattice) { state[w] = 3; out->n_survivor++; continue; }
+        if (!have_lattice || min_neighbours == 0) {
+            state[w] = 3; out->n_survivor++; continue;
+        }
 
         const size_t ia = w / spec->n_win_rg, ir = w % spec->n_win_rg;
         const long da[4] = { -1, 1, 0, 0 };
@@ -659,8 +687,8 @@ resonarsat_status_t rs_spectrum_ampcor_window_opts(const rs_spectrum_t *spec,
             if (state[nb] == 0) continue;
             if (fabs(spec->dominant_freq[nb] - spec->dominant_freq[w]) <= tol) agree++;
         }
-        if (agree >= RS_CULL_MIN_NEIGHBOURS) { state[w] = 3; out->n_survivor++; }
-        else                                 { out->n_neigh_cull++; }
+        if (agree >= min_neighbours) { state[w] = 3; out->n_survivor++; }
+        else                         { out->n_neigh_cull++; }
     }
 
     if (out->n_survivor == 0) {

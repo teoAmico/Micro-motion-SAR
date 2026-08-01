@@ -1276,3 +1276,79 @@ that fixture and its recall of 2 of 6 is entirely someone else's doing.
 **One measurement to be careful with.** Three seeds and one fixture family. The
 static false positive at factors <= 1.0 is a single occurrence out of three
 seeds, so its existence is established and its rate is not.
+
+### 12e. Gate 3 swept: the derived value is exactly the boundary, and it costs the recall
+
+Item 12d showed gate 1 is not what holds the cull at 5 answers of 18 -- above a
+factor of 1.75 it changes nothing -- and pointed at gate 3 and the coherence gate
+instead. Both are answered here, and they need different answers.
+
+**GATE 3, SWEPT OVER THE SAME SPECTRA.** Its threshold is derived rather than
+tuned: two is the in-block 4-neighbour count of a 2x2 block, the smallest
+footprint a resolvable target can occupy given that windows overlap at the
+tracking stride.
+
+```
+min nbrs   clutter (18 pts)        isolated (6)   static (3)
+           ans  corr  distinct     ans  corr      answered
+    0       18   12     6            6    3         3   DISQUALIFIED
+    1       15   11     6            4    2         1   DISQUALIFIED
+    2        5    5     2            2    2         0
+    3        0    0     0            0    0         0
+    4        0    0     0            0    0         0
+```
+
+**The derivation predicted the boundary and the measurement lands on it.** Below
+two, a scene with nothing moving gets an answer -- at zero it gets one at every
+seed. Above two, nothing gets an answer at all. Two is the only value that both
+refuses every static control and answers anything. That is a stronger result than
+gate 1's, where 2.0 merely sits on a plateau: here the constant is pinned from
+both sides, and by an argument made before the data.
+
+**AND IT IS WHAT HOLDS THE RECALL DOWN.** Disabled, the cull answers all 18
+clutter points, 12 of them correct, across all six distinct injections. So the
+coverage a meaningful fit needs is PRESENT IN THE TRACKING and is being discarded
+by the selection -- which is item 7-9's finding again, one level up: the cull was
+built to fix a selection policy discarding real recoveries, and its own strictest
+gate now discards them too.
+
+**But the coverage exists only together with false positives.** Every setting
+that reaches six distinct injections also answers on a motionless scene. There is
+no threshold that gives both. That is a statement about the operating point, not
+about this constant: at these coherences the chain cannot simultaneously answer
+across the band and refuse a null, and no value of any of the three gates changes
+that. Item 12c's "recall is the open question" is therefore answered and the
+answer is that recall is not separately obtainable here.
+
+**THE COHERENCE GATE CANNOT BE SWEPT ON THIS FIXTURE FAMILY, MEASURED.** The
+default is 0.4 and the published campaigns work near 0.85, measured between
+95-percent-overlapped looks on the Giza collect. What this fixture reaches:
+
+```
+overlap   coherence min / median / max
+  0.00      0.059 / 0.075 / 0.135
+  0.50      0.063 / 0.100 / 0.186
+  0.90      0.143 / 0.194 / 0.265
+  0.95      0.196 / 0.244 / 0.323
+```
+
+Coherence rises with overlap exactly as it should -- the mechanism is right, and
+zero overlap decorrelating totally is correct behaviour rather than a fixture
+defect, since look 0 and look 127 then share no pulses and a `first` reference
+compares images a full aperture apart. But the ceiling is 0.323 even at 95
+percent overlap, below the gate's own default and far below the regime the gate
+exists to discriminate within. **Sweeping the coherence gate here would measure
+the fixture's ceiling and report it as a property of the gate**, which is item
+12c's error in a different costume. Asserted as a limitation in
+`test_cullsweep.c` so that a fixture which can reach 0.4 makes the test fail.
+
+**WHAT A SECOND FIXTURE FAMILY HAS TO DO, now specified rather than guessed.** It
+must reach coherence of order 0.85 at high overlap. Overlap alone does not get
+there, so it is a scene-content change and not a parameter: 96 ideal point
+scatterers over 24 m at 8 m sub-look resolution give roughly ten per cell, whose
+relative phases decorrelate with aspect far faster than a real cell's effective
+thousands. Candidates, in increasing cost: many more scatterers per resolution
+cell; a persistent dominant scatterer per cell, which is what a built structure
+actually presents; or a physical sub-resolution model. Until one exists, every
+number in items 12a to 12e rests on one fixture family and the coherence gate's
+default has never been tested by anything.

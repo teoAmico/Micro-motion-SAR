@@ -161,10 +161,18 @@ that culls on what the correlator knew rather than on the spectrum. It is report
 beside the other two and gates nothing. Swept in `tests/test_cullsweep.c`: it answers
 rarely and, so far, always correctly, and refuses every static control where the other
 two report a confident frequency — but its answers cluster at two distinct injections,
-so its recall, not its correctness, is the open question (items 12c-d). The SNR gate's
-factor has been swept and is load-bearing — at or below the noise-alone value the cull
-admits a static scene — and sits on a plateau, so recall is being lost at the other two
-gates rather than there.
+so its recall, not its correctness, was the open question (items 12c-e). All three gates
+are now swept. The answer: gate 3 holds the recall down, its derived threshold of two is
+pinned from both sides — below it a static scene gets an answer, above it nothing does —
+and the coverage a fit needs exists in the tracking only together with false positives.
+No gate setting gives both, which is a statement about the operating point rather than
+about any constant.
+
+`tests/test_cullsweep.c` also measures what this fixture family can reach: coherence tops
+out at 0.323 even at 95% overlap, against a `--coherence` default of 0.4 and a real
+collect's 0.85. **The coherence gate has never been tested by anything**, and a second
+fixture family that reaches ~0.85 at high overlap is the prerequisite for testing it —
+a scene-content change, not a parameter (item 12e).
 
 `--reference pair` and `--reference adjacent` do not recover a frequency on the
 synthetic fixture and are exposed because the sources describe them, not because they

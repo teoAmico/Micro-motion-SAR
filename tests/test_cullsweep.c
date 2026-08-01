@@ -59,6 +59,14 @@
  * thing. Its own factor is not swept here: it is relative to the scene's median
  * and so cannot be compared across runs the way an absolute threshold can. */
 #define RS_CULL_SIGMA_DEFAULT 2.0
+#define RS_CULL_SNR_FACTOR_DEFAULT 2.0
+#define RS_CULL_MIN_NBR_DEFAULT 2u
+
+/* Gate 3 thresholds swept, in agreeing 4-neighbours. Zero disables the gate; 4
+ * is every neighbour a window has, which only an interior cell of a solid block
+ * can reach. Two is the derived value. */
+#define N_NBR 5u
+static const size_t NBR_MINS[N_NBR] = { 0, 1, 2, 3, 4 };
 
 #define N_FACTOR 8u
 static const double SNR_FACTORS[N_FACTOR] = {
@@ -83,6 +91,7 @@ typedef struct {
     size_t cull_snr, cull_sigma, cull_neigh;
     double snr_null, snr_median;
     double sigma_median, exc_median;
+    double q_lo, q_med, q_hi;
 
     /* What the cull reported at each swept SNR factor, from THIS run's single
      * spectrum. Evaluating every factor against one set of spectra is the whole
@@ -91,6 +100,7 @@ typedef struct {
      * worse answer. */
     double cull_hz_f[N_FACTOR];
     size_t cull_surv_f[N_FACTOR];
+    double cull_hz_n[N_NBR];      /* the same, against gate 3's threshold */
 } rs_run_t;
 
 /* Build a coherently vibrating clutter patch.
@@ -140,8 +150,8 @@ static void make_clutter(rs_sim_tgt_t *tg, size_t n, unsigned seed,
  * under test are the cull's, and leaving a second mask in front of them would
  * confound the two.
  */
-static resonarsat_status_t run_once(double freq, double amp, unsigned seed,
-                                    int isolated, rs_run_t *out)
+static resonarsat_status_t run_once_ov(double freq, double amp, unsigned seed,
+                                       int isolated, double overlap, rs_run_t *out)
 {
     memset(out, 0, sizeof *out);
     out->best_hz = out->consensus_hz = out->cull_hz = -1.0;
@@ -170,7 +180,7 @@ static resonarsat_status_t run_once(double freq, double amp, unsigned seed,
     rs_subap_params_t sp;
     rs_subap_params_default(&sp);
     sp.n_looks = N_LOOKS;
-    sp.overlap = 0.0;      /* overlap works against the ambiguity condition */
+    sp.overlap = overlap;  /* zero works with the ambiguity condition */
 
     rs_subap_stack_t s;
     if ((st = rs_subaperture_from_cphd(&c, &g, &sp, &s)) != RS_OK) {
@@ -216,6 +226,25 @@ static resonarsat_status_t run_once(double freq, double amp, unsigned seed,
         }
     }
 
+    /* The coherence distribution across windows. This is what decides whether
+     * this fixture can exercise the coherence gate AT ALL: a gate whose default
+     * is 0.4 cannot be swept on a scene where every window sits at 0.05. */
+    if (spec.quality && spec.n_win) {
+        double *q = malloc(spec.n_win * sizeof *q);
+        if (q) {
+            memcpy(q, spec.quality, spec.n_win * sizeof *q);
+            for (size_t i = 1; i < spec.n_win; i++) {
+                const double v = q[i]; size_t j = i;
+                while (j > 0 && q[j-1] > v) { q[j] = q[j-1]; j--; }
+                q[j] = v;
+            }
+            out->q_lo = q[0];
+            out->q_med = q[spec.n_win / 2];
+            out->q_hi = q[spec.n_win - 1];
+            free(q);
+        }
+    }
+
     /* Median sigma and excursion, which is what gate 2 compares. Printed
      * rather than only counted because "the gate fired" and "the gate fired
      * because sigma is on the wrong scale" are different findings. */
@@ -253,9 +282,19 @@ static resonarsat_status_t run_once(double freq, double amp, unsigned seed,
         rs_spectrum_cull_t cull_i;
         const resonarsat_status_t s2 =
             rs_spectrum_ampcor_window_opts(&spec, SNR_FACTORS[i],
-                                           RS_CULL_SIGMA_DEFAULT, &cull_i);
+                                           RS_CULL_SIGMA_DEFAULT,
+                                           RS_CULL_MIN_NBR_DEFAULT, &cull_i);
         out->cull_hz_f[i]   = (s2 == RS_OK) ? cull_i.freq_hz : -1.0;
         out->cull_surv_f[i] = cull_i.n_survivor;
+    }
+
+    for (size_t i = 0; i < N_NBR; i++) {
+        rs_spectrum_cull_t cull_i;
+        const resonarsat_status_t s2 =
+            rs_spectrum_ampcor_window_opts(&spec, RS_CULL_SNR_FACTOR_DEFAULT,
+                                           RS_CULL_SIGMA_DEFAULT, NBR_MINS[i],
+                                           &cull_i);
+        out->cull_hz_n[i] = (s2 == RS_OK) ? cull_i.freq_hz : -1.0;
     }
 
     rs_spectrum_cull_t cull;
@@ -274,6 +313,13 @@ static resonarsat_status_t run_once(double freq, double amp, unsigned seed,
     rs_subap_stack_free(&s);
     rs_cphd_free(&c);
     return RS_OK;
+}
+
+/* The zero-overlap call every row of the sweep uses. */
+static resonarsat_status_t run_once(double freq, double amp, unsigned seed,
+                                    int isolated, rs_run_t *out)
+{
+    return run_once_ov(freq, amp, seed, isolated, 0.0, out);
 }
 
 /* Fit one policy's answers against the injections that produced them, over
@@ -348,6 +394,9 @@ int main(void)
 
     double inj[64], f_best[64], f_cons[64], f_cull[64];
     double f_fac[N_FACTOR][64];       /* clutter answers, per SNR factor */
+    double f_nbr[N_NBR][64];          /* clutter answers, per gate 3 threshold */
+    double p_nbr[N_NBR][16];
+    double s_nbr[N_NBR][8];
     double p_fac[N_FACTOR][16];       /* isolated-point answers */
     double s_fac[N_FACTOR][8];        /* static control answers */
     size_t n = 0;
@@ -367,15 +416,16 @@ int main(void)
             f_cons[n] = r.consensus_hz;
             f_cull[n] = r.cull_hz;
             for (size_t k = 0; k < N_FACTOR; k++) f_fac[k][n] = r.cull_hz_f[k];
+            for (size_t k = 0; k < N_NBR; k++) f_nbr[k][n] = r.cull_hz_n[k];
             n++;
             df = r.df;
             snr_null = r.snr_null;
 
             printf("  %4.1f  %6u | %8.3f  %8.3f  %8.3f  | %2zu/%2zu/%2zu/%2zu/%2zu"
-                   "  snr med %.1f null %.1f\n",
+                   "  snr med %.1f  coh %.3f/%.3f/%.3f\n",
                    freqs[fi], seeds[si], r.best_hz, r.consensus_hz, r.cull_hz,
                    r.cull_input, r.cull_snr, r.cull_sigma, r.cull_neigh,
-                   r.cull_survivor, r.snr_median, r.snr_null);
+                   r.cull_survivor, r.snr_median, r.q_lo, r.q_med, r.q_hi);
         }
     }
 
@@ -395,6 +445,7 @@ int main(void)
         s_cons[si] = r.consensus_hz;
         s_cull[si] = r.cull_hz;
         for (size_t k = 0; k < N_FACTOR; k++) s_fac[k][si] = r.cull_hz_f[k];
+        for (size_t k = 0; k < N_NBR; k++) s_nbr[k][si] = r.cull_hz_n[k];
         printf("  %4s  %6u | %8.3f  %8.3f  %8.3f  | %2zu/%2zu/%2zu/%2zu/%2zu\n",
                "--", seeds[si], r.best_hz, r.consensus_hz, r.cull_hz,
                r.cull_input, r.cull_snr, r.cull_sigma, r.cull_neigh,
@@ -426,12 +477,13 @@ int main(void)
         p_cons[np] = r.consensus_hz;
         p_cull[np] = r.cull_hz;
         for (size_t k = 0; k < N_FACTOR; k++) p_fac[k][np] = r.cull_hz_f[k];
+        for (size_t k = 0; k < N_NBR; k++) p_nbr[k][np] = r.cull_hz_n[k];
         np++;
         printf("  %4.1f  | %8.3f  %8.3f  %8.3f  | %2zu/%2zu/%2zu/%2zu/%2zu"
-               "  snr med %.1f  sigma med %.2f px  exc med %.2f px\n",
+               "  snr med %.1f  coh %.3f/%.3f/%.3f\n",
                freqs[fi], r.best_hz, r.consensus_hz, r.cull_hz,
                r.cull_input, r.cull_snr, r.cull_sigma, r.cull_neigh,
-               r.cull_survivor, r.snr_median, r.sigma_median, r.exc_median);
+               r.cull_survivor, r.snr_median, r.q_lo, r.q_med, r.q_hi);
     }
 
     double sl_b = 0, rm_b = 0, sl_c = 0, rm_c = 0, sl_k = 0, rm_k = 0;
@@ -527,6 +579,74 @@ int main(void)
     }
     printf("  best distinct coverage at factor %.2f (%zu distinct injections "
            "across both fixtures)\n", SNR_FACTORS[best_k], best_cov);
+
+    /* ------------------------------------------------------------------
+     * GATE 3'S THRESHOLD, over the same spectra.
+     *
+     * Item 12d showed gate 1 is not what holds recall at 5 of 18: from a factor
+     * of 1.75 upwards it changes nothing. That leaves gate 3, whose threshold is
+     * DERIVED rather than tuned -- two is the in-block 4-neighbour count of a
+     * 2x2 block, the smallest footprint a resolvable target can occupy given
+     * that windows overlap at the tracking stride. A derivation is still a claim
+     * about the world, and its first version was already wrong once about which
+     * population it applied to (item 12c). This is the check.
+     * ------------------------------------------------------------------ */
+    printf("\n  gate 3 threshold swept over the SAME spectra "
+           "(gates 1 and 2 at their defaults):\n");
+    printf("  %10s | %-18s | %-12s | %s\n",
+           "min nbrs", "clutter (18 pts)", "isolated (6)", "static (3)");
+    printf("  %10s | %5s %5s %5s | %5s %5s | %s\n",
+           "", "ans", "corr", "dist", "ans", "corr", "answered");
+    for (size_t k = 0; k < N_NBR; k++) {
+        size_t ca = 0, cc = 0, ia = 0, ic = 0, sa = 0, cd = 0;
+        for (size_t i = 0; i < n; i++) {
+            if (f_nbr[k][i] < 0.0) continue;
+            ca++;
+            if (fabs(f_nbr[k][i] - inj[i]) <= 0.5 * df) cc++;
+        }
+        for (size_t i = 0; i < np; i++) {
+            if (p_nbr[k][i] < 0.0) continue;
+            ia++;
+            if (fabs(p_nbr[k][i] - p_inj[i]) <= 0.5 * df) ic++;
+        }
+        for (size_t i = 0; i < n_seed; i++) if (s_nbr[k][i] >= 0.0) sa++;
+        { double a = 0, b = 0; (void)fit_policy(inj, f_nbr[k], n, &a, &b, &cd); }
+        printf("  %10zu | %5zu %5zu %5zu | %5zu %5zu | %zu%s\n",
+               NBR_MINS[k], ca, cc, cd, ia, ic, sa,
+               (sa > 0) ? "  <- DISQUALIFIED" : "");
+    }
+
+    RS_CASE("gate 3 is what holds recall down, and is necessary anyway");
+    {
+        /* Both halves matter and they pull against each other. Relaxing gate 3
+         * must buy recall -- otherwise it is not the binding constraint and
+         * item 12d's conclusion was wrong -- and it must also cost something,
+         * or the gate is dead weight and should be deleted rather than tuned. */
+        size_t ans_off = 0, ans_def = 0;
+        for (size_t i = 0; i < n; i++) {
+            if (f_nbr[0][i] >= 0.0) ans_off++;      /* gate disabled */
+            if (f_nbr[2][i] >= 0.0) ans_def++;      /* the derived 2 */
+        }
+        printf("    disabled: %zu answers; at the derived 2: %zu\n",
+               ans_off, ans_def);
+        RS_CHECK(ans_off > ans_def);
+    }
+
+    RS_CASE("no gate 3 threshold at or above the derived value admits a static scene");
+    {
+        /* The derivation's real content. If a threshold BELOW two already
+         * refuses every static scene then the geometric argument is buying
+         * nothing here and two is merely conservative; if the static scenes
+         * start getting through below two, the derived value is the boundary
+         * and the derivation is doing work. Either is a finding; the assertion
+         * is only that at and above the derived value nothing gets through. */
+        for (size_t k = 0; k < N_NBR; k++) {
+            size_t sa = 0;
+            for (size_t i = 0; i < n_seed; i++) if (s_nbr[k][i] >= 0.0) sa++;
+            printf("    min nbrs %zu: %zu static answer(s)\n", NBR_MINS[k], sa);
+            if (NBR_MINS[k] >= 2) RS_CHECK(sa == 0);
+        }
+    }
 
     RS_CASE("the SNR gate factor sweep separates the candidates");
     {
@@ -674,6 +794,42 @@ int main(void)
         printf("    cull answered %zu of %zu clutter points over %zu distinct "
                "injections of %zu\n", nk, n, dk, n_freq);
         RS_CHECK(dk < n_freq);
+    }
+
+    RS_CASE("what coherence this fixture family can actually reach");
+    {
+        /* THE MEASUREMENT THAT SAYS WHICH GATES THIS FIXTURE CAN TEST.
+         *
+         * rs_microm_params_t.coherence_min defaults to 0.4 and the published
+         * campaigns work near 0.85, measured between 95-percent-overlapped looks
+         * on the Giza collect. If this fixture cannot reach those numbers then
+         * sweeping the coherence gate on it would measure the FIXTURE'S CEILING
+         * and report it as a property of the gate, which is the same error item
+         * 12c records against gate 2 in a different costume.
+         *
+         * Overlap is the axis, not scatterer density. At zero overlap look 0 and
+         * look 127 share no pulses at all, so a reference of RS_MICROM_REF_FIRST
+         * compares images a full aperture apart and total decorrelation is the
+         * correct outcome rather than a fixture defect. The literature's regime
+         * is the opposite one -- rs_microm_estimator_t records sub-apertures
+         * stepped by about 4 ms across a 16 s dwell, roughly 99 percent overlap
+         * -- and this project has never run there. */
+        printf("    clutter fixture, coherence min/median/max against overlap:\n");
+        const double ovs[] = { 0.0, 0.5, 0.9, 0.95 };
+        double reach = 0.0;
+        for (size_t i = 0; i < sizeof ovs / sizeof ovs[0]; i++) {
+            rs_run_t r;
+            RS_CHECK_OK(run_once_ov(0.5, amp, 7u, 0, ovs[i], &r));
+            printf("      overlap %.2f -> %.3f / %.3f / %.3f   (gate default %.2f)\n",
+                   ovs[i], r.q_lo, r.q_med, r.q_hi, 0.4);
+            if (r.q_hi > reach) reach = r.q_hi;
+        }
+        printf("    highest coherence any window reached: %.3f\n", reach);
+        /* Asserted as a LIMITATION. The claim is that this fixture cannot
+         * currently exercise the default coherence gate, so no sweep of that
+         * gate on this fixture means anything. When a fixture that can reach it
+         * exists, this fails and forces the finding to be revisited. */
+        RS_CHECK(reach < 0.4);
     }
 
     RS_CASE("the fit criterion can still reject a fixed answer");

@@ -51,9 +51,15 @@ the first thing here to meet the bar below, and `docs/FOLLOW-UPS.md` item 14 sta
 what it is not: the simulator gives every scatterer analytically exact phase, so the
 sub-look decorrelation that most threatens a phase observable is absent by construction.
 
-**Nothing here has been shown to recover a frequency on real data, and the correlation
-estimator has not been shown to recover one anywhere.** No output should be read as a
-demonstrated sensitivity until a real collect says so.
+On the real Giza collect the same estimator at 90% overlap returns a **null**, refused at
+16% window agreement, with no trace of the fixed-frequency artefact the old
+implementation produced at 100% agreement — the first evidence outside simulation that
+the fix holds. Nothing in that scene is known to move, so the null bounds nothing.
+
+**Nothing here has been shown to detect real motion, and the correlation estimator has
+not been shown to recover a frequency anywhere.** No collect available to this project
+contains motion known to be there, so no output should be read as a demonstrated
+sensitivity.
 
 ## The bar
 

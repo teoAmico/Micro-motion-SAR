@@ -1744,3 +1744,138 @@ precisely what the real collect will test.
 
 The next thing is the Giza collect, at high overlap, with `--estimator phase`,
 `--null-static` beside it, and this table as the read-out checklist.
+
+---
+
+## 16. `validate` is estimator-blind, and says FAIL for configurations the phase estimator handles
+
+Running the Giza collect through `validate --frequency 1.0 --overlap 0.90
+--amplitude 2.0` returns **VERDICT: FAIL** on four checks. Three of them do not
+apply to `--estimator phase`, and the one that does apply passes.
+
+```
+FAIL  observable band   ... the band reaches 0.304 Hz; the 0.1643 s step would
+                        suggest 3.042 Hz, which overlap does not buy. The target
+                        is ABOVE the band: past the sub-aperture's own averaging
+                        response, where a reported peak cannot be signal.
+FAIL  sensitivity       the floor measured at 0.4 m cells is 7.0 px p2p ...
+FAIL  ambiguity         ... a wrap ceiling of 1.5 px p2p against a 7.0 px
+                        artefact floor.
+PASS  phase floor       at the 0.40 mask over 994 independent samples the CRLB is
+                        0.051 rad, a line-of-sight noise of 0.1318 mm per look.
+```
+
+**The three failures are the correlation tracker's limits, in its units.**
+`sensitivity` and `ambiguity` are stated in TRACKING PIXELS -- a 7.0 px artefact
+floor, a 1.5 px wrap ceiling -- which are properties of a correlation surface and
+have no meaning for an estimator that reads pixel phase. `observable band` is the
+sub-aperture response ceiling, and item 13 established that ceiling is the
+correlator's: item 15 then measured phase recovering an injection at a response
+of **0.055**, a tenth of what correlation needs, so "past the averaging response,
+where a reported peak cannot be signal" is false for this estimator.
+
+Meanwhile `phase floor` -- the one check written for this observable -- passes
+with a line-of-sight noise of 0.13 mm per look against the 2 mm asked for.
+
+**This inverts the command's whole purpose.** `validate` exists because a wrong
+setting does not fail loudly, so it warns before the expensive processing. Here it
+does the opposite: it produces a confident refusal of a configuration that the
+measurements say is the right one, and a user following the documented order
+(`info` -> `validate` -> `focus` -> `mmotion`) would stop. A false alarm in a tool
+whose value is its authority is worse than a missing check.
+
+**The fix is not to relax the thresholds.** `rs_validate_req_t` carries no
+estimator field, so the checks cannot know which observable they are judging. It
+needs one, and then:
+
+- `RS_VALIDATE_SENSITIVITY` and `RS_VALIDATE_AMBIGUITY` should report
+  RS_V_UNKNOWN, not FAIL, for the phase estimator -- they measure a quantity that
+  estimator does not produce, and `RS_V_UNKNOWN` exists in the enum for exactly
+  this distinction.
+- `RS_VALIDATE_BAND` should use the sampling ceiling for phase and the response
+  ceiling for correlation, per item 13's arithmetic, rather than one rule for
+  both.
+- `RS_VALIDATE_PHASE_FLOOR` should be the sensitivity check for phase, and is
+  already computed.
+
+Until that exists, a phase run has to read the findings individually and ignore
+the verdict, which is precisely the habit `validate` was built to make
+unnecessary. **Recorded rather than fixed** because the Giza run this was found on
+is the more urgent thing; but a validate that cries wolf will be ignored, and then
+it will be ignored on the day it is right.
+
+---
+
+## 17. Giza with the repaired phase estimator at 90% overlap: a null, and the artefact is gone
+
+The first real-data run of the estimator repaired in items 14-15, at the high
+overlap item 15 showed it tolerates and real sub-look coherence requires.
+`runs/giza/2026-08-01-phase-highoverlap/RUN.md` has the full provenance.
+
+```
+./build/micromotion mmotion --cphd "$C" --at 29.979175,31.134186 \
+    --estimator phase --n 128 --overlap 0.90 \
+    --size 256 --cell 1.0 --win 32 --rbins 4096 --coherence 0
+```
+
+44 min 55 s, 442% mean CPU, 225 windows over a 256 m patch centred on Khufu.
+128 looks at 0.90 overlap give t_sap 2.40 s, dt 0.2399 s, a 2.08 Hz band and
+0.70 m sub-look resolution.
+
+```
+NO FREQUENCY REPORTED: only 27 of 170 windows agree (16%), which is what a
+  MOTIONLESS scene produces.
+  strongest window 55: 0.033 Hz, prominence 24.3, quality 0.483
+  consensus 0.195 Hz, 12 distinct answers, largest contiguous block 9
+  cull     0.065 Hz from 18 of 170 surviving, 105 removed on neighbours
+  the two disagree, and the tool says so
+```
+
+**THE ARTEFACT IS GONE, AND THIS IS THE RESULT WORTH HAVING.** Item 11 recorded
+the old phase estimator returning ONE fixed frequency at **100 percent** window
+agreement -- on moving scenes and on motionless ones alike, at a prominence
+higher than any real case. That was the sawtooth of item 14's diagnosis. Here the
+225 windows spread across 12 distinct bins and the modal answer takes 16 percent:
+
+```
+0.163 Hz  35 windows      0.065 Hz  28
+0.195 Hz  33              0.130 Hz  26
+0.098 Hz  30              0.228 Hz  25
+```
+
+A flat histogram over the low bins is noise. A line at 100 percent agreement is
+an artefact. The carrier removal was built and validated in simulation; this is
+the first evidence it holds on a real collect, where the sub-pixel offsets,
+geometry and decorrelation are all things the simulator does not produce.
+
+**And 16 percent is the project's own motionless signature.** Item 9 calibrated
+correct recoveries at 47-80 percent agreement and motionless scenes at 11-16.
+This lands at the top of the motionless band, and the tool refused, which is the
+behaviour every gate in the selection stage exists to produce.
+
+**WHAT THIS DOES NOT SHOW.** Nothing in this scene is known to move.
+`RS_VALIDATE_GROUND_TRUTH` reports unknown and always will; there is no
+accelerometer at Giza and `DATASETS.md` records that no collect with synchronous
+ground truth is in any open archive. **A null over a pyramid is the expected
+outcome and says nothing about sensitivity.** It is not a negative result about
+the method, and it must not be quoted as one.
+
+So the standing summary is unchanged in substance and sharper in detail: the
+phase estimator recovers injected frequencies in simulation, produces no artefact
+on real data, and **has still never been shown to detect real motion, because no
+collect available to this project contains motion known to be there.**
+
+**Two things this run makes concrete for the next one.**
+
+*Cost.* Work scales as `n_pulse * n_cells / (1 - overlap)`. At 0.90 overlap over
+65536 cells that is 45 minutes; 0.95 would be 90, and a 512-cell grid four times
+that again. Budget before configuring, and note `--null-static` multiplies it by
+the trial count -- which is why it was not run here, there being no positive to
+adjudicate.
+
+*The quality metric is weak on real data.* Amplitude stability ran 0.000 to 0.619
+with a median of 0.417, against 0.75-0.95 on the synthetic fixtures, and its map
+shows no structure following the pyramid's edges. The coherence gate admitted 170
+of 225 windows on a relative threshold of 0.31. Whether amplitude stability is
+the right precondition proxy on real clutter is now an open question that the
+synthetic work could not have raised.

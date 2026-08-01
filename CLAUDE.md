@@ -167,7 +167,16 @@ overlap is what buys sub-look coherence on a real collect. Item 13's response ce
 the correlator's, now measured — at 90% overlap a 1.3 Hz tone sits at a response of 0.055
 and phase still recovers it.
 
-Nothing has been shown to recover a frequency on REAL data. Every
+**Run once on the real Giza collect** (item 17): `--estimator phase` at 0.90 overlap,
+45 minutes, and it returned a NULL at 16% window agreement — the project's own
+motionless signature — with the frequency histogram flat across the low bins. The
+common-mode sawtooth artefact item 11 recorded at *100%* agreement is gone on real
+data, which is the first evidence outside simulation that item 14's carrier removal
+holds. Nothing in that scene is known to move, so the null says nothing about
+sensitivity and is not a negative result about the method.
+
+Nothing has been shown to DETECT REAL MOTION, and no collect available to this project
+contains motion known to be there. Every
 estimator and reference mode has failed at operating points this project's own
 arithmetic calls admissible; the most recent finding (`FOLLOW-UPS.md` items 7-9) is that
 the tracker does recover the injected carrier in most windows and the *selection policy*
@@ -213,6 +222,6 @@ synthetic fixture and are exposed because the sources describe them, not because
 work. `--reference lag` is documented and harmless but does not beat `first` on a
 consensus measure.
 
-`build/`, `data/` and run outputs are gitignored. `tools/new-run.sh <scene> <suffix>
+`build/` and `data/` are gitignored; run outputs are NOT -- `.gitignore` opts `runs/` back in, because a run directory IS the record. Raw `.f32` cubes and `.cphd` stay ignored. `tools/new-run.sh <scene> <suffix>
 "<question>"` seeds a run directory with a `RUN.md` recording commit, host, commands and
 result — a null result stays there rather than being deleted.

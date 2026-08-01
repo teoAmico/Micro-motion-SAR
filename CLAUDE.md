@@ -177,6 +177,15 @@ to scene content — a dominant-scatterer fixture was built and moves it by 0.02
 overlap moves it by 0.267. Testing that gate needs a change to the propagation model
 itself, not to the target list.
 
+**Do not raise `--overlap` to chase the literature's operating point** (item 13). The
+sampling ceiling and the sub-aperture response ceiling have a ratio of
+`0.829/(1-overlap)`, independent of look count and dwell, so zero overlap is the
+balanced setting and anything above it spends sampling rate on frequencies already
+averaged away. Measured across 25 sweep points, recovery requires a response above
+~0.5 with no exceptions. The published campaigns use ~99% overlap because they read
+pixel phase, which the averaging does not attenuate; entering their regime means making
+the PHASE estimator work, not raising the look count.
+
 `tests/rs_sim.h` now carries two fixture families: `make_clutter`-style uniform speckle
 and `rs_sim_dominant_patch()`, dominants on a lattice over a diffuse background. The
 second is harder for the spectrum-only policies and leaves the cull's profile unchanged,

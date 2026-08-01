@@ -1430,3 +1430,102 @@ generator.
 Deliberate: the alternative is one operating point on one seed, which is what
 items 12a and 12b did and which missed two formulation errors this file found in
 a single run.
+
+---
+
+## 13. Overlap buys nothing for the correlation estimator, and zero is optimal for a reason
+
+The published campaigns form sub-apertures at roughly 99 percent overlap with
+thousands of looks; `rs_microm_estimator_t` records that, and records that this
+project has only ever run tens to 128 looks at zero overlap. That gap was the
+obvious next thing to close. It is now measured, and it should not be closed --
+not with this observable.
+
+**Method.** Two exploratory probes, run outside `ctest` because backprojection
+work scales as `n_looks * t_sap * prf * n_cells` and at 98 percent overlap that
+is some 40 times the incumbent cost -- 163 s for a single 1024-look run against
+5 s for the incumbent. Stage one measured geometry, coherence and one injected
+frequency across seven `(n_looks, overlap)` settings; stage two swept six
+frequencies at three of them. Vibrating-clutter fixture, seed 7 throughout.
+
+**STAGE ONE, at 0.5 Hz.** `resp` is `rs_spectrum_subaperture_response()`:
+
+```
+looks  overlap   t_sap    f_max   resp   coherence med   reported
+  128    0.00   0.1550     3.23  0.990       0.075       0.504  ok
+  256    0.90   0.7525     6.67  0.782       0.152       0.521  ok
+  256    0.98   3.2775     7.69  0.176       0.264       0.120  WRONG
+  512    0.95   0.7525    13.33  0.782       0.153       0.521  ok
+  512    0.98   1.7825    14.29  0.120       0.214       0.112  WRONG
+ 1024    0.98   0.9300    28.57  0.679       0.161       0.502  ok
+ 1024    0.99   1.7800    28.57  0.121       0.215       0.112  WRONG
+```
+
+Seven for seven on a prediction made from the response alone before the runs.
+Note also that coherence rises monotonically with `t_sap` and with nothing else,
+which is the same finding as item 12f from the other direction.
+
+**STAGE TWO, six frequencies at three settings.** Pooling every point of both
+stages, 25 in all: **every point whose sub-aperture response was 0.608 or better
+recovered the injection, and every point at 0.481 or worse failed.** No
+exceptions, and a clean gap between 0.48 and 0.61.
+
+```
+                  0.3    0.5    0.7    0.9    1.1    1.3   slope    rms
+ 128/0.00  resp  0.996  0.990  0.981  0.968  0.953  0.935
+           best  0.302  0.504  0.706  0.907  1.058  1.260  0.950  0.0239
+1024/0.98  resp  0.877  0.680  0.435  0.186  0.022  0.161
+           best  0.279  0.502  0.391  0.391  0.391  0.223 -0.088  0.5800
+2048/0.98  resp  0.967  0.910  0.828  0.725  0.608  0.481
+           best  0.326  0.521  0.716  0.911  1.107  0.391  0.326  0.3716
+```
+
+**THE ARITHMETIC THAT GENERALISES IT.** Two ceilings bound the vibration
+frequency a stack can carry, and they move differently. Nyquist on the sub-look
+series is `f_N = 1/(2*t_sap*(1-overlap))`. The response reaches one half at an
+observation ratio of 0.6034, so the response ceiling is `f_R = 0.6034/t_sap`.
+Their ratio depends on neither the look count nor the dwell:
+
+```
+f_N / f_R  =  0.829 / (1 - overlap)
+```
+
+At zero overlap that is **0.83** -- the two ceilings coincide to within twenty
+percent, with sampling marginally the tighter. Every overlap above zero raises
+`f_N` by `1/(1-overlap)` and leaves `f_R` exactly where it was. At 0.98 the
+sampling headroom is 41 times the usable band: the extra rate is spent entirely
+on frequencies the sub-aperture has already averaged away.
+
+So **zero overlap is not a legacy setting, it is the balanced one**, and the
+2048-look run makes the point concretely: 52 Hz of Nyquist band, of which 1.27 Hz
+is usable, against the incumbent's 3.20 Hz of band with 3.86 Hz usable. Forty
+times the compute for a narrower measurement. The relation is asserted in
+`test_cullsweep.c`, where it costs nothing to check.
+
+**THIS DOES NOT CONTRADICT THE PUBLISHED WORK, AND THE RECONCILIATION IS THE
+USEFUL PART.** `rs_spectrum_observation_ratio()` already records two
+accelerometer-confirmed recoveries at observation ratios of 18.0 and 36.3 --
+seventy times what the sinc picture would permit -- and notes that 18.0 is an
+exact integer, which is where the sinc nulls. Those campaigns read the PHASE of
+each pixel in each sub-aperture. This one defaults to correlation-based offset
+tracking. The sinc attenuates the tracked DISPLACEMENT, which is exactly and only
+what a correlator measures; a phase or micro-Doppler observable reads the
+sidebands the averaging moves energy into rather than the averaged position. The
+ceiling derived here is therefore **the correlation estimator's, not the
+method's**.
+
+**WHAT THAT IMPLIES FOR THE NEXT STEP, and it is a redirection.** High overlap is
+the regime the validated literature works in, and this project cannot enter it
+through the correlation estimator -- not because the configuration is untried but
+because the observable forbids it. Entering it means making the PHASE estimator
+work, which `test_tracking.c` records as returning a fixed 0.407 Hz for every
+injection. That is the door to the literature's operating point, and it is shut
+for a reason that is now understood rather than merely observed.
+
+**Caveats, and they matter.** One seed for the whole of this, on one fixture
+family; item 12f's warning applies unchanged. The 0.5 response threshold is where
+the measured gap falls, not a derived constant -- the derivation gives the shape
+of the ceiling, not its height. And the incumbent's own sweep at seed 7 scores
+slope 0.950 and rms 0.0239, inside the bar, where the same sweep pooled over
+three seeds in `test_cullsweep.c` gives 0.811 and 0.2360: single-seed numbers
+overstate, including the ones in this entry.

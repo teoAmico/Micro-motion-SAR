@@ -309,7 +309,7 @@ Line by line, in the order it prints:
 
 | line | what to check |
 |---|---|
-| `sub-apertures: N looks, dt X s` | `1/dt` is your sampling rate; the band is half that. `dt` is often not what `t_sap*(1-overlap)` predicts — read it, don't derive it |
+| `sub-apertures: N looks, dt X s` | `1/dt` is your sampling rate; the band is half that. `dt` is often not what `t_sap*(1-overlap)` predicts — read it, don't derive it. **`--overlap 0` is the right setting for the correlation estimator** — see below |
 | `observable band f_max ... AT sub-look resolution ...` | the frequency ceiling, and the resolution you paid for it |
 | `sub-pixel refinement: 1/N px` | the **quantisation** of the reported series. An excursion under one step comes back as a two-level staircase whose energy sits at low frequency regardless of cause |
 | `tracked W windows; K pass the coherence mask` | K of 0 means nothing downstream is a measurement |
@@ -340,6 +340,32 @@ that is *independent* across windows. An artefact produced by the processing
 rather than the scene appears identically in every window, so the windows agree
 about it unanimously — measured at 100% agreement on a motionless scene. No
 threshold helps; 100% is the ceiling. Only a null control catches that.
+
+### Leave `--overlap` at zero, unless you change observable
+
+The sampling ceiling and the sub-aperture response ceiling move differently with
+overlap, and their ratio depends on neither the look count nor the dwell:
+
+```
+Nyquist / response-0.5  =  0.829 / (1 - overlap)
+```
+
+At `--overlap 0` those two ceilings coincide to within 20% — the configuration is
+balanced. Every overlap above zero raises the sampling rate by `1/(1-overlap)`
+while leaving the response ceiling exactly where it is, so the extra rate is spent
+on frequencies the sub-aperture has already averaged away. Measured across 25
+sweep points: everything with a response of 0.608 or better recovered the
+injection, everything at 0.481 or worse failed, no exceptions.
+
+Concretely — 2048 looks at 0.98 overlap gives 52 Hz of Nyquist band of which
+**1.27 Hz is usable**, against zero overlap's 3.20 Hz band with 3.86 Hz usable.
+Forty times the compute for a narrower measurement.
+
+The published campaigns *do* use ~99% overlap and are right to: they read pixel
+**phase**, which is not subject to this attenuation, where `--estimator
+correlation` tracks displacement, which is exactly what the averaging attenuates.
+So high overlap is a reason to change `--estimator`, not a reason to raise `--n`.
+`FOLLOW-UPS.md` item 13 has the measurements.
 
 ### The `cull` line reads different evidence
 

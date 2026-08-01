@@ -120,6 +120,50 @@ typedef enum {
 typedef struct {
     rs_subap_mode_t mode;
     size_t n_looks;         /* N_D: number of sub-looks to form */
+    /* Fractional overlap between consecutive sub-apertures, [0,1).
+     *
+     * OVERLAP BUYS NOTHING FOR THE CORRELATION ESTIMATOR, AND ZERO IS OPTIMAL
+     * FOR A DERIVABLE REASON RATHER THAN BY ACCIDENT. Two ceilings bound the
+     * vibration frequency a stack can carry, and they move differently.
+     *
+     * The sampling ceiling is Nyquist on the sub-look series,
+     *
+     *     f_N  =  1 / (2 * dt)  =  1 / (2 * t_sap * (1 - overlap))
+     *
+     * The response ceiling is where a sub-aperture's own integration has
+     * attenuated the motion past usefulness. Averaging a sinusoid over t_sap
+     * multiplies its amplitude by |sinc(pi*f*t_sap)|, which reaches one half at
+     * an observation ratio of 0.6034, so
+     *
+     *     f_R  =  0.6034 / t_sap
+     *
+     * Their ratio does not depend on the look count or the dwell at all:
+     *
+     *     f_N / f_R  =  0.829 / (1 - overlap)
+     *
+     * At zero overlap that is 0.83 -- the two ceilings COINCIDE to within twenty
+     * percent, with sampling the marginally tighter one. Every overlap above
+     * zero raises f_N by 1/(1-overlap) while leaving f_R exactly where it was,
+     * so the response ceiling binds and the extra sampling rate is spent on
+     * frequencies the sub-aperture has already averaged away. At 0.98 the
+     * sampling headroom is 41 times the usable band.
+     *
+     * MEASURED, across 25 sweep points at seven (n_looks, overlap) settings on
+     * the vibrating-clutter fixture: every point whose response was 0.608 or
+     * better recovered the injection, and every point at 0.481 or worse failed.
+     * The separation is clean and there are no exceptions. See FOLLOW-UPS.md
+     * item 13.
+     *
+     * THIS DOES NOT CONTRADICT THE PUBLISHED CAMPAIGNS, WHICH USE ~99 PERCENT
+     * OVERLAP AND ARE RIGHT TO. They read the PHASE of each pixel in each
+     * sub-aperture; this defaults to correlation-based offset tracking. The sinc
+     * attenuates the tracked DISPLACEMENT, which is precisely what a correlator
+     * measures, while a phase or micro-Doppler observable reads sidebands the
+     * averaging moves energy into rather than the averaged position itself --
+     * see rs_spectrum_observation_ratio(), which records two
+     * accelerometer-confirmed recoveries at observation ratios of 18.0 and 36.3.
+     * So the ceiling derived here is the CORRELATION ESTIMATOR'S, and the way to
+     * use overlap is to change observable, not to raise the look count. */
     double overlap;         /* uniform mode only: fractional band overlap [0,1) */
     double left_out_frac;   /* paper mode only: B_DL / B_CD, default 0.5 */
     int    window;          /* nonzero: raised-cosine band edges (strongly advised) */

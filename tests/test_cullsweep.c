@@ -989,6 +989,50 @@ int main(void)
         RS_CHECK(nd == n_freq * n_seed);
     }
 
+    RS_CASE("overlap raises the sampling ceiling past a response ceiling that does not move");
+    {
+        /* The arithmetic behind FOLLOW-UPS item 13, locked in without running
+         * the chain at all -- the expensive part of that finding was measuring
+         * WHERE the response ceiling bites, and that is recorded there; this is
+         * the relation that makes the measurement general.
+         *
+         * Two ceilings bound the vibration frequency a stack can carry. Nyquist
+         * on the sub-look series is 1/(2*dt) = 1/(2*t_sap*(1-overlap)). The
+         * sub-aperture response reaches one half at an observation ratio of
+         * 0.6034, so the response ceiling is 0.6034/t_sap. Their ratio is
+         * 0.829/(1-overlap) -- independent of look count and of dwell -- so at
+         * zero overlap they coincide and every overlap above zero spends
+         * sampling rate on frequencies already averaged away. */
+        const double eta_half = 0.6034;      /* |sinc(pi*eta)| = 1/2 */
+        RS_CHECK_NEAR(rs_spectrum_subaperture_response(1.0, eta_half), 0.5, 1e-3);
+
+        printf("    %8s %8s %10s %10s %8s\n",
+               "overlap", "t_sap", "Nyquist", "resp 0.5", "ratio");
+        const double ovs3[] = { 0.0, 0.5, 0.9, 0.98 };
+        for (size_t i = 0; i < sizeof ovs3 / sizeof ovs3[0]; i++) {
+            /* The dwell and look count are deliberately varied alongside the
+             * overlap, because the claim is that the ratio does not depend on
+             * either. If it did, this loop would show it. */
+            const double dwell = 20.0 + 10.0 * (double)i;
+            const size_t looks = 128u << i;
+            const double t_sap = dwell /
+                (1.0 + (double)(looks - 1) * (1.0 - ovs3[i]));
+            const double dt = t_sap * (1.0 - ovs3[i]);
+            const double f_nyq = 1.0 / (2.0 * dt);
+            const double f_resp = eta_half / t_sap;
+            const double ratio = f_nyq / f_resp;
+            printf("    %8.2f %8.4f %10.2f %10.2f %8.2f\n",
+                   ovs3[i], t_sap, f_nyq, f_resp, ratio);
+            RS_CHECK_NEAR(ratio, 0.5 / eta_half / (1.0 - ovs3[i]), 1e-6);
+        }
+
+        /* At zero overlap the two ceilings coincide to within twenty percent,
+         * with sampling the tighter of the two -- which is why zero is the
+         * right default for this observable and not a legacy of anything. */
+        const double r0 = 0.5 / eta_half;
+        RS_CHECK(r0 > 0.8 && r0 < 1.0);
+    }
+
     RS_CASE("the fit criterion can still reject a fixed answer");
     {
         /* Asserting anything about the policies above is meaningless unless the

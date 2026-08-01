@@ -89,10 +89,10 @@ statistic that can report disagreement instead of a number.
 measurements, that sub-look images can be correct while the tracker fails to read them; that
 the reference scheme looks like the binding constraint and is not; that cross-window
 agreement is blind to artefacts produced by the processing rather than the scene; that a
-gate derived from window geometry refused correct measurements; and that the tool built to
-warn before an expensive run spent two years answering every question for one estimator, and
-so refused a configuration that was correct. Each cost hours to establish and none is
-recoverable from the code.
+gate derived from window geometry refused correct measurements; and that `validate`, the
+command whose job is to warn before an expensive run, answered every question for the
+correlation estimator and so refused a phase configuration that was correct. Each cost hours
+to establish and none is recoverable from the code.
 
 [`docs/DATASETS.md`](docs/DATASETS.md) lists open phase-preserving SAR datasets suitable for
 experiments, with direct catalogue links and notes on their limitations.

@@ -53,6 +53,7 @@ add_library(mm_core STATIC
     src/readers/sicd.c
     src/io/raster.c
     src/io/png.c
+    src/io/figure.c
 )
 target_include_directories(mm_core PUBLIC include)
 target_link_libraries(mm_core PRIVATE pocketfft)

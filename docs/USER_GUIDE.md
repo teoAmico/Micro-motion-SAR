@@ -346,9 +346,26 @@ With `--out PREFIX`:
 
 | file | contents |
 |---|---|
-| `PREFIX_freq.png` | dominant frequency per window |
-| `PREFIX_quality.png` | tracking quality per window, 0–1 |
+| `PREFIX_freq.png` | dominant frequency per window, with a colour bar in Hz |
+| `PREFIX_quality.png` | tracking quality per window, colour bar 0–1 |
+| `PREFIX_spectrum.png` | **the spectrum the reported frequency was read from**, with a marker at the selected bin |
 | `PREFIX_windows.csv` | **per-window evidence behind the selection** — every window's frequency, prominence, quality, excursion, whether it passed the gates, and whether it agrees with the consensus |
+
+The two maps are figures, not raw rasters: the window grid is enlarged by an
+integer factor with nearest-neighbour sampling and carries a labelled colour bar,
+so a colour can be converted to a number without opening the CSV. Nearest
+neighbour is deliberate — windows overlap already, and a smoothed image would
+imply a spatial resolution the data does not have. Every solid block is exactly
+one window, and the caption underneath says how many windows and how many pixels
+each.
+
+**`PREFIX_spectrum.png` is the one to look at first.** The whole selection
+argument is about which bin won and by how much over its neighbours, and that is
+invisible in a reported number and in a per-window map alike. The red dashed
+marker is where the peak-picker landed, so a disagreement between the marker and
+the visible peak is legible at a glance. A peak that barely clears its
+neighbours, or a marker sitting beside a taller bin, tells you more than the
+frequency does.
 
 The CSV is the one to keep. Every earlier result in this project kept the answer
 and discarded what produced it, so later questions about the selection policy
@@ -362,9 +379,15 @@ a bright but stationary target also scores near 1.0, and it has **no detection
 threshold** — compare against a map from a motionless scene before reading
 structure into it.
 
-Use `tools/new-run.sh <scene> <suffix> "<question>"` to seed a run directory with
-a `RUN.md` recording the commit, host, commands and result. A null result stays
-there rather than being deleted.
+Use `tools/new-run.sh <scene> <suffix> "<question>"` to seed a run directory under
+`runs/<scene>/<date>-<suffix>/` with a `RUN.md` recording the commit, host,
+commands and result. A null result stays there rather than being deleted — it is
+the more common outcome here and the more informative one.
+
+Figures, CSV evidence and logs under `runs/` are committed: `.gitignore` blocks
+`*.png` and `*.csv` everywhere else, and opts them back in there specifically,
+because a run's output is the record of what happened. Raw `.f32` cubes and
+collects stay out. See [`runs/README.md`](../runs/README.md).
 
 ---
 

@@ -1681,12 +1681,42 @@ static int rs_cmd_mmotion(int argc, char **argv)
 
     if (prefix) {
         char path[512];
+        /* Figures rather than raw maps.
+         *
+         * One pixel per window makes a 7x7 PNG: a speck no viewer shows at a
+         * useful size, with nothing to say what a colour means. These are
+         * upscaled and carry a colour bar in the map's own units, which is the
+         * whole difference between output that exists and output that can be
+         * read. See rs_raster_write_map_figure(). */
         snprintf(path, sizeof path, "%s_freq.png", prefix);
-        rs_raster_write_map(spec.dominant_freq, spec.n_win_az, spec.n_win_rg,
-                            path, 0.0, 0.0, RS_PALETTE_VIRIDIS);
+        rs_raster_write_map_figure(spec.dominant_freq, spec.n_win_az, spec.n_win_rg,
+                                   path, 0.0, 0.0, RS_PALETTE_VIRIDIS,
+                                   "DOMINANT FREQUENCY PER WINDOW", "HZ", 420);
         snprintf(path, sizeof path, "%s_quality.png", prefix);
-        rs_raster_write_map(spec.quality, spec.n_win_az, spec.n_win_rg,
-                            path, 0.0, 1.0, RS_PALETTE_VIRIDIS);
+        rs_raster_write_map_figure(spec.quality, spec.n_win_az, spec.n_win_rg,
+                                   path, 0.0, 1.0, RS_PALETTE_VIRIDIS,
+                                   "TRACKING QUALITY PER WINDOW", "0-1", 420);
+
+        /* The spectrum the reported frequency was read from.
+         *
+         * The entire selection argument is about which bin won and by how much
+         * over its neighbours, and neither a number nor a per-window map shows
+         * that. Without this a reader cannot tell a peak that stands out of its
+         * surroundings from the largest sample in noise -- which is the
+         * distinction every negative result in this project turned on. The
+         * marker is where the peak-picker landed, so a disagreement between the
+         * marked bin and the visible peak is legible at a glance. */
+        if (spec.psd && spec.freq && spec.n_freq >= 2) {
+            char plot_title[96];
+            snprintf(plot_title, sizeof plot_title,
+                     "SPECTRUM OF WINDOW %zu (MOST PROMINENT OF %zu)",
+                     best, spec.n_win);
+            snprintf(path, sizeof path, "%s_spectrum.png", prefix);
+            rs_raster_write_plot(spec.freq, spec.psd + best * spec.n_freq,
+                                 spec.n_freq, path, plot_title,
+                                 "FREQUENCY, HZ", "POWER",
+                                 spec.dominant_freq[best]);
+        }
 
         /* The per-window evidence the selection was made FROM, not just the
          * selection.
@@ -1732,8 +1762,8 @@ static int rs_cmd_mmotion(int argc, char **argv)
             }
             fclose(wf);
         }
-        printf("wrote %s_freq.png, %s_quality.png and %s_windows.csv\n",
-               prefix, prefix, prefix);
+        printf("wrote %s_freq.png, %s_quality.png, %s_spectrum.png"
+               " and %s_windows.csv\n", prefix, prefix, prefix, prefix);
     }
 
     rs_spectrum_free(&spec);

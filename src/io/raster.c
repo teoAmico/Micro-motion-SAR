@@ -2,6 +2,7 @@
 
 #include "resonarsat/raster.h"
 
+#include "figure.h"
 #include "png.h"
 
 #include <math.h>
@@ -206,6 +207,267 @@ resonarsat_status_t rs_raster_write_map(const double *map, size_t n_row, size_t 
         st = rs_write_gray(path, px, n_row, n_col);
     }
     free(px);
+    return st;
+}
+
+/* Format a number for an axis or colour-bar tick.
+ *
+ * Three significant figures, which is more than a colour bar can be read to and
+ * enough that two adjacent ticks never print identically at the ranges these
+ * figures cover. Written into a caller's buffer so the callers can hold several
+ * labels at once while sizing a margin. */
+static void rs_fig_fmt(char *buf, size_t cap, double v)
+{
+    snprintf(buf, cap, "%.3g", v);
+}
+
+/* Find the finite extremes of a map, or fall back to [0,1].
+ *
+ * Shared by the two figure writers and by nothing else, because both have the
+ * same NaN problem: a single non-finite sample poisons a naive min/max through
+ * the comparisons and blanks the whole figure. */
+static void rs_fig_limits(const double *v, size_t n, double *lo, double *hi)
+{
+    int seen = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (!isfinite(v[i])) continue;
+        if (!seen) { *lo = *hi = v[i]; seen = 1; continue; }
+        if (v[i] < *lo) *lo = v[i];
+        if (v[i] > *hi) *hi = v[i];
+    }
+    if (!seen) { *lo = 0.0; *hi = 1.0; }
+}
+
+/* Write an upscaled, titled map with a labelled colour bar. See raster.h. */
+resonarsat_status_t rs_raster_write_map_figure(const double *map,
+                                               size_t n_row, size_t n_col,
+                                               const char *path,
+                                               double lo, double hi,
+                                               rs_palette_t palette,
+                                               const char *title,
+                                               const char *unit,
+                                               size_t min_px)
+{
+    if (!map || !path || n_row == 0 || n_col == 0) return RS_ERR_ARG;
+    if (min_px == 0) min_px = 360;
+
+    if (lo == hi) rs_fig_limits(map, n_row * n_col, &lo, &hi);
+    if (hi <= lo) hi = lo + 1.0;
+
+    /* Integer zoom, so every block of colour is exactly one window. */
+    const size_t longer = (n_row > n_col) ? n_row : n_col;
+    size_t zoom = (min_px + longer - 1) / longer;
+    if (zoom < 1) zoom = 1;
+    if (zoom > 64) zoom = 64;
+
+    const int ts = 2;                                   /* text scale */
+    const size_t ch = rs_fig_text_height(ts);
+    const size_t map_w = n_col * zoom, map_h = n_row * zoom;
+
+    /* Margins sized to the longest label each region will actually draw. */
+    char lab_hi[32], lab_lo[32];
+    rs_fig_fmt(lab_hi, sizeof lab_hi, hi);
+    rs_fig_fmt(lab_lo, sizeof lab_lo, lo);
+    size_t lab_w = rs_fig_text_width(lab_hi, ts);
+    if (rs_fig_text_width(lab_lo, ts) > lab_w) lab_w = rs_fig_text_width(lab_lo, ts);
+    if (unit && rs_fig_text_width(unit, ts) > lab_w) lab_w = rs_fig_text_width(unit, ts);
+
+    const size_t pad = 12;
+    const size_t bar_w = 18, bar_gap = 14;
+    const size_t top = pad + (title ? ch + 10 : 0);
+    const size_t left = pad;
+    const size_t right = bar_gap + bar_w + 6 + lab_w + pad;
+    const size_t bottom = pad + ch + 6;                 /* extent caption */
+
+    rs_fig_t f;
+    static const unsigned char white[3] = { 255, 255, 255 };
+    static const unsigned char black[3] = { 20, 20, 20 };
+    static const unsigned char grey[3]  = { 130, 130, 130 };
+
+    resonarsat_status_t st = rs_fig_create(&f, left + map_w + right,
+                                           top + map_h + bottom, white);
+    if (st != RS_OK) return st;
+
+    /* The map itself, nearest-neighbour so a window stays a solid block. */
+    for (size_t r = 0; r < map_h; r++) {
+        for (size_t c = 0; c < map_w; c++) {
+            const double m = map[(r / zoom) * n_col + (c / zoom)];
+            unsigned char rgb[3];
+            double t = isfinite(m) ? (m - lo) / (hi - lo) : 0.0;
+            if (t < 0.0) t = 0.0;
+            if (t > 1.0) t = 1.0;
+            if (palette == RS_PALETTE_GRAY) {
+                const unsigned char g = (unsigned char)(t * 255.0 + 0.5);
+                rgb[0] = rgb[1] = rgb[2] = g;
+            } else {
+                rs_colourise(t, palette, rgb);
+            }
+            rs_fig_pixel(&f, (long)(left + c), (long)(top + r), rgb);
+        }
+    }
+    rs_fig_rect(&f, (long)left - 1, (long)top - 1, (long)map_w + 2, 1, black);
+    rs_fig_rect(&f, (long)left - 1, (long)(top + map_h), (long)map_w + 2, 1, black);
+    rs_fig_rect(&f, (long)left - 1, (long)top - 1, 1, (long)map_h + 2, black);
+    rs_fig_rect(&f, (long)(left + map_w), (long)top - 1, 1, (long)map_h + 2, black);
+
+    /* Colour bar, high at the top, with ticks from the same limits. */
+    const size_t bar_x = left + map_w + bar_gap;
+    for (size_t r = 0; r < map_h; r++) {
+        unsigned char rgb[3];
+        const double t = 1.0 - (double)r / (double)(map_h > 1 ? map_h - 1 : 1);
+        if (palette == RS_PALETTE_GRAY) {
+            const unsigned char g = (unsigned char)(t * 255.0 + 0.5);
+            rgb[0] = rgb[1] = rgb[2] = g;
+        } else {
+            rs_colourise(t, palette, rgb);
+        }
+        rs_fig_rect(&f, (long)bar_x, (long)(top + r), (long)bar_w, 1, rgb);
+    }
+    rs_fig_rect(&f, (long)bar_x - 1, (long)top - 1, (long)bar_w + 2, 1, black);
+    rs_fig_rect(&f, (long)bar_x - 1, (long)(top + map_h), (long)bar_w + 2, 1, black);
+    rs_fig_rect(&f, (long)bar_x - 1, (long)top - 1, 1, (long)map_h + 2, black);
+    rs_fig_rect(&f, (long)(bar_x + bar_w), (long)top - 1, 1, (long)map_h + 2, black);
+
+    for (int k = 0; k <= 4; k++) {
+        const double frac = (double)k / 4.0;
+        const double v = hi - frac * (hi - lo);
+        const long y = (long)top + (long)(frac * (double)(map_h - 1));
+        char lab[32];
+        rs_fig_fmt(lab, sizeof lab, v);
+        rs_fig_rect(&f, (long)(bar_x + bar_w), y, 4, 1, black);
+        rs_fig_text(&f, (long)(bar_x + bar_w + 6), y - (long)(ch / 2), lab, ts, black);
+    }
+    if (unit) {
+        rs_fig_text(&f, (long)bar_x, (long)(top + map_h) + 8, unit, ts, black);
+    }
+
+    if (title) rs_fig_text(&f, (long)left, (long)pad, title, ts, black);
+
+    /* The grid extent, so the block size is not mistaken for resolution. */
+    {
+        char cap[96];
+        snprintf(cap, sizeof cap, "%zu X %zu WINDOWS, %zu PX EACH",
+                 n_row, n_col, zoom);
+        rs_fig_text(&f, (long)left, (long)(top + map_h) + 8, cap, ts, grey);
+    }
+
+    st = rs_png_write(path, f.px, f.w, f.h, 3);
+    rs_fig_free(&f);
+    return st;
+}
+
+/* Write an XY line plot with axes and an optional marker. See raster.h. */
+resonarsat_status_t rs_raster_write_plot(const double *x, const double *y, size_t n,
+                                         const char *path,
+                                         const char *title,
+                                         const char *x_label,
+                                         const char *y_label,
+                                         double marker_x)
+{
+    if (!x || !y || !path || n < 2) return RS_ERR_ARG;
+
+    double x_lo = 0.0, x_hi = 0.0, y_lo = 0.0, y_hi = 0.0;
+    rs_fig_limits(x, n, &x_lo, &x_hi);
+    rs_fig_limits(y, n, &y_lo, &y_hi);
+    if (x_hi <= x_lo) x_hi = x_lo + 1.0;
+
+    /* Zero-based y: a power spectrum's zero is meaningful, and starting the axis
+     * at min(y) manufactures prominence the data does not contain. */
+    y_lo = 0.0;
+    if (y_hi <= y_lo) y_hi = 1.0;
+
+    const int ts = 2;
+    const size_t ch = rs_fig_text_height(ts);
+
+    char lab[32];
+    rs_fig_fmt(lab, sizeof lab, y_hi);
+    const size_t y_lab_w = rs_fig_text_width(lab, ts);
+
+    const size_t pad = 12;
+    const size_t top = pad + (title ? ch + 10 : 0) + (y_label ? ch + 6 : 0);
+    const size_t left = pad + y_lab_w + 8;
+    const size_t right = pad + 24;
+    const size_t bottom = pad + ch + 8 + (x_label ? ch + 6 : 0);
+    const size_t plot_w = 620, plot_h = 300;
+
+    rs_fig_t f;
+    static const unsigned char white[3]  = { 255, 255, 255 };
+    static const unsigned char black[3]  = { 20, 20, 20 };
+    static const unsigned char grey[3]   = { 190, 190, 190 };
+    static const unsigned char blue[3]   = { 40, 90, 200 };
+    static const unsigned char red[3]    = { 200, 50, 40 };
+
+    resonarsat_status_t st = rs_fig_create(&f, left + plot_w + right,
+                                           top + plot_h + bottom, white);
+    if (st != RS_OK) return st;
+
+    /* Gridlines first, so data and axes draw over them. */
+    for (int k = 1; k < 5; k++) {
+        const long gy = (long)top + (long)((double)k / 5.0 * (double)plot_h);
+        rs_fig_rect(&f, (long)left, gy, (long)plot_w, 1, grey);
+    }
+
+    /* Axes. */
+    rs_fig_rect(&f, (long)left, (long)(top + plot_h), (long)plot_w + 1, 1, black);
+    rs_fig_rect(&f, (long)left, (long)top, 1, (long)plot_h + 1, black);
+
+    /* Ticks and labels. */
+    for (int k = 0; k <= 4; k++) {
+        const double frac = (double)k / 4.0;
+        const double vx = x_lo + frac * (x_hi - x_lo);
+        const long px = (long)left + (long)(frac * (double)plot_w);
+        rs_fig_fmt(lab, sizeof lab, vx);
+        rs_fig_rect(&f, px, (long)(top + plot_h) + 1, 1, 5, black);
+        rs_fig_text(&f, px - (long)(rs_fig_text_width(lab, ts) / 2),
+                    (long)(top + plot_h) + 9, lab, ts, black);
+
+        const double vy = y_lo + frac * (y_hi - y_lo);
+        const long py = (long)(top + plot_h) - (long)(frac * (double)plot_h);
+        rs_fig_fmt(lab, sizeof lab, vy);
+        rs_fig_rect(&f, (long)left - 5, py, 5, 1, black);
+        rs_fig_text(&f, (long)left - 8 - (long)rs_fig_text_width(lab, ts),
+                    py - (long)(ch / 2), lab, ts, black);
+    }
+
+    /* The marker goes under the series, so a peak is never hidden by it. */
+    if (isfinite(marker_x) && marker_x >= x_lo && marker_x <= x_hi) {
+        const long mx = (long)left +
+                        (long)((marker_x - x_lo) / (x_hi - x_lo) * (double)plot_w);
+        for (long yy = 0; yy < (long)plot_h; yy += 6) {
+            rs_fig_rect(&f, mx, (long)top + yy, 1, 3, red);
+        }
+    }
+
+    /* The series. */
+    long prev_x = 0, prev_y = 0;
+    int have_prev = 0;
+    for (size_t i = 0; i < n; i++) {
+        if (!isfinite(x[i]) || !isfinite(y[i])) { have_prev = 0; continue; }
+        double tx = (x[i] - x_lo) / (x_hi - x_lo);
+        double ty = (y[i] - y_lo) / (y_hi - y_lo);
+        if (tx < 0.0) tx = 0.0;
+        if (tx > 1.0) tx = 1.0;
+        if (ty < 0.0) ty = 0.0;
+        if (ty > 1.0) ty = 1.0;
+        const long px = (long)left + (long)(tx * (double)plot_w);
+        const long py = (long)(top + plot_h) - (long)(ty * (double)plot_h);
+        if (have_prev) rs_fig_line(&f, prev_x, prev_y, px, py, blue);
+        prev_x = px;
+        prev_y = py;
+        have_prev = 1;
+    }
+
+    if (title)   rs_fig_text(&f, (long)left, (long)pad, title, ts, black);
+    if (y_label) rs_fig_text(&f, (long)left, (long)pad + (title ? (long)ch + 10 : 0),
+                             y_label, ts, black);
+    if (x_label) {
+        rs_fig_text(&f, (long)left + (long)(plot_w / 2) -
+                        (long)(rs_fig_text_width(x_label, ts) / 2),
+                    (long)(top + plot_h) + 9 + (long)ch + 6, x_label, ts, black);
+    }
+
+    st = rs_png_write(path, f.px, f.w, f.h, 3);
+    rs_fig_free(&f);
     return st;
 }
 

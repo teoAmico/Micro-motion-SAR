@@ -1,5 +1,6 @@
 #!/bin/zsh
-# Create a run directory and seed its RUN.md. See runs/README.md.
+# Create a run directory and seed its RUN.md. See runs/README.md for the
+# layout, what belongs in a run directory, and what is committed.
 #
 # Exists so that recording provenance is easier than not recording it. The
 # alternative -- remembering to write it afterwards -- is what produced cubes

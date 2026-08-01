@@ -45,7 +45,7 @@ measures. Do not add it.
 
 ## Naming
 
-The project was renamed; the internals were not. The binary and CMake project are
+The tool and the library are named differently. The binary and CMake project are
 `micromotion`, headers live under `include/resonarsat/`, every symbol is `rs_`-prefixed,
 and some usage strings still print `resonarsat`. Treat `rs_`/`resonarsat` as the
 library's identity and `micromotion` as the tool's.

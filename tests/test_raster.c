@@ -278,9 +278,142 @@ int main(void)
                                      0, 0, RS_PALETTE_GRAY) != RS_OK);
     }
 
+    RS_CASE("a map FIGURE is upscaled, three-channel, and carries drawn ink");
+    {
+        /* The defect this guards against is the reason the function exists: a
+         * 7x7 window map written one pixel per datum is a speck. The figure
+         * must be larger than its data and must contain something that is
+         * neither background nor palette -- the axes, frame and labels. */
+        RS_CHECK_OK(rs_raster_write_map_figure(map, R, C, "t_fig_map.png",
+                                               0.0, 0.0, RS_PALETTE_VIRIDIS,
+                                               "TITLE", "HZ", 420));
+        size_t n = 0;
+        unsigned char *d = rs_slurp("t_fig_map.png", &n);
+        RS_CHECK(d != NULL);
+        size_t w = 0, h = 0, rn = 0; int ch = 0;
+        unsigned char *raw = rs_png_decode(d, n, &w, &h, &ch, &rn);
+        RS_CHECK(raw != NULL);
+        printf("    figure %zux%zu from a %zux%zu map\n", w, h, R, C);
+        RS_CHECK(ch == 3);
+        RS_CHECK(w > C && h > R);          /* upscaled, plus margins */
+        RS_CHECK(w >= 420);                /* reached the requested size */
+        RS_CHECK(rn == (w * 3 + 1) * h);
+
+        /* Black ink somewhere: the frame and the tick labels. Neither the
+         * viridis ramp nor the white background produces (20,20,20). */
+        int inked = 0;
+        for (size_t i = 0; i + 2 < rn && !inked; i++) {
+            if (raw[i] == 20 && raw[i + 1] == 20 && raw[i + 2] == 20) inked = 1;
+        }
+        RS_CHECK(inked);
+        free(raw); free(d);
+    }
+
+    RS_CASE("a one-window map still produces a figure rather than a speck");
+    {
+        /* The degenerate case the zoom arithmetic is most likely to divide by:
+         * a single window, where map_h - 1 is zero in the colour-bar ramp. */
+        const double one = 0.5;
+        RS_CHECK_OK(rs_raster_write_map_figure(&one, 1, 1, "t_fig_one.png",
+                                               0.0, 1.0, RS_PALETTE_VIRIDIS,
+                                               NULL, NULL, 128));
+        size_t n = 0;
+        unsigned char *d = rs_slurp("t_fig_one.png", &n);
+        RS_CHECK(d != NULL);
+        size_t w = 0, h = 0, rn = 0; int ch = 0;
+        unsigned char *raw = rs_png_decode(d, n, &w, &h, &ch, &rn);
+        RS_CHECK(raw != NULL);
+        RS_CHECK(w > 1 && h > 1);
+        free(raw); free(d);
+    }
+
+    RS_CASE("an all-NaN map still renders as a figure");
+    {
+        double *bad = malloc(R * C * sizeof *bad);
+        RS_CHECK(bad != NULL);
+        if (bad) {
+            for (size_t i = 0; i < R * C; i++) bad[i] = NAN;
+            RS_CHECK_OK(rs_raster_write_map_figure(bad, R, C, "t_fig_nan.png",
+                                                   0.0, 0.0, RS_PALETTE_VIRIDIS,
+                                                   "ALL NAN", "HZ", 200));
+            free(bad);
+        }
+    }
+
+    RS_CASE("a plot decodes, and draws the marker where it was asked to");
+    {
+        const size_t N = 65;
+        double *fx = malloc(N * sizeof *fx);
+        double *fy = malloc(N * sizeof *fy);
+        RS_CHECK(fx != NULL && fy != NULL);
+        if (fx && fy) {
+            for (size_t i = 0; i < N; i++) {
+                fx[i] = (double)i * 0.05;
+                fy[i] = (i == 12) ? 1.0 : 0.05;   /* one clear peak */
+            }
+            RS_CHECK_OK(rs_raster_write_plot(fx, fy, N, "t_fig_plot.png",
+                                             "SPECTRUM", "FREQUENCY, HZ",
+                                             "POWER", fx[12]));
+            size_t n = 0;
+            unsigned char *d = rs_slurp("t_fig_plot.png", &n);
+            RS_CHECK(d != NULL);
+            size_t w = 0, h = 0, rn = 0; int ch = 0;
+            unsigned char *raw = rs_png_decode(d, n, &w, &h, &ch, &rn);
+            RS_CHECK(raw != NULL);
+            RS_CHECK(ch == 3);
+            RS_CHECK(w > 400 && h > 200);
+
+            /* The marker is the only red in the figure. Its absence would mean
+             * a reader cannot see which bin the peak-picker chose, which is the
+             * one thing this plot is for. */
+            int marked = 0;
+            for (size_t i = 0; i + 2 < rn && !marked; i++) {
+                if (raw[i] == 200 && raw[i + 1] == 50 && raw[i + 2] == 40) marked = 1;
+            }
+            RS_CHECK(marked);
+            free(raw); free(d);
+        }
+        free(fx); free(fy);
+    }
+
+    RS_CASE("a plot survives non-finite samples instead of drawing off-canvas");
+    {
+        const size_t N = 16;
+        double fx[16], fy[16];
+        for (size_t i = 0; i < N; i++) {
+            fx[i] = (double)i;
+            fy[i] = (i == 5) ? NAN : (double)i;
+        }
+        RS_CHECK_OK(rs_raster_write_plot(fx, fy, N, "t_fig_gap.png",
+                                         NULL, NULL, NULL, NAN));
+    }
+
+    RS_CASE("figure writers refuse bad arguments rather than writing");
+    {
+        RS_CHECK_ERR(rs_raster_write_map_figure(NULL, R, C, "t_x.png", 0, 0,
+                                                RS_PALETTE_GRAY, NULL, NULL, 100),
+                     RS_ERR_ARG);
+        RS_CHECK_ERR(rs_raster_write_map_figure(map, 0, C, "t_x.png", 0, 0,
+                                                RS_PALETTE_GRAY, NULL, NULL, 100),
+                     RS_ERR_ARG);
+        RS_CHECK_ERR(rs_raster_write_map_figure(map, R, C, NULL, 0, 0,
+                                                RS_PALETTE_GRAY, NULL, NULL, 100),
+                     RS_ERR_ARG);
+        /* Fewer than two samples has no line and no axis span. */
+        const double one = 1.0;
+        RS_CHECK_ERR(rs_raster_write_plot(&one, &one, 1, "t_x.png",
+                                          NULL, NULL, NULL, NAN), RS_ERR_ARG);
+        RS_CHECK_ERR(rs_raster_write_plot(NULL, &one, 4, "t_x.png",
+                                          NULL, NULL, NULL, NAN), RS_ERR_ARG);
+        RS_CHECK_ERR(rs_raster_write_plot(&one, NULL, 4, "t_x.png",
+                                          NULL, NULL, NULL, NAN), RS_ERR_ARG);
+    }
+
     free(map);
     remove("t_raster_gray.png"); remove("t_raster_col.png");
     remove("t_raster.pgm"); remove("t_raster_deg.pgm"); remove("t_raster_nan.png");
+    remove("t_fig_map.png"); remove("t_fig_one.png"); remove("t_fig_nan.png");
+    remove("t_fig_plot.png"); remove("t_fig_gap.png");
 
     RS_TEST_END();
 }

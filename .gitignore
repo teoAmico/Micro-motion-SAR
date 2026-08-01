@@ -8,3 +8,17 @@ data/*
 *.png
 *.pgm
 *.csv
+
+# Run outputs ARE the record and belong in git, so runs/ opts back in.
+#
+# The rules above exist to keep collects and stray scratch images out of the
+# repository, and they were catching the figures and per-window evidence too --
+# which is how a finished run came to be undocumented except by its reported
+# number. A run directory is kilobytes to a few megabytes; that is worth
+# keeping. Raw cubes are not: .f32 stays ignored everywhere because it is
+# regenerable from the CSV and the commit, and *.cphd stays ignored because a
+# collect is referenced by vendor name, never committed.
+!runs/**/*.png
+!runs/**/*.csv
+!runs/**/*.log
+!runs/**/*.md

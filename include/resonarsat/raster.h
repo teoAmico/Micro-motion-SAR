@@ -102,6 +102,70 @@ resonarsat_status_t rs_raster_write_map(const double *map, size_t n_row, size_t 
                                         const char *path, double lo, double hi,
                                         rs_palette_t palette);
 
+/* Write a real-valued map as a READABLE FIGURE: upscaled, titled, and with a
+ * labelled colour bar.
+ *
+ * WHY THIS IS SEPARATE FROM rs_raster_write_map(). That function writes one
+ * pixel per datum, which is the right thing for an image and the wrong thing
+ * for a window map. A 7 by 7 tracking grid becomes a 7 by 7 PNG: a coloured
+ * speck that no viewer displays usefully and that carries no indication of what
+ * any colour means. Both are kept because they answer different questions --
+ * the raw map is data a program reads, this is a figure a person reads.
+ *
+ * The map is enlarged by an INTEGER factor with nearest-neighbour sampling,
+ * chosen so the longer side reaches roughly 'min_px' pixels. Integer and
+ * nearest-neighbour on purpose: interpolation would blur one window's value
+ * into its neighbour's, and windows overlap already, so a smooth image would
+ * imply a spatial resolution the data does not have. Every block of solid
+ * colour is exactly one window.
+ *
+ * 'title' and 'unit' may be NULL. 'unit' labels the colour bar, whose ticks are
+ * drawn from the same limits the pixels use, so a reader can convert colour to
+ * number without consulting anything else. Pass lo == hi to autoscale, as with
+ * rs_raster_write_map().
+ *
+ * Text renders uppercase and ASCII-only; see src/io/figure.h. Always writes PNG
+ * -- the format is not chosen by the path here, because a figure with a colour
+ * bar in greyscale PGM would defeat the point. Returns RS_ERR_ARG on a NULL or
+ * zero-dimension argument. */
+resonarsat_status_t rs_raster_write_map_figure(const double *map,
+                                               size_t n_row, size_t n_col,
+                                               const char *path,
+                                               double lo, double hi,
+                                               rs_palette_t palette,
+                                               const char *title,
+                                               const char *unit,
+                                               size_t min_px);
+
+/* Write an XY line plot with axes, tick labels and an optional marker.
+ *
+ * Written for the one picture this project's argument turns on and did not
+ * have: the spectrum of the window a result was read from. The whole question
+ * is which bin won and by how much over its neighbours, and that is invisible
+ * in a number and in a per-window map alike. A reader who cannot see the
+ * spectrum cannot judge whether a reported peak stands out of its
+ * surroundings or merely happens to be the largest sample in noise.
+ *
+ * 'x' and 'y' are 'n' samples of a single series, joined by straight segments.
+ * The y axis runs from zero rather than from min(y), because a power spectrum's
+ * zero is meaningful and a stretched axis manufactures prominence the data does
+ * not contain. The x axis spans the data.
+ *
+ * 'marker_x' draws a vertical line at that abscissa when it is finite, for
+ * showing which bin was selected. Pass NAN for none. 'title', 'x_label' and
+ * 'y_label' may be NULL; the y label is drawn horizontally above the axis
+ * rather than rotated, there being no rotated text in this rasteriser.
+ *
+ * Always writes PNG. Returns RS_ERR_ARG on a NULL argument or fewer than two
+ * samples -- a one-point plot has no line and no axis span, and refusing is
+ * clearer than emitting an empty frame. */
+resonarsat_status_t rs_raster_write_plot(const double *x, const double *y, size_t n,
+                                         const char *path,
+                                         const char *title,
+                                         const char *x_label,
+                                         const char *y_label,
+                                         double marker_x);
+
 /* Write a raw float32 cube with a text sidecar describing its shape.
  *
  * The sidecar carries the dimensions and axis descriptions, so the binary is

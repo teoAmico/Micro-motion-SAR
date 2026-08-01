@@ -315,8 +315,16 @@ artefacts, and it is what `README.md` names as the credibility check that
 matters.
 
 ```sh
-./build/micromotion mmotion --cphd scene.cphd ... --null-static 20
+./build/micromotion mmotion --cphd scene.cphd ... --null-static 5
 ```
+
+**Budget for it.** Each trial re-simulates and refocuses the whole stack, so the
+control costs far more than the measurement: on the synthetic fixture at 128
+looks and `--upsample 200`, the run itself takes about 9 s and `--null-static 5`
+takes **23 minutes**. Measured, not estimated — see
+`runs/synthetic/2026-08-01-e2e-check/`. Plan the trial count accordingly rather
+than discovering this mid-run, and do not let the cost become a reason to skip
+the check; it is the only thing that catches a common-mode artefact.
 
 `--shuffle-looks SEED` is a cheaper cousin that shuffles sub-look time order,
 answering "is there temporal structure here at all". It is **not** a bound for

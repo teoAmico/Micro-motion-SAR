@@ -1,0 +1,10 @@
+warning: grid cell 0.500 m is coarser than the 0.064 m azimuth
+         resolution this collect supports. The image will alias:
+         each scatterer gains ghost peaks that resemble real
+         targets. Use --cell 0.064 or finer, or treat the result
+         as deliberately multi-looked.
+  static trial 1/5: prominence 7.1 at 1.613 Hz
+  static trial 2/5: prominence 7.8 at 1.310 Hz
+  static trial 3/5: prominence 6.8 at 1.966 Hz
+  static trial 4/5: prominence 9.1 at 1.008 Hz
+  static trial 5/5: prominence 8.1 at 2.218 Hz

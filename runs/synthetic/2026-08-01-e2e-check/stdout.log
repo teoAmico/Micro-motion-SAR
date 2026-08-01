@@ -1,0 +1,26 @@
+sub-apertures: 128 looks, dt 0.1550 s
+  observable band  f_max 3.23 Hz   AT sub-look resolution 8.26 m
+sub-pixel refinement: 1/200 px (default 1/10 azimuth, 1/20 range)
+tracked 49 windows (7 x 7); 49 pass the 0.00 coherence mask
+spectra: 65 bins, 0.0504 Hz resolution
+NO FREQUENCY REPORTED: only 4 of 49 windows agree (8%), which is what a
+  MOTIONLESS scene produces. Diagnostics only, NOT a measurement -- strongest
+  window 48: 0.504 Hz, prominence 8.3, quality 0.060, peak-to-peak velocity 188.7 mm/s
+  49 of 49 windows were eligible for selection (coherence gate and quantisation floor)
+  consensus: 0.504 Hz, agreed by 4 of 49 voting windows (8%), 36 distinct answers, largest contiguous block 2
+  WARNING: the agreeing windows are SCATTERED (largest block 2 < 4).
+           Windows overlap at the tracking stride, so a resolvable mode
+           occupies a 2x2 block at minimum. This is the shape of coincidence.
+  sub-aperture response 0.9900 (-0.1 dB) at an observation ratio of 0.08
+
+STATIC-SCENE NULL FLOOR from 5 simulated motionless collects
+with this collect's own geometry, through the identical chain:
+  mean 7.8, sd 0.8, worst 9.1
+  detection 8.3 is 1.06x the mean and 0.91x the worst
+  1 of 5 reached it -- empirical p = 0.3333
+  A MOTIONLESS SCENE REACHED THIS MEASUREMENT through the
+  same processing. Whatever the peak is, it is not
+  evidence of motion.
+  (amplitude is QUALITATIVE -- relative amplitudes do not validate
+   against ground truth even where frequencies do)
+wrote e2e_freq.png, e2e_quality.png, e2e_spectrum.png and e2e_windows.csv

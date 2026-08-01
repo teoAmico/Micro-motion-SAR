@@ -6,6 +6,7 @@ data/*
 *.cphd.truth
 *.f32
 *.png
+!assets/logo.png
 *.pgm
 *.csv
 

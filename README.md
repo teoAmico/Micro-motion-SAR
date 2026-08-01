@@ -1,5 +1,9 @@
 # Micro-motion-SAR
 
+<p align="center">
+  <img src="assets/logo.png" alt="Micro-Motion SAR logo" width="280">
+</p>
+
 **Measuring vibration of the ground and of structures from a single satellite pass.**
 
 One radar pass is cut into sub-apertures — snapshots of the same ground at different

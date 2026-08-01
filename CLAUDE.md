@@ -105,6 +105,14 @@ measured tables, and the reasoning behind each constant, and resolved `FOLLOW-UP
 entries are retired *into* them. When a measurement settles something, it belongs
 beside the code it constrains, not in a new document.
 
+**Keep `docs/USER_GUIDE.md` current — it is not enforced by any test.** Update it in the
+same change that alters a subcommand's flags, its defaults, what it prints, or which
+estimator and reference modes are known to work. Its transcripts are **real captured
+output**, not illustrations: if you change what a command prints, re-run the command and
+paste what it actually says rather than editing the quoted text by hand. Section 9 and
+the Gotchas list are claims about the current state of the code — when a defect there is
+fixed or a mode starts working, that section is wrong until it is changed.
+
 **Errors: set then return.** Every fallible function returns `resonarsat_status_t` and
 calls `rs_set_error("...")` immediately before returning non-OK, at the point where the
 specific detail is still in scope. Library code never prints; the CLI calls

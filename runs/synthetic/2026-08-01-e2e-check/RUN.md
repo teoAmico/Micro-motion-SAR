@@ -66,8 +66,23 @@ than rebuilding it per trial. Not attempted here.
 
 ## Artifacts
 
-`e2e_freq.png`, `e2e_quality.png`, `e2e_spectrum.png`, `e2e_windows.csv`,
-`stdout.log`, `stderr.log`.
+`e2e_freq.png`, `e2e_quality.png`, `e2e_scene.png`, `e2e_spectrum.png`,
+`e2e_windows.csv`, `stdout.log`, `stderr.log`.
+
+**`e2e_scene.png` did not exist when this run was made** and was produced later
+the same day, by the same regeneration described below, once `mmotion` learned to
+write the scene its windows sit on. `stdout.log` therefore predates it and its
+`wrote ...` line does not name it.
+
+It is worth looking at. The sub-look is heavily oversampled -- 0.5 m cells
+against the 8.26 m sub-look resolution printed above -- so what fills the frame
+is the sub-look point-spread function, not scatterers: sixteen cells per
+resolution element, drawn out into tilted streaks. The 32 px correlation patch
+outlined in red spans about two resolution cells. That is the geometry every
+number in this run was measured in, and it was not visible in any output the run
+originally produced. Note this is a different quantity from the aliasing warning
+in `stderr.log`, which compares the cell to the FULL-aperture resolution of
+0.064 m.
 
 **`e2e_spectrum.png` was regenerated later the same day**, after the y axis
 learned to state its units: it read a bare `POWER` and now reads

@@ -1272,6 +1272,15 @@ static int rs_cmd_mmotion(int argc, char **argv)
         rs_subap_stack_free(&stack); rs_cphd_free(&c);
         return 1;
     }
+    /* The look the tracker correlated against, kept for the scene figure.
+     *
+     * A shallow copy taken HERE and not at the point the figures are written,
+     * because --null-trials permutes the stack in place between the two: after
+     * it runs, stack.look[0] is some other sub-look and the grid would be drawn
+     * over a scene it was never laid on. Copying the struct is enough -- the
+     * pixels belong to the stack and are freed with it. */
+    const rs_slc_t scene_ref = stack.look[0];
+
     size_t n_pass = 0;
     for (size_t w = 0; w < m.n_win; w++) if (m.quality[w] >= mp.coherence_min) n_pass++;
     printf("tracked %zu windows (%zu x %zu); %zu pass the %.2f coherence mask\n",
@@ -1697,6 +1706,28 @@ static int rs_cmd_mmotion(int argc, char **argv)
                                    path, 0.0, 1.0, RS_PALETTE_VIRIDIS,
                                    "TRACKING QUALITY PER WINDOW", "0-1", 420);
 
+        /* The scene the two maps above are abstractions OF.
+         *
+         * Both of them, and the spectrum below, are indexed by a window number
+         * against a scene that appeared in no output at all: nothing said
+         * whether the window carrying the reported peak sat on a target, on
+         * clutter, or on the edge of the patch. It also shows the correlation
+         * patch against the SUB-LOOK's resolution, which is coarser than the
+         * full-aperture figure the aliasing warning quotes by roughly the
+         * number of looks. See rs_raster_write_scene_figure(). */
+        {
+            const rs_win_grid_t wg = {
+                .win_az = mp.win_az, .win_rg = mp.win_rg,
+                .stride_az = mp.stride_az, .stride_rg = mp.stride_rg,
+                .n_win_az = m.n_win_az, .n_win_rg = m.n_win_rg,
+                .mark = best
+            };
+            snprintf(path, sizeof path, "%s_scene.png", prefix);
+            rs_raster_write_scene_figure(&scene_ref, 40.0, &wg, path,
+                                         "REFERENCE SUB-LOOK, TRACKING GRID,"
+                                         " SELECTED WINDOW", 420);
+        }
+
         /* The spectrum the reported frequency was read from.
          *
          * The entire selection argument is about which bin won and by how much
@@ -1770,8 +1801,9 @@ static int rs_cmd_mmotion(int argc, char **argv)
             }
             fclose(wf);
         }
-        printf("wrote %s_freq.png, %s_quality.png, %s_spectrum.png"
-               " and %s_windows.csv\n", prefix, prefix, prefix, prefix);
+        printf("wrote %s_freq.png, %s_quality.png, %s_scene.png,"
+               " %s_spectrum.png and %s_windows.csv\n",
+               prefix, prefix, prefix, prefix, prefix);
     }
 
     rs_spectrum_free(&spec);

@@ -124,11 +124,17 @@ static void rs_colourise(double t, rs_palette_t palette, unsigned char rgb[3])
     }
 }
 
-/* Write an amplitude quicklook on a decibel scale. See raster.h. */
-resonarsat_status_t rs_raster_write_quicklook(const rs_slc_t *img, const char *path,
-                                              double dyn_range_db)
+/* Amplitude on the quicklook's decibel scale, one byte per pixel.
+ *
+ * Shared by the bare quicklook and by the scene figure so the two cannot drift
+ * apart: a reader comparing 'focus' output against the scene a measurement was
+ * taken from must be looking at the same stretch, or the comparison says
+ * nothing. Writes an allocated buffer of img->n_az * img->n_rg bytes to '*out',
+ * which the caller frees. 'dyn_range_db' at or below zero means 40. */
+static resonarsat_status_t rs_amp_gray(const rs_slc_t *img, double dyn_range_db,
+                                       unsigned char **out)
 {
-    if (!img || !img->data || !path) return RS_ERR_ARG;
+    if (!img || !img->data || !out) return RS_ERR_ARG;
     if (dyn_range_db <= 0.0) dyn_range_db = 40.0;
 
     const size_t n = img->n_az * img->n_rg;
@@ -160,9 +166,23 @@ resonarsat_status_t rs_raster_write_quicklook(const rs_slc_t *img, const char *p
     }
     free(amp);
 
-    const resonarsat_status_t st = rs_write_gray(path, px, img->n_az, img->n_rg);
+    *out = px;
+    return RS_OK;
+}
+
+/* Write an amplitude quicklook on a decibel scale. See raster.h. */
+resonarsat_status_t rs_raster_write_quicklook(const rs_slc_t *img, const char *path,
+                                              double dyn_range_db)
+{
+    if (!img || !img->data || !path) return RS_ERR_ARG;
+
+    unsigned char *px = NULL;
+    const resonarsat_status_t st = rs_amp_gray(img, dyn_range_db, &px);
+    if (st != RS_OK) return st;
+
+    const resonarsat_status_t w = rs_write_gray(path, px, img->n_az, img->n_rg);
     free(px);
-    return st;
+    return w;
 }
 
 /* Write a real map with a linear stretch, autoscaling when lo == hi. */
@@ -350,6 +370,131 @@ resonarsat_status_t rs_raster_write_map_figure(const double *map,
                  n_row, n_col, zoom);
         rs_fig_text(&f, (long)left, (long)(top + map_h) + 8, cap, ts, grey);
     }
+
+    st = rs_png_write(path, f.px, f.w, f.h, 3);
+    rs_fig_free(&f);
+    return st;
+}
+
+/* Write the scene with its tracking grid drawn over it. See raster.h. */
+resonarsat_status_t rs_raster_write_scene_figure(const rs_slc_t *img,
+                                                 double dyn_range_db,
+                                                 const rs_win_grid_t *grid,
+                                                 const char *path,
+                                                 const char *title,
+                                                 size_t min_px)
+{
+    if (!img || !img->data || !path) return RS_ERR_ARG;
+    if (img->n_az == 0 || img->n_rg == 0) return RS_ERR_ARG;
+    if (min_px == 0) min_px = 360;
+
+    unsigned char *amp = NULL;
+    resonarsat_status_t st = rs_amp_gray(img, dyn_range_db, &amp);
+    if (st != RS_OK) return st;
+
+    /* Integer zoom for the same reason the map figure uses one: a scene pixel
+     * is the unit the grid is specified in, and interpolating between them
+     * would put the overlay somewhere between two pixels it was never on. */
+    const size_t longer = (img->n_az > img->n_rg) ? img->n_az : img->n_rg;
+    size_t zoom = (min_px + longer - 1) / longer;
+    if (zoom < 1) zoom = 1;
+    if (zoom > 16) zoom = 16;
+
+    const int ts = 2;
+    const size_t ch = rs_fig_text_height(ts);
+    const size_t img_w = img->n_rg * zoom, img_h = img->n_az * zoom;
+
+    /* Two caption lines: what the grid is, and what the stretch is not. Both
+     * are built here rather than at the point they are drawn, because the
+     * canvas has to be wide enough for whichever of them is longest -- a scene
+     * narrower than its own caption is the common case at these grid sizes, and
+     * sizing to the image alone silently truncates the text. */
+    char cap_grid[128], cap_stretch[128];
+    if (grid && grid->n_win_az > 0 && grid->n_win_rg > 0) {
+        snprintf(cap_grid, sizeof cap_grid,
+                 "%zu X %zu WINDOWS, %zu PX PATCH, %zu PX STRIDE",
+                 grid->n_win_az, grid->n_win_rg, grid->win_az, grid->stride_az);
+    } else {
+        snprintf(cap_grid, sizeof cap_grid, "%zu X %zu PX SCENE",
+                 img->n_az, img->n_rg);
+    }
+    snprintf(cap_stretch, sizeof cap_stretch,
+             "%.0f DB LOG STRETCH -- FOR LOOKING, NOT FOR MEASURING",
+             (dyn_range_db > 0.0) ? dyn_range_db : 40.0);
+
+    const size_t pad = 12;
+    const size_t top = pad + (title ? ch + 10 : 0);
+    const size_t left = pad;
+    const size_t bottom = pad + 2 * ch + 12;
+
+    size_t text_w = rs_fig_text_width(cap_grid, ts);
+    if (rs_fig_text_width(cap_stretch, ts) > text_w) {
+        text_w = rs_fig_text_width(cap_stretch, ts);
+    }
+    if (title && rs_fig_text_width(title, ts) > text_w) {
+        text_w = rs_fig_text_width(title, ts);
+    }
+    const size_t body_w = (img_w > text_w) ? img_w : text_w;
+
+    rs_fig_t f;
+    static const unsigned char white[3] = { 255, 255, 255 };
+    static const unsigned char black[3] = { 20, 20, 20 };
+    static const unsigned char grey[3]  = { 130, 130, 130 };
+    static const unsigned char line[3]  = { 90, 160, 255 };
+    static const unsigned char red[3]   = { 230, 60, 45 };
+
+    st = rs_fig_create(&f, left + body_w + pad, top + img_h + bottom, white);
+    if (st != RS_OK) { free(amp); return st; }
+
+    for (size_t r = 0; r < img_h; r++) {
+        for (size_t c = 0; c < img_w; c++) {
+            const unsigned char g = amp[(r / zoom) * img->n_rg + (c / zoom)];
+            const unsigned char rgb[3] = { g, g, g };
+            rs_fig_pixel(&f, (long)(left + c), (long)(top + r), rgb);
+        }
+    }
+    free(amp);
+
+    if (grid && grid->n_win_az > 0 && grid->n_win_rg > 0) {
+        /* The lattice marks where windows START, so its spacing is the stride.
+         * Drawing every window's outline instead would overlap them into a
+         * solid wash wherever stride < win, which is the default. */
+        for (size_t k = 0; k < grid->n_win_az; k++) {
+            const size_t y = top + k * grid->stride_az * zoom;
+            if (y >= top + img_h) break;
+            rs_fig_line(&f, (long)left, (long)y,
+                        (long)(left + img_w - 1), (long)y, line);
+        }
+        for (size_t k = 0; k < grid->n_win_rg; k++) {
+            const size_t x = left + k * grid->stride_rg * zoom;
+            if (x >= left + img_w) break;
+            rs_fig_line(&f, (long)x, (long)top,
+                        (long)x, (long)(top + img_h - 1), line);
+        }
+
+        /* The marked window's PATCH, not its stride cell: the box has to show
+         * how much ground one correlation covered, which is the quantity a
+         * reader is about to judge a reported frequency against. */
+        if (grid->mark != RS_WIN_GRID_NO_MARK &&
+            grid->mark < grid->n_win_az * grid->n_win_rg) {
+            const size_t wa = grid->mark / grid->n_win_rg;
+            const size_t wr = grid->mark % grid->n_win_rg;
+            const long y0 = (long)(top + wa * grid->stride_az * zoom);
+            const long x0 = (long)(left + wr * grid->stride_rg * zoom);
+            const long y1 = y0 + (long)(grid->win_az * zoom) - 1;
+            const long x1 = x0 + (long)(grid->win_rg * zoom) - 1;
+            rs_fig_line(&f, x0, y0, x1, y0, red);
+            rs_fig_line(&f, x0, y1, x1, y1, red);
+            rs_fig_line(&f, x0, y0, x0, y1, red);
+            rs_fig_line(&f, x1, y0, x1, y1, red);
+        }
+    }
+
+    if (title) rs_fig_text(&f, (long)left, (long)pad, title, ts, black);
+
+    rs_fig_text(&f, (long)left, (long)(top + img_h) + 8, cap_grid, ts, grey);
+    rs_fig_text(&f, (long)left, (long)(top + img_h) + 8 + (long)ch + 4,
+                cap_stretch, ts, grey);
 
     st = rs_png_write(path, f.px, f.w, f.h, 3);
     rs_fig_free(&f);

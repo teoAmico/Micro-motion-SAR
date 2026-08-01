@@ -137,6 +137,67 @@ resonarsat_status_t rs_raster_write_map_figure(const double *map,
                                                const char *unit,
                                                size_t min_px);
 
+/* The tracking grid, for drawing over the scene it was laid on.
+ *
+ * Every field is in image pixels of the sub-look the grid was built from, which
+ * is the only frame in which the two can be drawn together. 'n_win_az' by
+ * 'n_win_rg' windows of 'win_az' by 'win_rg' pixels start every 'stride_az' by
+ * 'stride_rg' pixels, so window w -- the index used by the spectrum figure and
+ * by the windows CSV -- covers rows (w / n_win_rg) * stride_az onward and
+ * columns (w % n_win_rg) * stride_rg onward. 'mark' highlights one window, or
+ * RS_WIN_GRID_NO_MARK for none. */
+#define RS_WIN_GRID_NO_MARK ((size_t)-1)
+
+typedef struct {
+    size_t win_az, win_rg;
+    size_t stride_az, stride_rg;
+    size_t n_win_az, n_win_rg;
+    size_t mark;
+} rs_win_grid_t;
+
+/* Write the scene a measurement was taken from, with the tracking grid on it.
+ *
+ * WHAT THIS IS FOR. Every other figure this tool writes is an abstraction over
+ * a scene the reader never sees: a 7 by 7 map of frequencies, and one window's
+ * spectrum labelled by an index. Nothing says whether the window that produced
+ * the reported peak sits on a target, on distributed clutter, or on the edge of
+ * the patch, and no amount of per-window evidence answers that.
+ *
+ * It also shows how the correlation patch compares to the sub-look's own
+ * resolution, which is not the resolution 'validate' and the aliasing warning
+ * talk about. Those concern the FULL aperture; a sub-look is coarser by roughly
+ * the number of looks, so a grid cell that undersamples the full aperture can
+ * still oversample every image the tracker actually sees. Whether a patch spans
+ * many resolution cells or barely two is legible here and nowhere else.
+ *
+ * WHICH IMAGE TO PASS. The sub-look the tracker correlated against -- look 0 of
+ * the stack -- and NOT a full-aperture focus. The window grid is defined on that
+ * image's dimensions, so the overlay lands where the windows actually were, and
+ * in the pulse route the stack is not a decomposition of a full-aperture image
+ * at all. Note that a shuffle null permutes the stack in place, so a caller that
+ * runs one must copy the reference look before it does.
+ *
+ * WHAT IS DRAWN. The amplitude on the same decibel stretch as
+ * rs_raster_write_quicklook(), enlarged by an integer factor to roughly
+ * 'min_px'; a lattice at the window STRIDE, which is finer than the window when
+ * they overlap; and the marked window's full patch extent as a red box. The
+ * lattice therefore shows how the grid was sampled and the box shows how much
+ * ground one correlation actually covered -- the two differ, and the caption
+ * states both.
+ *
+ * The stretch is for looking, not measuring. Bright scatterers saturate at the
+ * 99th percentile, so a point-spread function measured off this comes out
+ * broader than it is; 'focus --raw' is the route for that. The caption says so.
+ *
+ * 'grid' may be NULL for a bare enlarged scene. Always writes PNG. Returns
+ * RS_ERR_ARG on a NULL image or path. */
+resonarsat_status_t rs_raster_write_scene_figure(const rs_slc_t *img,
+                                                 double dyn_range_db,
+                                                 const rs_win_grid_t *grid,
+                                                 const char *path,
+                                                 const char *title,
+                                                 size_t min_px);
+
 /* Write an XY line plot with axes, tick labels and an optional marker.
  *
  * Written for the one picture this project's argument turns on and did not

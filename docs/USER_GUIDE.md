@@ -356,6 +356,7 @@ With `--out PREFIX`:
 |---|---|
 | `PREFIX_freq.png` | dominant frequency per window, with a colour bar in Hz |
 | `PREFIX_quality.png` | tracking quality per window, colour bar 0–1 |
+| `PREFIX_scene.png` | **the scene the measurement was taken from**, with the tracking grid on it and the selected window boxed |
 | `PREFIX_spectrum.png` | **the spectrum the reported frequency was read from**, with a marker at the selected bin |
 | `PREFIX_windows.csv` | **per-window evidence behind the selection** — every window's frequency, prominence, quality, excursion, whether it passed the gates, and whether it agrees with the consensus |
 
@@ -364,10 +365,11 @@ integer factor with nearest-neighbour sampling and carries a labelled colour bar
 so a colour can be converted to a number without opening the CSV. Nearest
 neighbour is deliberate — windows overlap already, and a smoothed image would
 imply a spatial resolution the data does not have. Every solid block is exactly
-one window, and the caption underneath says how many windows and how many pixels
-each.
+one window, and the caption underneath says how many windows and how many
+screen pixels each was drawn as.
 
-**`PREFIX_spectrum.png` is the one to look at first.** The whole selection
+**`PREFIX_spectrum.png` is the one to look at first, `PREFIX_scene.png`
+second.** The whole selection
 argument is about which bin won and by how much over its neighbours, and that is
 invisible in a reported number and in a per-window map alike. The red dashed
 marker is where the peak-picker landed, so a disagreement between the marker and
@@ -448,6 +450,35 @@ does not say:
 **`PREFIX_quality.png`.** Mean correlation-peak value per window, in [0,1]. This
 bar is **fixed at 0–1**, not autoscaled, so unlike the frequency map it is
 comparable across runs. It is the quantity the `--coherence` gate thresholds.
+
+**`PREFIX_scene.png`.** The image everything else is an abstraction of. Without
+it a window index is unanchored: nothing says whether the window carrying the
+reported peak sat on a target, on clutter, or on the edge of the patch.
+
+- It is the **reference sub-look** — look 0, the one the tracker correlated
+  every other look against — not a full-aperture focus. The window grid is
+  defined on this image's dimensions, so the overlay lands where the windows
+  actually were. In the `pulse` route the stack is not a decomposition of a
+  full-aperture image at all, so there is no other image the grid would fit.
+- *The blue lattice* marks where windows **start**, so its spacing is the
+  stride, which is half the patch by default. *The red box* is the selected
+  window's **full patch**, so it is twice the lattice cell and overlaps its
+  neighbours — that is not a drawing error, it is what the tracker did. The
+  caption gives both numbers.
+- *Greyscale is amplitude* on a 40 dB log stretch clipped at the 99th
+  percentile, the same stretch `focus` writes. It is for looking, not measuring:
+  bright scatterers saturate, so a point-spread function measured off it comes
+  out broader than it is. Use `focus --raw` for that.
+- **It shows the patch against the sub-look's resolution, which is not the
+  resolution the aliasing warning is about.** That warning compares `--cell` to
+  the *full-aperture* resolution. A sub-look is coarser than the full aperture
+  by roughly the number of looks, so a cell that undersamples the full aperture
+  can still oversample every image the tracker sees — the synthetic run in
+  section 3 is warned about a 0.5 m cell against 0.064 m full-aperture
+  resolution while its sub-looks resolve 8.26 m, sixteen cells. What you see
+  there is the sub-look point-spread function, not point targets, and a 32 px
+  patch spans about two resolution cells. Neither fact is visible in any
+  statistic computed downstream.
 
 **The caption under both maps** — `7 X 7 WINDOWS, 60 PX EACH` — gives the grid
 size and how many *screen* pixels one window block was drawn as. The 60 is a zoom

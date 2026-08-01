@@ -10,6 +10,13 @@ One radar pass is cut into sub-apertures — snapshots of the same ground at dif
 instants — and what moves between them is tracked and turned into a per-window vibration
 spectrum. No second pass, no interferometric stack, no repeat cycle.
 
+## AI full disclosure
+
+This software is developed with strong assistance from Claude Opus 5, GPT-5.5 and GPT-5.6,
+with humans leading the ideas, the testing and the debugging. We say this openly because it
+shaped how the project was built. If you are not happy with AI-developed code, this software
+is not for you.
+
 ## Why single-pass
 
 Repeat-pass interferometry measures millimetres per year over days to years. This measures

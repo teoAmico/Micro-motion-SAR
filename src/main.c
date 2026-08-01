@@ -344,8 +344,23 @@ static int rs_cmd_info(int argc, char **argv)
 {
     if (argc < 2) {
         printf("usage: resonarsat info --uavsar SLC --ann ANN\n"
-               "       resonarsat info --cphd FILE\n"
-               "       resonarsat info --sicd FILE.nitf\n");
+               "       resonarsat info --cphd FILE [--json]\n"
+               "       resonarsat info --sicd FILE.nitf\n"
+               "\n"
+               "--json prints the derived quantities the pipeline consumes as\n"
+               "JSON instead of the human report. CPHD only -- it exists to be\n"
+               "compared against an independent reader, and the CPHD path is\n"
+               "the one with a vendor metadata defect known to need it. See\n"
+               "tools/sarpy_crosscheck.py.\n");
+        return 1;
+    }
+
+    /* Refused rather than ignored. A caller that pipes this into a parser and
+     * silently receives the human report gets a parse failure at best and a
+     * misread field at worst, and the whole point of the flag is to be the
+     * input to a comparison. */
+    if (rs_opt_flag(argc, argv, "--json") && !rs_opt(argc, argv, "--cphd")) {
+        fprintf(stderr, "info: --json is implemented for --cphd only\n");
         return 1;
     }
 
@@ -435,6 +450,54 @@ static int rs_cmd_info(int argc, char **argv)
                        (size_t)rs_opt_double(argc, argv, "--pulse-stride", 0.0),
                        (size_t)rs_opt_double(argc, argv, "--max-pulses", 0.0));
         if (st != RS_OK) { rs_report_error("info", st); return 1; }
+
+        /* Machine-readable form, for cross-checking this reader against an
+         * independent one. See tools/sarpy_crosscheck.py.
+         *
+         * WHY THIS EXISTS. Every stage downstream is tested against fixtures
+         * this project generates, so a reader that misreads a real vendor file
+         * consistently is invisible to the whole suite -- the pipeline would
+         * simply measure the wrong collect, confidently. The Capella SGN
+         * override in src/readers/cphd.c is direct evidence that vendor
+         * metadata cannot be taken at face value, and it was found by comparing
+         * against someone else's reader rather than by any test here.
+         *
+         * The fields are the ones the pipeline actually consumes, and they are
+         * DERIVED values rather than raw metadata on purpose: reading SC0 out of
+         * a file and printing it proves nothing, whereas the wavelength, the bin
+         * spacing and the reference range are what focusing depends on and each
+         * one exercises a different part of the parse. The pulse count is the
+         * output of the validity screening, so it checks that too.
+         *
+         * Printed instead of the human report, not beside it, so the output is
+         * parseable without a filter. */
+        if (rs_opt_flag(argc, argv, "--json")) {
+            /* %.17g, not the %.12g the human report uses. Seventeen
+             * significant digits round-trip an IEEE double exactly, and this
+             * output exists to be differenced against another reader's: at
+             * twelve, a comparison at a floating-point tolerance measures this
+             * printf and not the parse. Both quotients below -- the wavelength
+             * and the bin spacing -- disagreed at 1.3e-12 for exactly that
+             * reason before it was raised. */
+            const double span = c.t[c.n_pulse - 1] - c.t[0];
+            printf("{\n");
+            printf("  \"source\": \"%s\",\n", c.source);
+            printf("  \"n_pulse\": %zu,\n", c.n_pulse);
+            printf("  \"n_rbin\": %zu,\n", c.n_rbin);
+            printf("  \"fc_hz\": %.17g,\n", c.fc);
+            printf("  \"lambda_m\": %.17g,\n", c.lambda);
+            printf("  \"prf_hz\": %.17g,\n", c.prf);
+            printf("  \"dwell_s\": %.17g,\n", span);
+            printf("  \"t_first_s\": %.17g,\n", c.t[0]);
+            printf("  \"t_last_s\": %.17g,\n", c.t[c.n_pulse - 1]);
+            printf("  \"dr_m\": %.17g,\n", c.dr);
+            printf("  \"r_near_m\": %.17g,\n", c.r_near);
+            printf("  \"r_ref_first_m\": %.17g,\n", c.r_ref[0]);
+            printf("  \"r_ref_last_m\": %.17g\n", c.r_ref[c.n_pulse - 1]);
+            printf("}\n");
+            rs_cphd_free(&c);
+            return 0;
+        }
 
         printf("source              phase history (unfocused)\n");
         printf("pulses              %zu\n", c.n_pulse);
@@ -1445,6 +1508,14 @@ static int rs_cmd_mmotion(int argc, char **argv)
     (void)rs_spectrum_consensus(&spec, &cons_hz, &cons_agree, &cons_distinct,
                                 &cons_vote, &cons_block);
 
+    /* The third selection policy, reported beside the other two and gating
+     * nothing. It reads what the CORRELATOR knew rather than what the spectrum
+     * shows, so where it disagrees with the consensus the disagreement is
+     * information -- see rs_spectrum_ampcor_window() in microm.h. Its status is
+     * kept because a total cull is a result and must be printable as one. */
+    rs_spectrum_cull_t cull;
+    const resonarsat_status_t cull_st = rs_spectrum_ampcor_window(&spec, &cull);
+
     /* THE GATE. Refuse to report a frequency when the windows do not agree.
      *
      * AN EARLIER VERSION GATED ON CONTIGUITY INSTEAD, and it was wrong. The
@@ -1575,6 +1646,32 @@ static int rs_cmd_mmotion(int argc, char **argv)
             /* The agreement gate above already refused this case; nothing
              * further to warn about here. */
         }
+    }
+
+    /* The correlation cull, printed whether it succeeded or not: the counts are
+     * the output, and "every window was removed, here is which gate removed
+     * them" is a more useful line than silence. */
+    if (cull_st == RS_OK) {
+        printf("  cull: %.3f Hz from %zu of %zu windows surviving "
+               "(SNR %zu, sigma %zu, neighbours %zu removed)%s\n",
+               cull.freq_hz, cull.n_agree, cull.n_input,
+               cull.n_snr_cull, cull.n_sigma_cull, cull.n_neigh_cull,
+               cull.gates_applied ? "" : ", surface gates N/A");
+        /* Disagreement between the two policies is the point of having both.
+         * They read different evidence -- the consensus the spectrum alone, the
+         * cull the correlation surfaces behind it -- so agreement is weak
+         * corroboration and disagreement says one of them is reading noise. */
+        if (cons_vote > 0 && spec.df > 0.0 &&
+            fabs(cull.freq_hz - cons_hz) > 0.5 * spec.df) {
+            printf("  NOTE: the cull and the consensus disagree (%.3f vs %.3f Hz).\n"
+                   "        They read different evidence, so this is not a tie to\n"
+                   "        break by preference: at most one of them is measuring.\n",
+                   cull.freq_hz, cons_hz);
+        }
+    } else {
+        printf("  cull: no window survived (%zu entered; SNR %zu, sigma %zu, "
+               "neighbours %zu removed)\n",
+               cull.n_input, cull.n_snr_cull, cull.n_sigma_cull, cull.n_neigh_cull);
     }
     if (spec.quant_px > 0.0 && n_cand > 0 && n_cand < 4) {
         printf("  WARNING: windows overlap at the tracking stride, so a target\n"
@@ -1785,8 +1882,20 @@ static int rs_cmd_mmotion(int argc, char **argv)
                         "floor_px=%.12g n_win_az=%zu n_win_rg=%zu\n",
                     spec.df, spec.quant_px, q_min_rep, floor_rep,
                     spec.n_win_az, spec.n_win_rg);
+            /* The cull's own line, so the file records which windows the
+             * correlation gates removed and at what thresholds. Without the
+             * thresholds the per-window snr and sigma columns below could not
+             * be re-scored later against a different policy, which is the only
+             * reason this file exists. */
+            fprintf(wf, "# cull_hz=%.12g agree=%zu input=%zu survivors=%zu "
+                        "snr_cull=%zu sigma_cull=%zu neigh_cull=%zu "
+                        "snr_gate=%.12g snr_null=%.12g sigma_k=%g gates=%d\n",
+                    cull.freq_hz, cull.n_agree, cull.n_input, cull.n_survivor,
+                    cull.n_snr_cull, cull.n_sigma_cull, cull.n_neigh_cull,
+                    cull.snr_gate, spec.snr_null, 3.0, cull.gates_applied);
             fprintf(wf, "window,iaz,irg,dominant_hz,prominence,quality,"
-                        "excursion_px,passed_gates,agrees_with_consensus\n");
+                        "excursion_px,snr,sigma_px,passed_gates,"
+                        "agrees_with_consensus,passed_cull\n");
             for (size_t w = 0; w < spec.n_win; w++) {
                 const double exc = spec.excursion_px ? spec.excursion_px[w] : 0.0;
                 const int passed = (spec.quality[w] >= q_min_rep) &&
@@ -1794,10 +1903,19 @@ static int rs_cmd_mmotion(int argc, char **argv)
                                     exc >= floor_rep);
                 const int agrees = passed && spec.df > 0.0 &&
                     fabs(spec.dominant_freq[w] - cons_hz) <= 0.5 * spec.df;
-                fprintf(wf, "%zu,%zu,%zu,%.12g,%.12g,%.12g,%.12g,%d,%d\n",
+                /* Recomputed from the recorded thresholds rather than exported
+                 * from the selector, so the column and the header line are
+                 * checkable against each other by whoever reads the file. */
+                const double snr_w = spec.snr ? spec.snr[w] : 0.0;
+                const double sig_w = spec.sigma_px ? spec.sigma_px[w] : 0.0;
+                const int culled = passed &&
+                    (!cull.gates_applied ||
+                     (snr_w >= cull.snr_gate && exc >= 3.0 * sig_w));
+                fprintf(wf, "%zu,%zu,%zu,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%d,%d,%d\n",
                         w, w / spec.n_win_rg, w % spec.n_win_rg,
                         spec.dominant_freq[w], spec.prominence[w],
-                        spec.quality[w], exc, passed, agrees);
+                        spec.quality[w], exc, snr_w, sig_w,
+                        passed, agrees, culled);
             }
             fclose(wf);
         }

@@ -77,15 +77,23 @@ The `mmotion` chain, in order:
    `rs_microm_estimator_t` (`correlation`, `phase`, `splitband`). The correlator itself
    is `src/core/coreg.c`; split-band phase linking is `src/core/phaselink.c`.
 4. **Spectrum** — `src/core/spectrum.c`. `rs_spectrum_compute_opts()` per window, then
-   two selection statistics side by side: `rs_spectrum_best_window()` (prominence, the
-   reported answer) and `rs_spectrum_consensus()` (which frequency the most windows
+   three selection statistics side by side: `rs_spectrum_best_window()` (prominence, the
+   reported answer), `rs_spectrum_consensus()` (which frequency the most windows
    agree on, how many distinct answers there are, and the largest 4-connected block of
-   agreeing windows).
+   agreeing windows), and `rs_spectrum_ampcor_window()` (an ampcor-style cull on the
+   correlation surfaces' own SNR and curvature plus a neighbourhood test, which is the
+   only one reading evidence from the tracker rather than from the spectrum).
 
 `src/core/ccd.c` is a separate scale-invariant change-detection locator over the same
 stack — "where is something moving", not "at what frequency". `src/io/` writes PNG and
 raster maps; `src/util/` holds geometry, geocoding, orbit and the thread-local error
 buffer.
+
+`tools/sarpy_crosscheck.py` compares this project's CPHD reader against SARPy on a real
+vendor product, via `info --cphd --json`. It is the only check anywhere here that
+exercises the CPHD parse — `sim_cphd` writes the project's own container, so the test
+suite never touches it. Needs `pip install sarpy` and a real product; see `FOLLOW-UPS.md`
+item 12b for what it does and does not cover.
 
 `tools/sim_cphd.c` generates synthetic phase history and is how nearly every claim in
 `FOLLOW-UPS.md` was measured: `--clutter N` for distributed texture, `--clutter-vib` to
@@ -148,6 +156,9 @@ arithmetic calls admissible; the most recent finding (`FOLLOW-UPS.md` items 7-9)
 the tracker does recover the injected carrier in most windows and the *selection policy*
 discards it. `rs_spectrum_best_window()` still selects by prominence and is still what
 the tool reports; ranking on consensus and contiguity instead is the open half.
+`rs_spectrum_ampcor_window()` is a third policy added since (`FOLLOW-UPS.md` item 12)
+that culls on what the correlator knew rather than on the spectrum — it is reported
+beside the other two, gates nothing, and has not been put to a sweep.
 
 `--reference pair` and `--reference adjacent` do not recover a frequency on the
 synthetic fixture and are exposed because the sources describe them, not because they

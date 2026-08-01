@@ -796,6 +796,224 @@ int main(void)
     }
 
     /* ------------------------------------------------------------------
+     * The correlation cull, rs_spectrum_ampcor_window().
+     *
+     * Built from hand-made tracking results rather than from a simulated scene,
+     * for the same reason the prominence cases above are: each gate has to be
+     * shown to fire on the population it is meant to fire on and to leave the
+     * others alone, and that requires setting the three inputs independently.
+     * A scene supplies them jointly and could pass this while only one gate
+     * worked.
+     *
+     * The layout is a 4x4 window lattice holding, by construction:
+     *   - a 2x2 block at (1,1)..(2,2) with a well-determined 1.25 Hz signal
+     *   - one ISOLATED window at the same frequency, equally well determined,
+     *     which only the neighbourhood gate can remove
+     *   - four windows with a strong clean 0.625 Hz peak and a noise-level SNR
+     *   - the rest well correlated but barely moving, so the excursion gate
+     *     takes them
+     * ------------------------------------------------------------------ */
+    RS_CASE("the cull keeps a block and drops an equally strong isolated window");
+    {
+        const size_t k = 64, n_az = 4, n_rg = 4, n_win = n_az * n_rg;
+        rs_microm_t m;
+        memset(&m, 0, sizeof m);
+        m.n_looks = k; m.n_win = n_win; m.n_win_az = n_az; m.n_win_rg = n_rg;
+        m.win_az = m.win_rg = 32; m.stride_az = m.stride_rg = 16;
+        m.dt = 0.1; m.az_spacing_m = m.rg_spacing_m = 1.0;
+        /* The quantisation floor is disabled so that the only gates acting are
+         * the cull's own three. It is exercised separately above. */
+        m.quant_px = 0.0;
+        m.snr_null = 7.5;               /* about H_1024, a 32x32 window */
+
+        m.disp_az  = calloc(n_win * k, sizeof *m.disp_az);
+        m.disp_rg  = calloc(n_win * k, sizeof *m.disp_rg);
+        m.disp_los = calloc(n_win * k, sizeof *m.disp_los);
+        m.vel_los  = calloc(n_win * k, sizeof *m.vel_los);
+        m.quality  = calloc(n_win, sizeof *m.quality);
+        m.snr      = calloc(n_win, sizeof *m.snr);
+        m.sigma_px = calloc(n_win, sizeof *m.sigma_px);
+        RS_CHECK(m.disp_az && m.disp_rg && m.disp_los && m.vel_los &&
+                 m.quality && m.snr && m.sigma_px);
+
+        /* fs = 10 Hz over 64 samples, so df = 0.15625 Hz and these two land on
+         * bins 8 and 4 exactly -- no leakage to argue about. */
+        const double f_block = 1.25, f_weak = 0.625;
+
+        for (size_t w = 0; w < n_win; w++) {
+            m.quality[w] = 1.0;         /* the coherence gate passes everyone */
+
+            double freq, amp, snr, sig;
+            const int in_block = (w == 5 || w == 6 || w == 9 || w == 10);
+            const int isolated = (w == 0);
+            const int weak_snr = (w >= 12);
+            if (in_block || isolated) {
+                freq = f_block; amp = 1.0; snr = 100.0; sig = 0.1;
+            } else if (weak_snr) {
+                /* A clean, prominent peak behind a surface indistinguishable
+                 * from noise. Nothing in the spectrum says so. */
+                freq = f_weak;  amp = 1.0; snr = 8.0;   sig = 0.1;
+            } else {
+                /* Well correlated and well determined, but the excursion is
+                 * below three sigma of the offset noise, so the series is not
+                 * a measurement however clean its periodogram looks. */
+                freq = 0.15625 * (double)(2 + (w % 3));
+                amp = 0.05; snr = 100.0; sig = 1.0;
+            }
+            m.snr[w] = snr;
+            m.sigma_px[w] = sig;
+            for (size_t i = 0; i < k; i++) {
+                const double v = amp * sin(2.0 * M_PI * freq * m.dt * (double)i);
+                m.disp_az[w * k + i] = v;
+                m.vel_los[w * k + i] = v;
+            }
+        }
+
+        rs_spectrum_t sp;
+        RS_CHECK_OK(rs_spectrum_compute(&m, RS_SPEC_VELOCITY, &sp));
+
+        /* The premise. Every window has a peak at the frequency it was given,
+         * so nothing below is culled for having the wrong spectrum. */
+        RS_CHECK_NEAR(sp.dominant_freq[0], f_block, 0.5 * sp.df);
+        RS_CHECK_NEAR(sp.dominant_freq[5], f_block, 0.5 * sp.df);
+        RS_CHECK_NEAR(sp.dominant_freq[12], f_weak, 0.5 * sp.df);
+
+        rs_spectrum_cull_t c;
+        RS_CHECK_OK(rs_spectrum_ampcor_window(&sp, &c));
+        printf("    entered %zu; culled %zu on SNR, %zu on sigma, %zu on "
+               "neighbours; %zu survived\n",
+               c.n_input, c.n_snr_cull, c.n_sigma_cull, c.n_neigh_cull,
+               c.n_survivor);
+        printf("    reported %.4f Hz from window %zu, %zu agreeing\n",
+               c.freq_hz, c.window, c.n_agree);
+
+        RS_CHECK(c.gates_applied == 1);
+        RS_CHECK_NEAR(c.snr_gate, 15.0, 1e-9);   /* twice the stated null */
+        RS_CHECK(c.n_input == n_win);
+        RS_CHECK(c.n_snr_cull == 4);
+        RS_CHECK(c.n_sigma_cull == 7);
+        /* The one that matters: the isolated window is as strong, as coherent
+         * and as well determined as any block member, and differs from them in
+         * nothing except that it stands alone. */
+        RS_CHECK(c.n_neigh_cull == 1);
+        RS_CHECK(c.n_survivor == 4);
+        RS_CHECK(c.n_agree == 4);
+        RS_CHECK_NEAR(c.freq_hz, f_block, 0.5 * sp.df);
+        RS_CHECK(c.window == 5 || c.window == 6 || c.window == 9 || c.window == 10);
+
+        rs_spectrum_free(&sp);
+        free(m.disp_az); free(m.disp_rg); free(m.disp_los);
+        free(m.vel_los); free(m.quality); free(m.snr); free(m.sigma_px);
+    }
+
+    RS_CASE("a total cull is a reported result, not a silent fallback");
+    {
+        /* Every window well correlated, every window barely moving. The
+         * excursion gate should take all of them, and the counts must survive
+         * the refusal -- a policy that reports nothing and explains nothing is
+         * indistinguishable from a scene with no motion in it. */
+        const size_t k = 64, n_az = 3, n_rg = 3, n_win = n_az * n_rg;
+        rs_microm_t m;
+        memset(&m, 0, sizeof m);
+        m.n_looks = k; m.n_win = n_win; m.n_win_az = n_az; m.n_win_rg = n_rg;
+        m.win_az = m.win_rg = 32; m.stride_az = m.stride_rg = 16;
+        m.dt = 0.1; m.az_spacing_m = m.rg_spacing_m = 1.0;
+        m.quant_px = 0.0;
+        m.snr_null = 7.5;
+
+        m.disp_az  = calloc(n_win * k, sizeof *m.disp_az);
+        m.disp_rg  = calloc(n_win * k, sizeof *m.disp_rg);
+        m.disp_los = calloc(n_win * k, sizeof *m.disp_los);
+        m.vel_los  = calloc(n_win * k, sizeof *m.vel_los);
+        m.quality  = calloc(n_win, sizeof *m.quality);
+        m.snr      = calloc(n_win, sizeof *m.snr);
+        m.sigma_px = calloc(n_win, sizeof *m.sigma_px);
+        RS_CHECK(m.disp_az && m.disp_rg && m.disp_los && m.vel_los &&
+                 m.quality && m.snr && m.sigma_px);
+
+        for (size_t w = 0; w < n_win; w++) {
+            m.quality[w] = 1.0;
+            m.snr[w] = 100.0;
+            m.sigma_px[w] = 1.0;
+            for (size_t i = 0; i < k; i++) {
+                const double v = 0.01 * sin(2.0 * M_PI * 1.25 * m.dt * (double)i);
+                m.disp_az[w * k + i] = v;
+                m.vel_los[w * k + i] = v;
+            }
+        }
+
+        rs_spectrum_t sp;
+        RS_CHECK_OK(rs_spectrum_compute(&m, RS_SPEC_VELOCITY, &sp));
+
+        rs_spectrum_cull_t c;
+        RS_CHECK_ERR(rs_spectrum_ampcor_window(&sp, &c), RS_ERR_RANGE);
+        RS_CHECK(c.n_input == n_win);
+        RS_CHECK(c.n_sigma_cull == n_win);
+        RS_CHECK(c.n_survivor == 0);
+        RS_CHECK(c.window == n_win);     /* no fallback was written */
+        printf("    refused, as it should: %s\n", rs_last_error());
+
+        rs_spectrum_free(&sp);
+        free(m.disp_az); free(m.disp_rg); free(m.disp_los);
+        free(m.vel_los); free(m.quality); free(m.snr); free(m.sigma_px);
+    }
+
+    RS_CASE("without surface statistics the cull says so and still runs gate 3");
+    {
+        /* The phase and split-band estimators form no correlation surface. The
+         * two gates that read one must then be SKIPPED rather than failed --
+         * failing them would make the cull refuse every result those estimators
+         * produce, for a reason that has nothing to do with the data. */
+        const size_t k = 64, n_az = 4, n_rg = 4, n_win = n_az * n_rg;
+        rs_microm_t m;
+        memset(&m, 0, sizeof m);
+        m.n_looks = k; m.n_win = n_win; m.n_win_az = n_az; m.n_win_rg = n_rg;
+        m.win_az = m.win_rg = 32; m.stride_az = m.stride_rg = 16;
+        m.dt = 0.1; m.az_spacing_m = m.rg_spacing_m = 1.0;
+        m.quant_px = 0.0;
+        m.snr_null = 0.0;               /* what the phase estimator leaves */
+
+        m.disp_az  = calloc(n_win * k, sizeof *m.disp_az);
+        m.disp_rg  = calloc(n_win * k, sizeof *m.disp_rg);
+        m.disp_los = calloc(n_win * k, sizeof *m.disp_los);
+        m.vel_los  = calloc(n_win * k, sizeof *m.vel_los);
+        m.quality  = calloc(n_win, sizeof *m.quality);
+        RS_CHECK(m.disp_az && m.disp_rg && m.disp_los && m.vel_los && m.quality);
+        /* snr and sigma_px deliberately left NULL, as that estimator leaves
+         * them -- the spectrum stage must tolerate it. */
+
+        for (size_t w = 0; w < n_win; w++) {
+            m.quality[w] = 1.0;
+            const int in_block = (w == 5 || w == 6 || w == 9 || w == 10);
+            const double freq = in_block ? 1.25 : 0.15625 * (double)(2 + (w % 3));
+            for (size_t i = 0; i < k; i++) {
+                const double v = sin(2.0 * M_PI * freq * m.dt * (double)i);
+                m.disp_az[w * k + i] = v;
+                m.vel_los[w * k + i] = v;
+            }
+        }
+
+        rs_spectrum_t sp;
+        RS_CHECK_OK(rs_spectrum_compute(&m, RS_SPEC_VELOCITY, &sp));
+
+        rs_spectrum_cull_t c;
+        RS_CHECK_OK(rs_spectrum_ampcor_window(&sp, &c));
+        printf("    gates_applied %d, survivors %zu at %.4f Hz\n",
+               c.gates_applied, c.n_survivor, c.freq_hz);
+        /* The flag is the contract: a caller must be able to tell that the
+         * survivor count carries no correlator evidence behind it. */
+        RS_CHECK(c.gates_applied == 0);
+        RS_CHECK(c.n_snr_cull == 0 && c.n_sigma_cull == 0);
+        /* And gate 3 still did its work, on frequencies alone. */
+        RS_CHECK(c.n_survivor == 4);
+        RS_CHECK_NEAR(c.freq_hz, 1.25, 0.5 * sp.df);
+
+        rs_spectrum_free(&sp);
+        free(m.disp_az); free(m.disp_rg); free(m.disp_los);
+        free(m.vel_los); free(m.quality);
+    }
+
+    /* ------------------------------------------------------------------
      * The phase estimator, against a known injected vibration.
      *
      * WHY THIS EXISTS, AND WHY ITS ABSENCE WAS EXPENSIVE. rs_microm_track()

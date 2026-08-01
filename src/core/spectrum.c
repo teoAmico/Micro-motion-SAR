@@ -18,6 +18,8 @@ void rs_spectrum_free(rs_spectrum_t *s)
     free(s->excursion_px);
     free(s->quality);
     free(s->prominence);
+    free(s->snr);
+    free(s->sigma_px);
     memset(s, 0, sizeof *s);
 }
 
@@ -90,8 +92,11 @@ resonarsat_status_t rs_spectrum_compute_opts(const rs_microm_t *m,
     out->excursion_px  = calloc(m->n_win, sizeof *out->excursion_px);
     out->quality       = calloc(m->n_win, sizeof *out->quality);
     out->prominence    = calloc(m->n_win, sizeof *out->prominence);
+    out->snr           = calloc(m->n_win, sizeof *out->snr);
+    out->sigma_px      = calloc(m->n_win, sizeof *out->sigma_px);
     if (!out->psd || !out->freq || !out->dominant_freq || !out->amplitude ||
-        !out->quality || !out->prominence || !out->excursion_px) {
+        !out->quality || !out->prominence || !out->excursion_px ||
+        !out->snr || !out->sigma_px) {
         rs_spectrum_free(out);
         return RS_ERR_ALLOC;
     }
@@ -104,6 +109,9 @@ resonarsat_status_t rs_spectrum_compute_opts(const rs_microm_t *m,
     /* Carried through so rs_spectrum_best_window() can evaluate the floor
      * without the caller having to pass the tracking parameters again. */
     out->quant_px = m->quant_px;
+    /* And the correlation-surface null, which is what makes the SNRs below
+     * interpretable. Zero for the estimators that produce none. */
+    out->snr_null = m->snr_null;
 
     for (size_t k = 0; k < n_freq; k++) out->freq[k] = (double)k * out->df;
 
@@ -200,6 +208,13 @@ resonarsat_status_t rs_spectrum_compute_opts(const rs_microm_t *m,
         out->dominant_freq[w] = out->freq[best];
         out->amplitude[w] = sqrt(psd[best]);   /* qualitative -- see the header */
         out->quality[w] = m->quality[w];
+        /* Guarded because a caller may assemble an rs_microm_t by hand -- the
+         * tests do -- and the surface statistics are optional in a way the
+         * displacement series is not. Absent, they stay zero, which
+         * rs_spectrum_ampcor_window() reads through 'snr_null' as "this
+         * estimator has no surface" rather than as a window that failed. */
+        if (m->snr)      out->snr[w] = m->snr[w];
+        if (m->sigma_px) out->sigma_px[w] = m->sigma_px[w];
 
         /* Prominence: peak power against the mean of the rest. A window holding
          * a vibrating target concentrates its energy in one bin; a window of
@@ -415,6 +430,174 @@ resonarsat_status_t rs_spectrum_consensus(const rs_spectrum_t *spec,
         }
         free(mark); free(stack);
     }
+    return RS_OK;
+}
+
+
+/* Multiple of the noise-alone SNR a window must reach to enter the cull.
+ *
+ * The null itself is derived (rs_coreg_snr_null); this factor is not, and it is
+ * the only chosen number in rs_spectrum_ampcor_window(). Two is the weakest
+ * claim worth making -- a surface whose peak does not stand at twice what an
+ * empty surface produces has not distinguished itself from one -- and the gate
+ * that was actually applied is reported in rs_spectrum_cull_t.snr_gate so that a
+ * result never depends on a reader knowing this constant. */
+#define RS_CULL_SNR_FACTOR 2.0
+
+/* Sigma multiplier for the excursion gate. The same 3 the quantisation floor
+ * uses, kept identical on purpose: the two gates make the same statement about
+ * two different noise sources, and a different multiplier would make them
+ * incomparable for no reason anyone could reconstruct later. */
+#define RS_CULL_SIGMA_K 3.0
+
+/* Agreeing four-neighbours a window needs to survive the consistency cull.
+ *
+ * Geometric, not tuned: each cell of a 2x2 block has exactly two of its four
+ * lattice neighbours inside the block, and a 2x2 block is the smallest footprint
+ * a resolvable target can occupy given that windows overlap at the tracking
+ * stride. See rs_spectrum_ampcor_window() in microm.h. */
+#define RS_CULL_MIN_NEIGHBOURS 2
+
+/* Select by culling on what the correlator knew. See microm.h. */
+resonarsat_status_t rs_spectrum_ampcor_window(const rs_spectrum_t *spec,
+                                              rs_spectrum_cull_t *out)
+{
+    if (!out) return RS_ERR_ARG;
+    memset(out, 0, sizeof *out);
+    if (!spec || !spec->dominant_freq || !spec->quality || spec->n_win == 0)
+        return RS_ERR_ARG;
+    out->window = spec->n_win;
+
+    /* The shared gates, in the same form rs_spectrum_best_window() and
+     * rs_spectrum_consensus() apply them. Duplicated for the reason stated on
+     * the consensus: the gates are the contract that makes the three functions'
+     * counts describe one population, so a change to one that silently changed
+     * the others would make them incomparable with nothing saying so. */
+    double q_max = 0.0;
+    for (size_t w = 0; w < spec->n_win; w++) {
+        if (spec->quality[w] > q_max) q_max = spec->quality[w];
+    }
+    const double q_min = 0.5 * q_max;
+    const double floor_px = (spec->quant_px > 0.0) ? 2.449 * spec->quant_px : 0.0;
+
+    const int have_surface = (spec->snr_null > 0.0 && spec->snr && spec->sigma_px);
+    out->gates_applied = have_surface;
+    out->snr_gate = have_surface ? RS_CULL_SNR_FACTOR * spec->snr_null : 0.0;
+
+    const double tol = (spec->df > 0.0) ? 0.5 * spec->df : 1e-9;
+
+    /* 0 = did not enter, 1 = survived gates 1 and 2, 2 = survived all three.
+     * Two passes are needed because gate 3 reads its neighbours' verdicts on
+     * gates 1 and 2, so no window can be decided until every window has been. */
+    unsigned char *state = calloc(spec->n_win, 1);
+    if (!state) return RS_ERR_ALLOC;
+
+    for (size_t w = 0; w < spec->n_win; w++) {
+        if (spec->quality[w] < q_min) continue;
+        if (floor_px > 0.0 && spec->excursion_px &&
+            spec->excursion_px[w] < floor_px) continue;
+        out->n_input++;
+
+        if (have_surface) {
+            if (spec->snr[w] < out->snr_gate) { out->n_snr_cull++; continue; }
+            /* The excursion the tracker actually resolved against the noise of
+             * the correlation that resolved it. An absent excursion array means
+             * the caller built a spectrum without one, in which case this gate
+             * has nothing to compare and is skipped rather than assumed. */
+            if (spec->excursion_px) {
+                const double need = RS_CULL_SIGMA_K * spec->sigma_px[w];
+                if (spec->excursion_px[w] < need) { out->n_sigma_cull++; continue; }
+            }
+        }
+        state[w] = 1;
+    }
+
+    /* Gate 3, on the window lattice. Skipped when the lattice is not rectangular
+     * or its extents do not describe n_win, since neighbours are then undefined;
+     * every survivor of the first two gates carries through in that case rather
+     * than being culled by a test that could not be run. */
+    const int have_lattice = (spec->n_win_az > 0 && spec->n_win_rg > 0 &&
+                              spec->n_win_az * spec->n_win_rg == spec->n_win);
+    for (size_t w = 0; w < spec->n_win; w++) {
+        if (state[w] != 1) continue;
+        if (!have_lattice) { state[w] = 2; out->n_survivor++; continue; }
+
+        const size_t ia = w / spec->n_win_rg, ir = w % spec->n_win_rg;
+        const long da[4] = { -1, 1, 0, 0 };
+        const long dr[4] = { 0, 0, -1, 1 };
+        size_t agree = 0;
+        for (int k = 0; k < 4; k++) {
+            const long na = (long)ia + da[k], nr = (long)ir + dr[k];
+            if (na < 0 || nr < 0 || (size_t)na >= spec->n_win_az ||
+                (size_t)nr >= spec->n_win_rg) continue;
+            const size_t nb = (size_t)na * spec->n_win_rg + (size_t)nr;
+            if (state[nb] == 0) continue;   /* culled neighbours do not vote */
+            if (fabs(spec->dominant_freq[nb] - spec->dominant_freq[w]) <= tol) agree++;
+        }
+        if (agree >= RS_CULL_MIN_NEIGHBOURS) { state[w] = 2; out->n_survivor++; }
+        else                                 { out->n_neigh_cull++; }
+    }
+
+    if (out->n_survivor == 0) {
+        free(state);
+        rs_set_error("spectrum: the correlation cull removed every window -- "
+                     "%zu entered, %zu failed the SNR gate at %.3g, %zu failed "
+                     "the offset-uncertainty gate, %zu had too few agreeing "
+                     "neighbours",
+                     out->n_input, out->n_snr_cull, out->snr_gate,
+                     out->n_sigma_cull, out->n_neigh_cull);
+        return RS_ERR_RANGE;
+    }
+
+    /* The answer is the frequency the survivors agree on, not the single best
+     * survivor's. The cull has already decided which windows are believed; the
+     * remaining question is what they say, and the mode of a believed population
+     * is a better answer than the argmax of any statistic over it -- which is
+     * the whole complaint FOLLOW-UPS items 7-9 record against ranking by
+     * prominence. Ties go to the lower frequency, matching
+     * rs_spectrum_consensus() so the two cannot disagree by convention alone. */
+    size_t best_count = 0;
+    double best_freq = 0.0;
+    for (size_t w = 0; w < spec->n_win; w++) {
+        if (state[w] != 2) continue;
+        size_t count = 0;
+        for (size_t v = 0; v < spec->n_win; v++) {
+            if (state[v] != 2) continue;
+            if (fabs(spec->dominant_freq[v] - spec->dominant_freq[w]) <= tol) count++;
+        }
+        if (count > best_count ||
+            (count == best_count && best_count > 0 &&
+             spec->dominant_freq[w] < best_freq)) {
+            best_count = count;
+            best_freq  = spec->dominant_freq[w];
+        }
+    }
+
+    /* Which window to name. Among the survivors at the reported frequency, the
+     * one whose correlation was best determined -- highest SNR, and lowest sigma
+     * to break a tie. Without surface statistics that ordering does not exist,
+     * so the first such window is named and the caller learns from
+     * 'gates_applied' that the choice carries no weight. */
+    size_t pick = spec->n_win;
+    for (size_t w = 0; w < spec->n_win; w++) {
+        if (state[w] != 2) continue;
+        if (fabs(spec->dominant_freq[w] - best_freq) > tol) continue;
+        if (pick == spec->n_win) { pick = w; continue; }
+        if (!have_surface) continue;
+        if (spec->snr[w] > spec->snr[pick] ||
+            (spec->snr[w] == spec->snr[pick] &&
+             spec->sigma_px[w] < spec->sigma_px[pick])) {
+            pick = w;
+        }
+    }
+
+    out->window   = pick;
+    out->freq_hz  = best_freq;
+    out->n_agree  = best_count;
+    out->snr      = (spec->snr && pick < spec->n_win) ? spec->snr[pick] : 0.0;
+    out->sigma_px = (spec->sigma_px && pick < spec->n_win) ? spec->sigma_px[pick] : 0.0;
+
+    free(state);
     return RS_OK;
 }
 

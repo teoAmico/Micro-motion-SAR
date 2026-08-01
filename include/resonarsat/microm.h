@@ -448,6 +448,48 @@ typedef struct {
 
     double *quality;            /* [n_win], mean correlation peak in [0,1] */
 
+    /* [n_win] mean correlation-surface SNR, and the value that same surface
+     * reaches on noise alone. Both zero for the estimators that never form a
+     * correlation surface.
+     *
+     * WHAT THIS ADDS OVER 'quality', WHICH IS THE WHOLE REASON IT EXISTS. The
+     * peak value says how alike two sub-looks are. The SNR says whether the
+     * surface had ONE maximum or a field of comparable ones, which is a
+     * different failure and the one that moves an offset without lowering the
+     * coherence. A window over distributed clutter with several scatterers of
+     * similar strength correlates well and locates badly; nothing in 'quality'
+     * distinguishes it from a window that correlates well and locates well.
+     *
+     * 'snr_null' is what the surface would score with no signal in it at all --
+     * the harmonic number of the window's bin count, derived on
+     * rs_coreg_quality_t -- and it travels with the measurement because the
+     * threshold is only meaningful relative to it. It depends on win_az and
+     * win_rg, so a run with a different window size has a different null and the
+     * raw SNRs of the two runs are not comparable. Their ratios to this are. */
+    double *snr;                /* [n_win] */
+    double  snr_null;
+
+    /* [n_win] rms over looks of the one-sigma offset uncertainty in AZIMUTH,
+     * pixels, from the curvature of each look's correlation peak. Zero for the
+     * estimators that form no correlation surface.
+     *
+     * Azimuth alone because azimuth is the observable: the tracked azimuth shift
+     * is what becomes vel_los, and a range uncertainty does not enter the
+     * reported spectrum. The range figure is computed per look and discarded
+     * here rather than being carried unused.
+     *
+     * Combined as an rms rather than a mean because variances add and standard
+     * deviations do not. Individual looks are clamped at RS_COREG_SIGMA_MAX
+     * before the combination, so a window whose peaks were unusable reaches a
+     * large finite value instead of poisoning the aggregate with an infinity --
+     * see that constant for why a clamp rather than an exclusion.
+     *
+     * NOT AN ERROR BAR. See rs_coreg_quality_t: the constant factor relating
+     * this to a true standard deviation is omitted, and is the same for every
+     * window of a run. It ranks windows against each other and is used for
+     * nothing else. */
+    double *sigma_px;           /* [n_win] */
+
     size_t n_win_az, n_win_rg, n_win, n_looks;
     size_t win_az, win_rg, stride_az, stride_rg;
 
@@ -507,6 +549,19 @@ typedef struct {
      * frequency -- and on a synthetic sweep it recovers five injected
      * frequencies of six where excursion-based selection recovers two. */
     double *prominence;
+
+    /* [n_win] the correlation-surface statistics, carried through unchanged from
+     * rs_microm_t so that a selection policy can weigh what the TRACKER knew
+     * beside what the spectrum shows. Zero, with 'snr_null' zero, for estimators
+     * that form no correlation surface; rs_spectrum_ampcor_window() reads that
+     * as "these gates do not apply here" rather than as a failure.
+     *
+     * They are copied rather than referenced because rs_spectrum_t outlives no
+     * rs_microm_t in particular -- tests build spectra from hand-made tracking
+     * results and free them independently. */
+    double *snr;
+    double *sigma_px;
+    double  snr_null;
 
     size_t n_win, n_win_az, n_win_rg, n_freq;
     double df;              /* Hz per spectral bin */
@@ -672,6 +727,15 @@ void rs_spectrum_free(rs_spectrum_t *s);
  * not already know where the target is. See rs_spectrum_t.prominence for why
  * the obvious alternatives are worse.
  *
+ * IT IS ONE OF THREE POLICIES AND THE WEAKEST OF THEM. It is what the tool
+ * reports, and FOLLOW-UPS.md items 7-9 record the finding that it discards
+ * carriers the tracker did recover. rs_spectrum_consensus() asks instead what
+ * the windows collectively say; rs_spectrum_ampcor_window() asks what the
+ * correlation surfaces behind them looked like, which is the only one of the
+ * three reading evidence from the tracker rather than from the spectrum. All
+ * three apply the same two gates below, so their counts describe one population
+ * and can be compared directly.
+ *
  * THE QUANTISATION FLOOR, AND WHY PROMINENCE ALONE CANNOT SUPPLY IT.
  * Prominence is peak power over mean power -- a ratio, and therefore
  * scale-free. Multiply a window's whole series by any constant and its
@@ -824,6 +888,106 @@ resonarsat_status_t rs_spectrum_consensus(const rs_spectrum_t *spec,
                                           size_t *out_n_distinct,
                                           size_t *out_n_voting,
                                           size_t *out_n_contiguous);
+
+/* What a cull kept, what it removed, and at which gate. */
+typedef struct {
+    size_t window;        /* the selected window; n_win if nothing survived */
+    double freq_hz;       /* the frequency the survivors agree on */
+    double snr;           /* the selected window's correlation SNR */
+    double sigma_px;      /* and its offset uncertainty */
+
+    size_t n_input;       /* entered the cull, i.e. passed the shared gates */
+    size_t n_snr_cull;    /* removed by the surface-SNR gate */
+    size_t n_sigma_cull;  /* removed by the offset-uncertainty gate */
+    size_t n_neigh_cull;  /* removed by the neighbourhood-consistency gate */
+    size_t n_survivor;    /* passed all three */
+    size_t n_agree;       /* survivors sharing the reported frequency bin */
+
+    double snr_gate;      /* the thresholds actually applied, for the record */
+    int    gates_applied; /* zero when the estimator has no surface statistics */
+} rs_spectrum_cull_t;
+
+/* Select a window the way the offset-tracking correlators do: by throwing away
+ * everything whose measurement was not well determined, and reading the answer
+ * off what is left.
+ *
+ * WHY A THIRD SELECTION POLICY. rs_spectrum_best_window() ranks by prominence
+ * and is what the tool reports; rs_spectrum_consensus() asks what the windows
+ * agree on. FOLLOW-UPS items 7-9 record the finding that motivates this one: on
+ * the synthetic fixture the TRACKER recovers the injected carrier in most
+ * windows and the SELECTION POLICY discards it. Both existing policies read only
+ * the spectrum. Neither asks the question the ampcor family of correlators has
+ * always asked first -- was this offset series worth transforming at all -- and
+ * that question is answerable from quantities the correlator already computes
+ * and this pipeline was throwing away.
+ *
+ * THE THREE GATES, IN ORDER, EACH DERIVED RATHER THAN TUNED.
+ *
+ * 1. SURFACE SNR. A window must score at least twice what its own window size
+ *    scores on noise alone, 'snr_null'. The null is the harmonic number of the
+ *    bin count and is derived on rs_coreg_quality_t, so the threshold is stated
+ *    as a multiple of what pure noise produces rather than as a bare number.
+ *    The factor of two is the one genuinely chosen quantity here; it is chosen
+ *    at the scale where "twice what noise gives" is the weakest claim worth
+ *    making, and 'snr_gate' is reported so a caller can see what was applied.
+ *
+ * 2. OFFSET UNCERTAINTY AGAINST EXCURSION. A window must satisfy
+ *
+ *        excursion_px  >=  3 * sigma_px
+ *
+ *    This is the SAME TEST as the quantisation floor rs_spectrum_best_window()
+ *    applies, with the correlator's measured noise in place of its rounding
+ *    bound: there, a series must move further than the tracker's grid step could
+ *    move it by rounding; here, further than the correlation surface's own
+ *    uncertainty could move it by noise. The two are complementary and neither
+ *    subsumes the other -- quantisation is a floor even for a perfect
+ *    correlation, and a broad peak is uncertain even at fine quantisation -- so
+ *    both are applied. The 3 is the sigma multiplier already in use for the
+ *    floor, kept identical so the two gates mean the same thing.
+ *
+ * 3. NEIGHBOURHOOD CONSISTENCY. A window must have at least TWO of its four
+ *    lattice neighbours reporting the same frequency bin, among neighbours that
+ *    passed the first two gates. This is ampcor's cull of offsets that disagree
+ *    with their neighbours, applied to the frequency rather than to the offset,
+ *    and its threshold is the geometric bound this codebase already uses: a
+ *    resolvable target falls inside a 2x2 block of overlapping windows, and each
+ *    cell of a 2x2 block has exactly two of its four neighbours inside the
+ *    block. So two agreeing neighbours is precisely "belongs to a block or
+ *    better", and it is what an isolated window cannot produce. A line of three
+ *    agreeing windows loses its ends and then its middle, which is intended: a
+ *    one-window-wide streak is the shape of a processing artefact along an axis,
+ *    not of a structure.
+ *
+ * HOW THIS RELATES TO THE CONSENSUS GATE, AND WHAT IT STILL CANNOT DO. Gate 3
+ * is a stricter, local form of the contiguity figure rs_spectrum_consensus()
+ * reports, and gates 1 and 2 are new information -- they come from the
+ * correlator, not from the spectrum. That makes this policy sensitive to a
+ * failure the consensus is blind to by construction, since a window that tracked
+ * nothing can still agree with its neighbours about a common-mode artefact but
+ * cannot manufacture a sharp, well-determined correlation peak.
+ *
+ * IT IS NOT A NULL CONTROL AND DOES NOT BECOME ONE. FOLLOW-UPS item 11's finding
+ * survives here unchanged: an artefact produced by the processing appears in
+ * every window with a genuine, well-determined correlation behind it, and passes
+ * all three gates. Only running a motionless scene through identical processing
+ * catches that. This narrows which windows are believed; it does not decide
+ * whether the ground moved.
+ *
+ * WHEN THE STATISTICS DO NOT EXIST. The phase and split-band estimators form no
+ * correlation surface, so 'snr' and 'sigma_px' are zero and 'snr_null' is zero.
+ * Gates 1 and 2 are then SKIPPED rather than failed -- 'gates_applied' is set to
+ * zero to say so -- and gate 3 still runs, because neighbourhood consistency
+ * needs only the frequencies. A caller must read 'gates_applied' before treating
+ * a survivor count as evidence of anything the correlator vouched for.
+ *
+ * 'out' receives the counts at every stage, which is the point: a policy that
+ * reports only its winner cannot be audited, and the per-gate counts say whether
+ * a null came from a scene with no motion or from a threshold that removed
+ * everything. Returns RS_ERR_ARG on a NULL or empty spectrum, and RS_ERR_RANGE
+ * when nothing survives -- with the counts filled in, so the caller can still
+ * see where the population went. */
+resonarsat_status_t rs_spectrum_ampcor_window(const rs_spectrum_t *spec,
+                                              rs_spectrum_cull_t *out);
 
 /* Return the observation ratio implied by a sub-aperture duration and a measured
  * frequency: t_sap divided by that frequency's period, i.e. how many cycles of

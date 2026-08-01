@@ -77,6 +77,13 @@ add_test(NAME sim_cphd_rejects_unknown_option
          COMMAND sim_cphd ignored.cphd --cluter 3000)
 set_tests_properties(sim_cphd_rejects_unknown_option PROPERTIES WILL_FAIL TRUE)
 
+# --json is a machine interface, so its refusal path is part of the contract:
+# a source it does not support must fail rather than fall back to the human
+# report, which a parser would either choke on or silently misread.
+add_test(NAME info_json_refuses_non_cphd
+         COMMAND micromotion info --sicd ignored.nitf --json)
+set_tests_properties(info_json_refuses_non_cphd PROPERTIES WILL_FAIL TRUE)
+
 set(MM_TESTS
     test_constants test_fft test_focus test_subaperture test_coreg
     test_endtoend test_tracking test_nullmotion test_ccd test_validate

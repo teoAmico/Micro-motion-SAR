@@ -964,3 +964,108 @@ its null behaviour is real for the failure mode it addresses. But it is a partia
 check, and the sentence in `rs_spectrum_consensus()`'s header about a fragmented
 vote and a motionless scene looking alike needs the qualification that it holds
 for scene-driven noise only.
+
+---
+
+## 12. Two things borrowed from existing tools: an ampcor-style cull, and a reader cross-check
+
+Both came from reading how the established offset-tracking implementations do
+this -- ISCE's `ampcor`, GMTSAR's `xcorr`, and SARPy for the parse -- rather than
+from a new measurement. Neither is a result. They are instruments, and this entry
+records what they are and what they are not, so that the next person does not
+mistake either for evidence.
+
+### 12a. The selection policy now has a third option, reading the correlator
+
+Items 7-9 leave one open finding: the tracker recovers the injected carrier in
+most windows and `rs_spectrum_best_window()` discards it. Both existing policies
+-- prominence and consensus -- read only the spectrum. The ampcor family has
+always asked a prior question, which this pipeline was computing the answer to
+and throwing away: **was this offset determined well enough to be worth
+transforming?**
+
+`rs_coreg_shift_q()` now reports two quantities beside the peak value, and
+`rs_spectrum_ampcor_window()` culls on them plus a neighbourhood test. Derivations
+are in `coreg.h` and `microm.h`; the thresholds are derived rather than tuned
+except for one factor of two, which is reported in the output so no result
+depends on knowing it.
+
+**What the two new quantities add over `quality`, which is the whole question.**
+The peak value says how alike two sub-looks are. It cannot say whether the
+surface had one distinguished maximum or a field of comparable ones, and it
+cannot say whether that maximum was sharp. `tests/test_coreg.c` pins both
+separations against controls where the peak value gives the same answer:
+
+```
+one lobe:  peak 1.0000, snr 301.7        <- identical peak value
+two lobes: peak 1.0000, snr 103.9        <- the SNR sees the rival lobe
+sharp:     peak 1.0000, sigma_az 0.0007 px
+broad:     peak 1.0000, sigma_az 0.0029 px
+```
+
+**The first measurement, on the documented synthetic operating point.** At the
+configuration `USER_GUIDE.md` section 3 uses -- 128 looks, 32-pixel windows,
+`--upsample 200`, the clutter-vib fixture at 0.5 Hz -- all 49 windows fail the
+SNR gate. Measured SNRs run **5.9 to 8.3 against a noise-alone value of 7.5**.
+
+That is the interesting part. The surfaces are not marginal, they are AT the
+value a surface with no signal in it produces. The consensus already refuses this
+configuration, at 8% agreement, so the two policies agree on the verdict --
+but they reach it from independent evidence, and the cull's version is the
+stronger statement: not "the windows disagree" but "there was nothing in the
+correlation surfaces to agree about". Whether the same holds at operating points
+where the consensus PASSES is unmeasured and is the obvious next question.
+
+**IT IS NOT A NULL CONTROL AND ITEM 11 APPLIES TO IT UNCHANGED.** A common-mode
+artefact produced by the processing has a genuine, sharp, well-determined
+correlation peak behind it in every window. It passes all three gates. The cull
+narrows which windows are believed; it does not decide whether the ground moved,
+and describing it as a credibility check would repeat exactly the error item 11
+records against the consensus.
+
+**What it does not yet do:** it does not rank; it culls and then takes the mode
+of the survivors. Whether ranking the survivors by SNR beats taking their mode is
+untested. And no sweep has been run through it -- `rs_track_fit()` over injected
+frequencies, pooled over seeds, is the bar and this has not been put to it. The
+numbers above are one configuration and one seed. **Nothing here has been shown
+to recover a frequency.**
+
+### 12b. The CPHD reader is now checked against SARPy, and agrees
+
+`tools/sarpy_crosscheck.py`, against `info --cphd --json`.
+
+**The hole this fills.** Every test in the suite builds its own fixture, and
+`sim_cphd` writes the project's private "RSCH" container rather than a conformant
+CPHD -- SARPy refuses to open its output, correctly. So **no test in this
+repository has ever exercised the CPHD parse**. A reader that misparsed a real
+product consistently would produce no failure anywhere: the pipeline would
+measure a different collect from the one on disk and report a confident spectrum
+for it. Item 3's Capella SGN override is direct evidence that this is not
+hypothetical, and it was found by comparison with another reader -- nothing here
+would have found it, and nothing here would notice a second one.
+
+**Result, on the whole Giza collect** -- all 335,141 vectors surviving the
+validity screening, which the script replicates rather than trusts:
+
+```
+n_pulse 335141, n_rbin 512, fc 9.3 GHz, lambda 0.032235748172 m,
+prf 10196.3524146 Hz, dwell 32.8686167733 s, dr 0.249827048333 m,
+r_near 762749.526717 m, r_ref_first 762813.482441 m, r_ref_last 762812.628754 m
+```
+
+Every field agrees to floating-point round-trip. That covers the PVP field
+offsets, the byte order, the SIGNAL-flag and finite-geometry screening, the
+bistatic reference-range convention, and the SCSS-to-bin-spacing arithmetic.
+
+**One defect found, in this project, by running it.** `--json` initially printed
+`%.12g`, and `lambda_m` and `dr_m` disagreed at 1.3e-12 relative -- the print
+format, not the parse. A machine interface has to round-trip, so it is `%.17g`.
+Worth recording because the failure looked exactly like a reader disagreement.
+
+**WHAT IT CANNOT SEE: the signal samples.** It compares the geometry and timing
+the pipeline reads, not the phase history it reads them for. The SGN convention
+affects only sample values, so **the one vendor defect this project has actually
+hit is outside what this checks**. Two readers agreeing here does not mean the
+image is right. Item 3's suggestion -- compress a pulse both ways and choose the
+direction whose energy lands inside the declared `TOA1`/`TOA2` support -- remains
+the thing that would test that, and remains unimplemented.

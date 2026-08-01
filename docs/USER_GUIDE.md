@@ -45,7 +45,7 @@ ctest --test-dir build-asan --output-on-failure
 ## 2. The commands
 
 ```
-micromotion info       print a product's geometry and timing
+micromotion info       print a product's geometry and timing (--json for CPHD)
             validate   can this collect support the measurement you want?
             focus      form an image from phase history (backprojection)
             mmotion    track sub-looks and extract vibration spectra
@@ -82,23 +82,30 @@ Then track it:
 ```sh
 ./build/micromotion mmotion --cphd scene.cphd \
     --n 128 --overlap 0 --size 128 --cell 0.5 --win 32 --upsample 200 \
-    --out run1
+    --coherence 0 --out run1
 ```
 
-About 9 seconds with OpenMP. Abridged output:
+About 9 seconds with OpenMP. `--coherence 0` opens the mask: an isolated
+synthetic target on a clutter field scores far below the 0.4 default even when it
+tracks perfectly, so without it every window is masked out and there is nothing
+to look at. Output, with the aliasing warning and the file list cut:
 
 ```
 sub-apertures: 128 looks, dt 0.1550 s
   observable band  f_max 3.23 Hz   AT sub-look resolution 8.26 m
-sub-pixel refinement: 1/200 px
+sub-pixel refinement: 1/200 px (default 1/10 azimuth, 1/20 range)
 tracked 49 windows (7 x 7); 49 pass the 0.00 coherence mask
 spectra: 65 bins, 0.0504 Hz resolution
 NO FREQUENCY REPORTED: only 4 of 49 windows agree (8%), which is what a
   MOTIONLESS scene produces. Diagnostics only, NOT a measurement -- strongest
-  window 48: 0.504 Hz, prominence 8.3, quality 0.060
-  consensus: 0.504 Hz, agreed by 4 of 49 voting windows (8%), 36 distinct
-  answers, largest contiguous block 2
+  window 48: 0.504 Hz, prominence 8.3, quality 0.060, peak-to-peak velocity 188.7 mm/s
+  49 of 49 windows were eligible for selection (coherence gate and quantisation floor)
+  consensus: 0.504 Hz, agreed by 4 of 49 voting windows (8%), 36 distinct answers, largest contiguous block 2
   WARNING: the agreeing windows are SCATTERED (largest block 2 < 4).
+           Windows overlap at the tracking stride, so a resolvable mode
+           occupies a 2x2 block at minimum. This is the shape of coincidence.
+  cull: no window survived (49 entered; SNR 49, sigma 0, neighbours 0 removed)
+  sub-aperture response 0.9900 (-0.1 dB) at an observation ratio of 0.08
 ```
 
 **This is the tool working correctly.** The strongest window says 0.504 Hz
@@ -108,6 +115,12 @@ rather than a spatially resolved mode. `docs/FOLLOW-UPS.md` item 2 records
 several such near-misses across a frequency sweep, where they are visibly
 uncorrelated with what was injected. The consensus gate refuses it, and it is
 right to.
+
+The `cull` line refuses it a second time, on evidence the consensus never looks
+at: all 49 windows fell at the **SNR** gate, meaning not one correlation surface
+had a peak distinguishable from what an empty surface produces. Measured, the
+SNRs run 5.9 to 8.3 against a noise-alone value of 7.5 for this window size. The
+tracked series here are noise, and the 0.504 Hz is the periodogram of noise.
 
 Vary the injection and watch what the report does — that is the exercise this
 tool is for. One frequency matched once means nothing.
@@ -141,6 +154,51 @@ reader compensates for — without it every image is mirrored in range and still
 looks perfectly focused. And the transmit PRF is **not** the rate at which
 vibration is sampled; that is set by the sub-aperture step, which is thousands of
 times slower.
+
+### Cross-check the reader against SARPy
+
+The SGN note above is evidence that vendor metadata cannot be taken at face
+value, and it was found by comparison with another reader — not by anything in
+this repository. Every test here builds its own fixture, and `sim_cphd` writes
+the project's private container rather than a conformant CPHD, so **nothing in
+the test suite exercises the CPHD parse at all**. A reader that misparses a real
+product consistently would be invisible: the pipeline would measure a different
+collect and report a confident spectrum for it.
+
+`info --cphd --json` prints the derived quantities the pipeline consumes, at full
+double precision, for differencing against an independent parse:
+
+```sh
+pip install sarpy
+python3 tools/sarpy_crosscheck.py "$C"
+```
+
+```
+  field                       micromotion                  sarpy   verdict
+  ---------------- ---------------------- ----------------------   -------
+  n_pulse                          335141                 335141   ok
+  n_rbin                              512                    512   ok
+  fc_hz                        9300000000             9300000000   ok
+  lambda_m                 0.032235748172         0.032235748172   ok
+  prf_hz                    10196.3524146          10196.3524146   ok
+  dwell_s                   32.8686167733          32.8686167733   ok
+  dr_m                     0.249827048333         0.249827048333   ok
+  r_near_m                  762749.526717          762749.526717   ok
+  r_ref_first_m             762813.482441          762813.482441   ok
+  r_ref_last_m              762812.628754          762812.628754   ok
+```
+
+That is the whole Giza collect, all 335,141 vectors after the validity screening,
+which the script replicates rather than trusts. The fields are chosen so the
+pattern of any failure localises the fault: a disagreement in `r_ref` alone points
+at the position PVP offsets, in `n_pulse` alone at the validity screening.
+
+By default the script reads 2,000 vectors, which takes seconds and exercises every
+parse path; `--all-pulses` does the collect above and reads the full 36 GB.
+
+**What it cannot see:** the signal samples. The SGN convention affects only sample
+values, so the one vendor defect this project has actually hit is outside what is
+compared. Two readers agreeing here does not mean the image will be right.
 
 ### Three flags that control memory
 
@@ -255,6 +313,7 @@ Line by line, in the order it prints:
 | `tracked W windows; K pass the coherence mask` | K of 0 means nothing downstream is a measurement |
 | `spectra: B bins, df Hz` | `df` sets what "within half a bin" means |
 | `consensus: f, agreed by A of V windows, D distinct, largest block C` | the detection statistic — see below |
+| `cull: f from A of N windows surviving (SNR x, sigma y, neighbours z removed)` | a **second, independent** selection policy — see below |
 | `sub-aperture response ... at an observation ratio of eta` | near-integer eta means the observable's response is near zero there |
 
 ### The consensus line is the important one
@@ -279,6 +338,48 @@ that is *independent* across windows. An artefact produced by the processing
 rather than the scene appears identically in every window, so the windows agree
 about it unanimously — measured at 100% agreement on a motionless scene. No
 threshold helps; 100% is the ceiling. Only a null control catches that.
+
+### The `cull` line reads different evidence
+
+The consensus reads the spectrum. The `cull` line reads what the **correlator**
+knew, which is information neither of the other two policies looks at. It is
+modelled on the culling that ISCE's `ampcor` and GMTSAR's `xcorr` have always
+applied to offset fields, and it drops a window unless all three hold:
+
+| gate | test | where the threshold comes from |
+|---|---|---|
+| surface SNR | peak power ÷ mean off-peak power ≥ 2× the noise-alone value | the noise-alone value is the harmonic number of the window's bin count — about 7.5 for a 32×32 window — so the gate is stated as a multiple of what an *empty* surface produces |
+| offset uncertainty | excursion ≥ 3σ, σ from the curvature of the correlation peak | the same 3σ test as the quantisation floor, with the correlator's measured noise in place of its rounding bound |
+| neighbourhood | ≥ 2 of the 4 lattice neighbours report the same bin | each cell of a 2×2 block has exactly two in-block neighbours, so this is "belongs to a block or better" |
+
+Nothing here is tuned except the factor of two, and the gate actually applied is
+written into `PREFIX_windows.csv` so a result never depends on knowing it.
+
+**Use it as a disagreement detector, not as a better answer.** When the cull and
+the consensus report the same frequency that is weak corroboration from two
+different kinds of evidence. When they disagree the tool says so, and at most one
+of them is measuring:
+
+```
+  NOTE: the cull and the consensus disagree (1.008 vs 0.504 Hz).
+        They read different evidence, so this is not a tie to
+        break by preference: at most one of them is measuring.
+```
+
+`cull: no window survived` is a result, not a failure — the per-gate counts say
+which gate removed the population, and "every surface was indistinguishable from
+noise" is a more informative null than a scattered consensus.
+
+**It is not a null control either.** `FOLLOW-UPS.md` item 11 applies here
+unchanged: an artefact produced by the processing has a genuine, sharp,
+well-determined correlation peak behind it in every window, and passes all three
+gates. Nothing but a motionless scene through identical processing catches that.
+The cull narrows which windows are believed; it does not decide whether the
+ground moved.
+
+The `snr` and `sigma_px` columns of `PREFIX_windows.csv` carry the per-window
+numbers, so an alternative policy can be scored against a finished run without
+reprocessing the collect.
 
 ### When it refuses
 
@@ -346,6 +447,13 @@ before detrending or any spectral estimation. The spectrum cannot separate a rea
 low-frequency motion from correlator bias; the series can. Several conclusions in
 `docs/FOLLOW-UPS.md` were overturned by dumping this and looking.
 
+**Free, and worth reading first: the `cull` line.** It costs nothing — the
+statistics come from correlations the tracker already performed — and it fails
+early and loudly when the correlation surfaces are noise, which is the case where
+items 1 to 3 are about to be spent on nothing. It is *not* a substitute for the
+null control: it is blind to the same common-mode artefacts the consensus is
+blind to, for the same reason.
+
 ---
 
 ## 8. What gets written
@@ -358,7 +466,7 @@ With `--out PREFIX`:
 | `PREFIX_quality.png` | tracking quality per window, colour bar 0–1 |
 | `PREFIX_scene.png` | **the scene the measurement was taken from**, with the tracking grid on it and the selected window boxed |
 | `PREFIX_spectrum.png` | **the spectrum the reported frequency was read from**, with a marker at the selected bin |
-| `PREFIX_windows.csv` | **per-window evidence behind the selection** — every window's frequency, prominence, quality, excursion, whether it passed the gates, and whether it agrees with the consensus |
+| `PREFIX_windows.csv` | **per-window evidence behind the selection** — every window's frequency, prominence, quality, excursion, correlation SNR and offset uncertainty, whether it passed the gates, whether it agrees with the consensus, and whether it survived the cull |
 
 The two maps are figures, not raw rasters: the window grid is enlarged by an
 integer factor with nearest-neighbour sampling and carries a labelled colour bar,
@@ -562,6 +670,13 @@ peak, and runs serially. Backprojection is bitwise identical either way.
   `--coherence` reports the lowest bin rather than being marked absent. The
   spectrum's y axis carries its units, but its absolute height is uncalibrated —
   read prominence, not amplitude. Section 8 has the details.
+- **`--json` is `info --cphd` only.** Other sources refuse it rather than
+  falling back to the human report, which would hand a parser something it would
+  either fail on or silently misread.
+- **The cull's `sigma_px` column is not an error bar.** It ranks windows against
+  each other within one run; the constant relating it to a true standard
+  deviation is omitted because it is identical for every window. Do not quote it
+  as a precision.
 - **`-ffast-math` must stay out of the build.** It permits reassociation and
   flushes denormals, which perturbs exactly the sub-pixel correlation peaks and
   interferometric phase this project measures.

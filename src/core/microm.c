@@ -116,6 +116,8 @@ void rs_microm_free(rs_microm_t *m)
     free(m->disp_los);
     free(m->phase);
     free(m->quality);
+    free(m->snr);
+    free(m->sigma_px);
     memset(m, 0, sizeof *m);
 }
 
@@ -191,8 +193,10 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
     out->disp_los = calloc(n_win * n_looks, sizeof *out->disp_los);
     out->phase    = calloc(n_win * n_looks, sizeof *out->phase);
     out->quality  = calloc(n_win, sizeof *out->quality);
+    out->snr      = calloc(n_win, sizeof *out->snr);
+    out->sigma_px = calloc(n_win, sizeof *out->sigma_px);
     if (!out->disp_az || !out->disp_rg || !out->vel_los || !out->disp_los ||
-        !out->phase || !out->quality) {
+        !out->phase || !out->quality || !out->snr || !out->sigma_px) {
         rs_microm_free(out);
         return RS_ERR_ALLOC;
     }
@@ -216,6 +220,14 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
      * field stays zero -- see rs_microm_t.quant_px. */
     out->quant_px = (params->estimator == RS_MICROM_EST_PHASE || params->upsample_az == 0)
                   ? 0.0 : 1.0 / (double)params->upsample_az;
+
+    /* What this window size scores on noise alone, for the SNR the correlation
+     * branch fills in below. Left at zero for the estimators that form no
+     * correlation surface, which is how a consumer tells "no signal here" from
+     * "this statistic does not exist for this estimator" -- a gate keyed on a
+     * null of zero would pass every window rather than none. */
+    out->snr_null = (params->estimator == RS_MICROM_EST_CORRELATION)
+                  ? rs_coreg_snr_null(win_az, win_rg) : 0.0;
 
     const double lambda = (ref_img->lambda > 0.0) ? ref_img->lambda : 0.031;
 
@@ -462,6 +474,12 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
                 double qsum = 0.0;
                 size_t qn = 0;
 
+                /* Ampcor-style surface statistics, accumulated over the same
+                 * looks 'qsum' is: the SNR as a plain mean, the azimuth sigma
+                 * as a sum of variances so the aggregate is an rms. See
+                 * rs_microm_t.snr and .sigma_px. */
+                double snr_sum = 0.0, var_sum = 0.0;
+
                 /* Running absolute shift, used when accumulating differentials
                  * from adjacent looks. */
                 double acc_az = 0.0, acc_rg = 0.0;
@@ -503,12 +521,14 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
                         continue;
                     }
 
-                    double sa = 0.0, sr = 0.0, pk = 0.0;
-                    if (rs_coreg_shift_ex(pref, pcur, win_az, win_rg,
-                                          params->upsample_az, params->upsample_rg,
-                                          refine, &sa, &sr, &pk) != RS_OK) {
+                    double sa = 0.0, sr = 0.0;
+                    rs_coreg_quality_t cq;
+                    if (rs_coreg_shift_q(pref, pcur, win_az, win_rg,
+                                         params->upsample_az, params->upsample_rg,
+                                         refine, &sa, &sr, &cq) != RS_OK) {
                         continue;
                     }
+                    const double pk = cq.peak;
 
                     if (params->reference == RS_MICROM_REF_ADJACENT) {
                         /* 'sa' is the step since the previous look; the absolute
@@ -524,6 +544,8 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
                     out->disp_az[idx] = sa;
                     out->disp_rg[idx] = sr;
                     qsum += pk; qn++;
+                    snr_sum += cq.snr;
+                    var_sum += cq.sigma_az_px * cq.sigma_az_px;
 
                     /* Azimuth shift to line-of-sight velocity. This observable
                      * does not wrap, which is why it is the primary one. */
@@ -586,6 +608,14 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
 
                 const double qmean = qn ? qsum / (double)qn : 0.0;
                 out->quality[w] = qmean;
+                out->snr[w] = qn ? snr_sum / (double)qn : 0.0;
+                /* A window that produced no correlation at all gets the ceiling
+                 * rather than zero. Zero would read as a perfectly determined
+                 * offset, which is the opposite of what "nothing tracked" means,
+                 * and would carry such a window through a cull that exists to
+                 * remove it. */
+                out->sigma_px[w] = qn ? sqrt(var_sum / (double)qn)
+                                      : RS_COREG_SIGMA_MAX;
 
                 /* Enforce the coherence mask here rather than leaving it to
                  * consumers. A window whose sub-looks do not correlate has no

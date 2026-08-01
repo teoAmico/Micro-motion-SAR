@@ -31,8 +31,11 @@ exists and passes its tests:
 - sub-aperture decomposition, coregistration, phase linking
 - `validate` — thirteen arithmetic checks on whether a collect can support the measurement
   you intend, before any of it is processed
-- null-test machinery, `rs_track_fit()`, a cross-window consensus statistic, and a
+- null-test machinery, `rs_track_fit()`, a cross-window consensus statistic, an
+  ampcor-style cull on what the correlation surfaces themselves say, and a
   per-window evidence file written beside every result
+- a cross-check of the CPHD reader against SARPy (`tools/sarpy_crosscheck.py`),
+  which is the only thing here that tests the parse of a real vendor product
 
 19 tests pass. **Nothing here has yet been shown to recover a vibration frequency it was not
 told.** That is the whole of the work ahead, and no output should be read as a demonstrated

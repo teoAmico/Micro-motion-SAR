@@ -908,10 +908,16 @@ int main(void)
 
     RS_CASE("a total cull is a reported result, not a silent fallback");
     {
-        /* Every window well correlated, every window barely moving. The
-         * excursion gate should take all of them, and the counts must survive
-         * the refusal -- a policy that reports nothing and explains nothing is
-         * indistinguishable from a scene with no motion in it. */
+        /* Every window's correlation surface indistinguishable from noise, so
+         * the SNR gate takes all of them. The counts must survive the refusal:
+         * a policy that reports nothing and explains nothing is
+         * indistinguishable from a scene with no motion in it.
+         *
+         * The SNR gate rather than the offset-uncertainty one, because the
+         * latter is now RELATIVE to the scene's median and so cannot cull a
+         * scene in which every window is equally uncertain -- which is correct
+         * behaviour and is why this case was rewritten. See
+         * RS_CULL_SIGMA_FACTOR. */
         const size_t k = 64, n_az = 3, n_rg = 3, n_win = n_az * n_rg;
         rs_microm_t m;
         memset(&m, 0, sizeof m);
@@ -933,10 +939,10 @@ int main(void)
 
         for (size_t w = 0; w < n_win; w++) {
             m.quality[w] = 1.0;
-            m.snr[w] = 100.0;
+            m.snr[w] = 6.0;              /* below the 7.5 null, let alone 2x it */
             m.sigma_px[w] = 1.0;
             for (size_t i = 0; i < k; i++) {
-                const double v = 0.01 * sin(2.0 * M_PI * 1.25 * m.dt * (double)i);
+                const double v = sin(2.0 * M_PI * 1.25 * m.dt * (double)i);
                 m.disp_az[w * k + i] = v;
                 m.vel_los[w * k + i] = v;
             }
@@ -948,7 +954,7 @@ int main(void)
         rs_spectrum_cull_t c;
         RS_CHECK_ERR(rs_spectrum_ampcor_window(&sp, &c), RS_ERR_RANGE);
         RS_CHECK(c.n_input == n_win);
-        RS_CHECK(c.n_sigma_cull == n_win);
+        RS_CHECK(c.n_snr_cull == n_win);
         RS_CHECK(c.n_survivor == 0);
         RS_CHECK(c.window == n_win);     /* no fallback was written */
         printf("    refused, as it should: %s\n", rs_last_error());

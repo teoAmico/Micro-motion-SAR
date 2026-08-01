@@ -86,6 +86,7 @@ set_tests_properties(info_json_refuses_non_cphd PROPERTIES WILL_FAIL TRUE)
 
 set(MM_TESTS
     test_constants test_fft test_focus test_subaperture test_coreg
+    test_cullsweep
     test_endtoend test_tracking test_nullmotion test_ccd test_validate
     test_pairedecho test_phaselink test_cphd test_readers test_geocode test_raster
 )

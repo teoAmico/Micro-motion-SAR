@@ -349,11 +349,21 @@ applied to offset fields, and it drops a window unless all three hold:
 | gate | test | where the threshold comes from |
 |---|---|---|
 | surface SNR | peak power ÷ mean off-peak power ≥ 2× the noise-alone value | the noise-alone value is the harmonic number of the window's bin count — about 7.5 for a 32×32 window — so the gate is stated as a multiple of what an *empty* surface produces |
-| offset uncertainty | excursion ≥ 3σ, σ from the curvature of the correlation peak | the same 3σ test as the quantisation floor, with the correlator's measured noise in place of its rounding bound |
-| neighbourhood | ≥ 2 of the 4 lattice neighbours report the same bin | each cell of a 2×2 block has exactly two in-block neighbours, so this is "belongs to a block or better" |
+| offset uncertainty | σ ≤ 2× the median σ of the windows entering the cull | relative, because σ is a *ranking* statistic with no absolute scale — an absolute form was tried and removed every window at every operating point (`FOLLOW-UPS.md` item 12c). This is ampcor's median-based rejection applied to the covariance |
+| neighbourhood | ≥ 2 of the 4 lattice neighbours report the same bin, counting any window that entered the cull | each cell of a 2×2 block has exactly two in-block neighbours, so this is "belongs to a block or better". Neighbours vote whether or not they passed the first two gates — the bound describes a target's footprint, not the neighbours' reliability |
 
-Nothing here is tuned except the factor of two, and the gate actually applied is
-written into `PREFIX_windows.csv` so a result never depends on knowing it.
+Two tuned factors of two, both written into `PREFIX_windows.csv` so a result never
+depends on knowing them; the rest is derived.
+
+**Its measured profile is high precision and low recall.** On a swept fixture
+(`tests/test_cullsweep.c`, 6 frequencies × 3 clutter seeds plus an isolated-point
+control) it answered 7 times out of 24 and was **right every time**, to within
+half a bin, while `best` and `consensus` answered everywhere and missed badly
+(rms 0.24 and 0.37 Hz against a 0.025 Hz bar). It refused all three static
+controls, where the other two each reported a confident frequency. But its
+answers cluster at the bottom of the band — five clutter answers over **two**
+distinct injections — so it has **not** been swept in the sense `README.md`
+means, and none of this is yet a recovery.
 
 **Use it as a disagreement detector, not as a better answer.** When the cull and
 the consensus report the same frequency that is weak corroboration from two

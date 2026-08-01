@@ -444,11 +444,35 @@ resonarsat_status_t rs_spectrum_consensus(const rs_spectrum_t *spec,
  * result never depends on a reader knowing this constant. */
 #define RS_CULL_SNR_FACTOR 2.0
 
-/* Sigma multiplier for the excursion gate. The same 3 the quantisation floor
- * uses, kept identical on purpose: the two gates make the same statement about
- * two different noise sources, and a different multiplier would make them
- * incomparable for no reason anyone could reconstruct later. */
-#define RS_CULL_SIGMA_K 3.0
+/* How many times the scene's median offset uncertainty a window may carry.
+ *
+ * THIS GATE WAS ABSOLUTE AND THAT WAS WRONG. It read "excursion >= 3*sigma",
+ * comparing a peak-to-peak excursion in real pixels against sigma -- and
+ * rs_coreg_quality_t states in terms that could not be plainer that sigma is NOT
+ * CALIBRATED IN AN ABSOLUTE SENSE, because the estimator omits the patch's
+ * independent-sample count. Using an explicitly uncalibrated quantity in a
+ * calibrated comparison is exactly the dimensional error this codebase's comment
+ * rule exists to prevent, and it was measured: on an isolated point target with
+ * surface SNRs near 80 -- ten times the noise-alone value, so gate 1 culled
+ * nothing at all -- sigma came out at 130 to 200 PIXELS on 32-pixel patches
+ * against excursions of 10 to 18 px, and the gate removed 100% of windows at
+ * every frequency of a sweep. See FOLLOW-UPS.md item 12c.
+ *
+ * The relative form is what the quantity actually supports, and it is also what
+ * the ampcor family does: those cullers reject offsets deviating from a local
+ * median rather than from a fixed bound. A window is culled when its offset
+ * uncertainty is more than twice the median of the windows entering the cull.
+ *
+ * The median rather than the mean, because one hopeless window returning
+ * RS_COREG_SIGMA_MAX would drag a mean past every real one and cull the scene.
+ * The factor of two is tuned, like the coherence gate's one half and for the
+ * same reason -- an absolute scale does not exist here -- and it is reported in
+ * rs_spectrum_cull_t.sigma_gate so that no result depends on knowing it.
+ *
+ * The excursion is not left unguarded by the change: rs_spectrum_best_window()'s
+ * quantisation floor is applied before this and is the test that a window moved
+ * further than the tracker's own grid step. That one IS calibrated. */
+#define RS_CULL_SIGMA_FACTOR 2.0
 
 /* Agreeing four-neighbours a window needs to survive the consistency cull.
  *
@@ -486,30 +510,69 @@ resonarsat_status_t rs_spectrum_ampcor_window(const rs_spectrum_t *spec,
 
     const double tol = (spec->df > 0.0) ? 0.5 * spec->df : 1e-9;
 
-    /* 0 = did not enter, 1 = survived gates 1 and 2, 2 = survived all three.
-     * Two passes are needed because gate 3 reads its neighbours' verdicts on
-     * gates 1 and 2, so no window can be decided until every window has been. */
+    /* 0 = did not enter, 1 = entered but culled by gate 1 or 2, 2 = candidate
+     * for gate 3, 3 = survived all three. Separate passes are needed because
+     * gate 3 reads its neighbourhood, so no window can be decided until every
+     * window's membership is known. */
     unsigned char *state = calloc(spec->n_win, 1);
     if (!state) return RS_ERR_ALLOC;
 
+    /* Which windows enter, and the median offset uncertainty among them.
+     *
+     * The median has to be taken over the ENTRANTS rather than over every
+     * window, or windows already excluded by the coherence gate -- which are
+     * the ones with the worst-determined offsets -- would set the scale that
+     * the surviving windows are then judged against, and a scene that is mostly
+     * empty background would gate on the background. Two passes for that
+     * reason; the alternative is a threshold that moves with how much of the
+     * scene was masked. */
+    double *sig = NULL;
+    size_t n_sig = 0;
+    if (have_surface) {
+        sig = malloc(spec->n_win * sizeof *sig);
+        if (!sig) { free(state); return RS_ERR_ALLOC; }
+    }
     for (size_t w = 0; w < spec->n_win; w++) {
         if (spec->quality[w] < q_min) continue;
         if (floor_px > 0.0 && spec->excursion_px &&
             spec->excursion_px[w] < floor_px) continue;
         out->n_input++;
+        if (sig) sig[n_sig++] = spec->sigma_px[w];
+    }
+
+    if (sig && n_sig) {
+        /* Insertion sort: n_sig is the window count, tens to low thousands, and
+         * this runs once per call against a tracking stage that has already
+         * spent orders of magnitude more. */
+        for (size_t i = 1; i < n_sig; i++) {
+            const double v = sig[i];
+            size_t j = i;
+            while (j > 0 && sig[j - 1] > v) { sig[j] = sig[j - 1]; j--; }
+            sig[j] = v;
+        }
+        out->sigma_gate = RS_CULL_SIGMA_FACTOR * sig[n_sig / 2];
+    }
+    free(sig);
+
+    for (size_t w = 0; w < spec->n_win; w++) {
+        if (spec->quality[w] < q_min) continue;
+        if (floor_px > 0.0 && spec->excursion_px &&
+            spec->excursion_px[w] < floor_px) continue;
+
+        state[w] = 1;                       /* entered; may still vote below */
 
         if (have_surface) {
             if (spec->snr[w] < out->snr_gate) { out->n_snr_cull++; continue; }
-            /* The excursion the tracker actually resolved against the noise of
-             * the correlation that resolved it. An absent excursion array means
-             * the caller built a spectrum without one, in which case this gate
-             * has nothing to compare and is skipped rather than assumed. */
-            if (spec->excursion_px) {
-                const double need = RS_CULL_SIGMA_K * spec->sigma_px[w];
-                if (spec->excursion_px[w] < need) { out->n_sigma_cull++; continue; }
+            /* Offset determination against the scene's own typical window. A
+             * gate of zero means every entrant reported a zero sigma, which the
+             * estimator only does at a coherence of one; nothing is culled
+             * then, rather than everything. */
+            if (out->sigma_gate > 0.0 && spec->sigma_px[w] > out->sigma_gate) {
+                out->n_sigma_cull++;
+                continue;
             }
         }
-        state[w] = 1;
+        state[w] = 2;
     }
 
     /* Gate 3, on the window lattice. Skipped when the lattice is not rectangular
@@ -519,8 +582,8 @@ resonarsat_status_t rs_spectrum_ampcor_window(const rs_spectrum_t *spec,
     const int have_lattice = (spec->n_win_az > 0 && spec->n_win_rg > 0 &&
                               spec->n_win_az * spec->n_win_rg == spec->n_win);
     for (size_t w = 0; w < spec->n_win; w++) {
-        if (state[w] != 1) continue;
-        if (!have_lattice) { state[w] = 2; out->n_survivor++; continue; }
+        if (state[w] != 2) continue;
+        if (!have_lattice) { state[w] = 3; out->n_survivor++; continue; }
 
         const size_t ia = w / spec->n_win_rg, ir = w % spec->n_win_rg;
         const long da[4] = { -1, 1, 0, 0 };
@@ -531,10 +594,26 @@ resonarsat_status_t rs_spectrum_ampcor_window(const rs_spectrum_t *spec,
             if (na < 0 || nr < 0 || (size_t)na >= spec->n_win_az ||
                 (size_t)nr >= spec->n_win_rg) continue;
             const size_t nb = (size_t)na * spec->n_win_rg + (size_t)nr;
-            if (state[nb] == 0) continue;   /* culled neighbours do not vote */
+            /* ANY WINDOW THAT ENTERED THE CULL MAY VOTE, including one gates 1
+             * and 2 removed. This gate asks whether a FREQUENCY is spatially
+             * supported, which is a property of the answers and not of the
+             * neighbours' own reliability -- the window under test has already
+             * been judged on that. Restricting the vote to gate-1-and-2
+             * survivors was the first version and it was wrong for a measurable
+             * reason (FOLLOW-UPS.md item 12c): this threshold is derived from a
+             * target's FOOTPRINT -- each cell of a 2x2 block has exactly two
+             * in-block neighbours -- and that derivation describes the whole
+             * block. After gate 1 has removed a third to two thirds of the
+             * population, the survivors are too sparse to form blocks, and the
+             * geometric bound was being applied to a population it was never
+             * about. It removed every window of every run of a sweep.
+             *
+             * It also makes the vote consistent with rs_spectrum_consensus(),
+             * which counts every shared-gate survivor as an equal voter. */
+            if (state[nb] == 0) continue;
             if (fabs(spec->dominant_freq[nb] - spec->dominant_freq[w]) <= tol) agree++;
         }
-        if (agree >= RS_CULL_MIN_NEIGHBOURS) { state[w] = 2; out->n_survivor++; }
+        if (agree >= RS_CULL_MIN_NEIGHBOURS) { state[w] = 3; out->n_survivor++; }
         else                                 { out->n_neigh_cull++; }
     }
 
@@ -542,10 +621,10 @@ resonarsat_status_t rs_spectrum_ampcor_window(const rs_spectrum_t *spec,
         free(state);
         rs_set_error("spectrum: the correlation cull removed every window -- "
                      "%zu entered, %zu failed the SNR gate at %.3g, %zu failed "
-                     "the offset-uncertainty gate, %zu had too few agreeing "
-                     "neighbours",
+                     "the offset-uncertainty gate at %.3g px, %zu had too few "
+                     "agreeing neighbours",
                      out->n_input, out->n_snr_cull, out->snr_gate,
-                     out->n_sigma_cull, out->n_neigh_cull);
+                     out->n_sigma_cull, out->sigma_gate, out->n_neigh_cull);
         return RS_ERR_RANGE;
     }
 
@@ -559,10 +638,10 @@ resonarsat_status_t rs_spectrum_ampcor_window(const rs_spectrum_t *spec,
     size_t best_count = 0;
     double best_freq = 0.0;
     for (size_t w = 0; w < spec->n_win; w++) {
-        if (state[w] != 2) continue;
+        if (state[w] != 3) continue;
         size_t count = 0;
         for (size_t v = 0; v < spec->n_win; v++) {
-            if (state[v] != 2) continue;
+            if (state[v] != 3) continue;
             if (fabs(spec->dominant_freq[v] - spec->dominant_freq[w]) <= tol) count++;
         }
         if (count > best_count ||
@@ -580,7 +659,7 @@ resonarsat_status_t rs_spectrum_ampcor_window(const rs_spectrum_t *spec,
      * 'gates_applied' that the choice carries no weight. */
     size_t pick = spec->n_win;
     for (size_t w = 0; w < spec->n_win; w++) {
-        if (state[w] != 2) continue;
+        if (state[w] != 3) continue;
         if (fabs(spec->dominant_freq[w] - best_freq) > tol) continue;
         if (pick == spec->n_win) { pick = w; continue; }
         if (!have_surface) continue;

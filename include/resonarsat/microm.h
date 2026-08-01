@@ -904,6 +904,7 @@ typedef struct {
     size_t n_agree;       /* survivors sharing the reported frequency bin */
 
     double snr_gate;      /* the thresholds actually applied, for the record */
+    double sigma_gate;    /* px; twice the entrants' median offset uncertainty */
     int    gates_applied; /* zero when the estimator has no surface statistics */
 } rs_spectrum_cull_t;
 
@@ -931,19 +932,25 @@ typedef struct {
  *    at the scale where "twice what noise gives" is the weakest claim worth
  *    making, and 'snr_gate' is reported so a caller can see what was applied.
  *
- * 2. OFFSET UNCERTAINTY AGAINST EXCURSION. A window must satisfy
+ * 2. OFFSET UNCERTAINTY, RELATIVE TO THE SCENE. A window is culled when its
+ *    sigma_px exceeds twice the MEDIAN sigma_px of the windows entering the
+ *    cull -- ampcor's median-based rejection of offsets that disagree with their
+ *    surroundings, applied to the covariance rather than to the offset itself.
  *
- *        excursion_px  >=  3 * sigma_px
+ *    THIS GATE WAS ABSOLUTE IN ITS FIRST VERSION AND THAT WAS AN ERROR, recorded
+ *    in FOLLOW-UPS.md item 12c. It read 'excursion_px >= 3*sigma_px', which
+ *    compares a real pixel excursion against a quantity rs_coreg_quality_t
+ *    states explicitly is not calibrated in an absolute sense. Measured: on an
+ *    isolated point target whose surfaces scored an SNR near 80 -- ten times the
+ *    noise-alone value, so gate 1 culled nothing -- sigma came out at 130 to 200
+ *    PIXELS on 32-pixel patches, and the gate removed every window at every
+ *    frequency of a sweep. The relative form is what an uncalibrated ranking
+ *    statistic supports, and it is the form the sources use.
  *
- *    This is the SAME TEST as the quantisation floor rs_spectrum_best_window()
- *    applies, with the correlator's measured noise in place of its rounding
- *    bound: there, a series must move further than the tracker's grid step could
- *    move it by rounding; here, further than the correlation surface's own
- *    uncertainty could move it by noise. The two are complementary and neither
- *    subsumes the other -- quantisation is a floor even for a perfect
- *    correlation, and a broad peak is uncertain even at fine quantisation -- so
- *    both are applied. The 3 is the sigma multiplier already in use for the
- *    floor, kept identical so the two gates mean the same thing.
+ *    The excursion is not left unguarded: rs_spectrum_best_window()'s
+ *    quantisation floor is applied before this, and it IS calibrated -- it asks
+ *    whether the series moved further than the tracker's own grid step. That
+ *    remains the absolute test; this is the relative one.
  *
  * 3. NEIGHBOURHOOD CONSISTENCY. A window must have at least TWO of its four
  *    lattice neighbours reporting the same frequency bin, among neighbours that

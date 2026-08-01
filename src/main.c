@@ -1889,10 +1889,12 @@ static int rs_cmd_mmotion(int argc, char **argv)
              * reason this file exists. */
             fprintf(wf, "# cull_hz=%.12g agree=%zu input=%zu survivors=%zu "
                         "snr_cull=%zu sigma_cull=%zu neigh_cull=%zu "
-                        "snr_gate=%.12g snr_null=%.12g sigma_k=%g gates=%d\n",
+                        "snr_gate=%.12g snr_null=%.12g sigma_gate_px=%.12g "
+                        "gates=%d\n",
                     cull.freq_hz, cull.n_agree, cull.n_input, cull.n_survivor,
                     cull.n_snr_cull, cull.n_sigma_cull, cull.n_neigh_cull,
-                    cull.snr_gate, spec.snr_null, 3.0, cull.gates_applied);
+                    cull.snr_gate, spec.snr_null, cull.sigma_gate,
+                    cull.gates_applied);
             fprintf(wf, "window,iaz,irg,dominant_hz,prominence,quality,"
                         "excursion_px,snr,sigma_px,passed_gates,"
                         "agrees_with_consensus,passed_cull\n");
@@ -1910,7 +1912,8 @@ static int rs_cmd_mmotion(int argc, char **argv)
                 const double sig_w = spec.sigma_px ? spec.sigma_px[w] : 0.0;
                 const int culled = passed &&
                     (!cull.gates_applied ||
-                     (snr_w >= cull.snr_gate && exc >= 3.0 * sig_w));
+                     (snr_w >= cull.snr_gate &&
+                      (cull.sigma_gate <= 0.0 || sig_w <= cull.sigma_gate)));
                 fprintf(wf, "%zu,%zu,%zu,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,%d,%d,%d\n",
                         w, w / spec.n_win_rg, w % spec.n_win_rg,
                         spec.dominant_freq[w], spec.prominence[w],

@@ -146,6 +146,56 @@ both ways and choosing the direction whose energy lands inside the declared
 `TOA1`/`TOA2` support would decide it per product, without a name. Not
 implemented.
 
+### Item 3, measured: THE PROPOSED TEST PICKS THE WRONG DIRECTION
+
+Measured before implementing, on the Giza collect. Sixty-four consecutive pulses
+were compressed both ways, the power falling inside that pulse's `[TOA1, TOA2]`
+integrated, and the larger fraction taken as the winner. Capella needs the
+INVERTED transform, so "inverse" is the correct answer at every row:
+
+```
+        support (bins)   asymmetry   forward   inverse   picks
+start   [-6945, +5031]        1914   54.794%   38.768%   FORWARD, wrong by 16.0 pp
+mid     [-5950, +6027]          77   53.897%   54.282%   inverse, right by  0.4 pp
+end     [-6343, +5634]         710   48.016%   44.756%   FORWARD, wrong by  3.3 pp
+```
+
+**It is wrong where it is confident.** The test has discriminating power only in
+proportion to the support's asymmetry -- a symmetric window cannot distinguish a
+profile from its mirror -- and the asymmetry is largest at the dwell ends. Those
+are exactly the two rows it gets wrong, by 16 and 3.3 percentage points. The one
+row it gets right is mid-dwell, where the support is almost symmetric (77 bins
+out of ~12000) and the 0.4-point margin is noise. Implemented as written, this
+would silently mirror Capella imagery, which is the failure the vendor override
+exists to prevent.
+
+**The premise is what fails, not the arithmetic.** Between 46 and 55 percent of
+the energy lands OUTSIDE the declared support in EITHER direction: 90% of the
+power spans about +/-12100 bins while the support is only ~12000 bins wide.
+`TOA1`/`TOA2` do not bound where this product's compressed energy sits, so
+"the correct direction is the one that lands inside" has nothing to key on.
+
+**CAVEAT, AND IT IS NOT A SMALL ONE.** The compression above is a plain FFT of
+the raw FX samples with `TOA` mapped straight onto signed FFT bins. If
+`TOA1`/`TOA2` are referenced to something other than that delay axis -- a deramp
+reference, or a convention tied to `SC0` -- then the mapping is wrong and these
+numbers say nothing about the idea, only about this reading of the fields. Half
+the energy sitting outside the declared support is itself evidence that
+something in the convention is not understood, and is the thing to explain
+before any detector is written.
+
+**So the open item is no longer "implement the detector".** It is: establish what
+`TOA1`/`TOA2` actually bound for this product. Until that is answered, a
+data-driven SGN test has no established statistic to use.
+
+**And when one exists, it should not REPLACE the vendor override.** Run both and
+warn on disagreement, the way the cull is reported beside the consensus. The
+override is known correct for the one product family that exhibits the defect;
+swapping it for an automatic test whose failure mode is a silent mirror is the
+wrong trade. There is also no conformant CPHD in `sar-data` to exercise the
+other branch against, so a detector written today could only ever be tested on
+the case it must invert.
+
 ---
 
 ## 4. Long dwells may need to be deliberately truncated, and never have been
@@ -1069,3 +1119,96 @@ hit is outside what this checks**. Two readers agreeing here does not mean the
 image is right. Item 3's suggestion -- compress a pulse both ways and choose the
 direction whose energy lands inside the declared `TOA1`/`TOA2` support -- remains
 the thing that would test that, and remains unimplemented.
+
+### 12c. The cull swept: two formulation errors found, and a high-precision, low-recall policy left
+
+Item 12a landed `rs_spectrum_ampcor_window()` and said plainly it had not been
+put to a sweep. `tests/test_cullsweep.c` is that sweep: six injected frequencies
+across three independent clutter realisations, an isolated-point condition, and a
+static control, with all three selection policies read off the SAME spectra so
+that any difference is attributable to the selection and nothing else.
+
+**It found two errors in the gates as shipped. Both were formulation errors, not
+mis-tuning, and neither was visible at the single operating point item 12a
+measured.**
+
+**ERROR ONE: gate 2 used an uncalibrated quantity in a calibrated comparison.**
+It read `excursion_px >= 3 * sigma_px`. `rs_coreg_quality_t` states in terms that
+could not be plainer that sigma is not calibrated in an absolute sense -- the
+estimator omits the patch's independent-sample count -- and then the gate
+compared it against a real pixel excursion. Measured, on an isolated point target
+whose surfaces scored an SNR near 80, ten times the noise-alone value, so gate 1
+culled nothing at all:
+
+```
+inj   in/snr/sigma/nbr/surv    snr med   sigma med    excursion med
+0.3    7/ 0/ 7/ 0/ 0             78.9    154.71 px      10.00 px
+0.5    9/ 0/ 9/ 0/ 0             83.2    200.89 px      10.70 px
+1.3    7/ 0/ 7/ 0/ 0             70.4    156.53 px      18.30 px
+```
+
+A 155-pixel offset uncertainty on a 32-pixel patch is not a number about the
+world. The gate removed 100% of windows at every frequency of every run. Replaced
+with the relative form the quantity supports and the sources actually use:
+sigma above twice the MEDIAN sigma of the entrants, which is ampcor's
+median-based rejection applied to the covariance. The excursion is not left
+unguarded -- the quantisation floor still tests it, and that test IS calibrated.
+
+**ERROR TWO: gate 3's derivation was applied to a population it was not about.**
+The neighbourhood threshold is geometric -- each cell of a 2x2 block has exactly
+two in-block 4-neighbours -- but only windows surviving gates 1 and 2 were
+allowed to vote. That derivation describes a target's FOOTPRINT, i.e. the whole
+block. After gate 1 removes a third to two thirds of the population, the
+survivors are too sparse to form blocks, and gate 3 then removed everything gate
+2 had not: `20/11/1/8/0`, `19/10/0/9/0`, and so on for every row. Neighbours now
+vote if they entered the cull at all, which also makes the vote consistent with
+`rs_spectrum_consensus()`, where every gated window is an equal voter.
+
+**THE RESULT AFTER BOTH FIXES.** Pooled over 6 frequencies x 3 seeds on
+coherently vibrating clutter, `df` 0.0504 Hz, half a bin 0.0252 Hz:
+
+```
+policy      answers  distinct      slope    rms Hz
+best             18         6      0.811    0.2360
+consensus        18         6      1.080    0.3667
+cull              5         2      1.008    0.0035
+```
+
+and the static control, three seeds, nothing moving:
+
+```
+best        3.024 Hz    1.462 Hz    -- consensus
+0.403 Hz    0.353 Hz
+1.613 Hz    0.403 Hz     cull: refused at all three seeds
+```
+
+**The cull's profile is the opposite of the other two policies'.** Over both
+fixtures it answered 7 times from 24 offered and every one of the 7 was within
+half a bin of the injection. It refused all three static scenes, where `best` and
+`consensus` each emitted a confident frequency. `best` and `consensus` answer
+everywhere and miss by ten times the bar.
+
+**THIS IS NOT A RECOVERY, AND THE REASON IS THE `distinct` COLUMN.** The five
+clutter answers sit at two injected frequencies, both at the bottom of the band.
+`rs_track_fit()` exists to separate a chain that follows the injection from one
+emitting a fixed value, and it does that by requiring the reported frequency to
+track across a SWEPT range; a slope through two abscissae fits perfectly whatever
+produced it. So the numbers in that row -- slope 1.008, rms 0.0035 Hz, nominally
+inside the bar -- do not mean what a row of the same shape would mean at six
+distinct injections. A policy that answers only where the answer is easy scores
+well and has demonstrated nothing. `test_cullsweep.c` ASSERTS the limitation
+(`RS_CHECK(dk < n_freq)`) so that the day recall improves the test fails and
+forces this paragraph to be rewritten rather than quietly outgrown.
+
+**What it does assert, and these are real:** every answer the cull gave was
+correct, and it refused every static control. One wrong answer fails the suite.
+
+**The open question is now recall, not correctness.** Gate 1 is doing most of the
+removing on clutter -- median SNRs of 8 to 15 against a gate of 15, so the
+population is halved before the neighbourhood test sees it -- and whether that
+gate's factor of two is right at these coherences is unmeasured. That is the next
+thing to sweep, and it is a different experiment from this one.
+
+**Item 11 is untouched by all of this.** The static control here is scene-driven.
+A common-mode artefact still passes every gate the cull applies, and only
+`--null-static` catches it.

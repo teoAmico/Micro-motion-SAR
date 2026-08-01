@@ -157,8 +157,11 @@ the tracker does recover the injected carrier in most windows and the *selection
 discards it. `rs_spectrum_best_window()` still selects by prominence and is still what
 the tool reports; ranking on consensus and contiguity instead is the open half.
 `rs_spectrum_ampcor_window()` is a third policy added since (`FOLLOW-UPS.md` item 12)
-that culls on what the correlator knew rather than on the spectrum — it is reported
-beside the other two, gates nothing, and has not been put to a sweep.
+that culls on what the correlator knew rather than on the spectrum. It is reported
+beside the other two and gates nothing. Swept in `tests/test_cullsweep.c`: it answers
+rarely and, so far, always correctly, and refuses every static control where the other
+two report a confident frequency — but its answers cluster at two distinct injections,
+so its recall, not its correctness, is the open question (item 12c).
 
 `--reference pair` and `--reference adjacent` do not recover a frequency on the
 synthetic fixture and are exposed because the sources describe them, not because they

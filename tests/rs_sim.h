@@ -99,7 +99,7 @@ static resonarsat_status_t rs_sim_scene(rs_cphd_t *cphd,
 
 /* Uniform draw in (0,1] from a stateful LCG, so a scene is reproducible from its
  * seed alone and two seeds are independent realisations of one experiment. */
-static double rs_sim_u01(unsigned *state)
+static inline double rs_sim_u01(unsigned *state)
 {
     *state = *state * 1103515245u + 12345u;
     const double u = (double)(*state >> 8) / 16777216.0;
@@ -155,7 +155,7 @@ static double rs_sim_u01(unsigned *state)
  *
  * Writes at most 'cap' targets and returns how many it wrote, so a caller sizing
  * an array wrongly loses scatterers rather than the stack beyond them. */
-static size_t rs_sim_dominant_patch(rs_sim_tgt_t *tg, size_t cap,
+static inline size_t rs_sim_dominant_patch(rs_sim_tgt_t *tg, size_t cap,
                                     size_t n_side, size_t n_diffuse,
                                     double extent_m, double dominance,
                                     unsigned seed, double freq, double amp)

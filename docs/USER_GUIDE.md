@@ -2,12 +2,13 @@
 
 How to build the tool, run it, and read what it tells you.
 
-**Read this first:** nothing in this project has yet been shown to recover a
-vibration frequency it was not told. The chain runs end to end and every stage is
-tested, but no configuration has passed the bar in `README.md`. This guide
-therefore spends as much space on how the tool refuses, and how to tell a
-measurement from an artefact, as on how to make it produce a number. That is the
-correct ratio for this instrument.
+**Read this first:** one configuration has passed the bar in `README.md` —
+`--estimator phase`, on synthetic fixtures, swept and pooled over seeds with a
+static control (`FOLLOW-UPS.md` item 14). Nothing has passed it on real data, and
+`--estimator correlation`, which is the default, has not passed it anywhere. This
+guide therefore spends as much space on how the tool refuses, and how to tell a
+measurement from an artefact, as on how to make it produce a number. That is
+still the correct ratio for this instrument.
 
 ---
 
@@ -659,17 +660,31 @@ collects stay out. See [`runs/README.md`](../runs/README.md).
 
 ## 9. Choosing estimator and reference
 
-Two orthogonal choices. Neither has a setting known to work; the honest summary
-is below.
+Two orthogonal choices. **One estimator setting is now known to work on synthetic
+data**; nothing works on real data. The honest summary is below.
 
 `--estimator correlation|phase|splitband`
 
-- `correlation` (default) — cross-correlation peak, sub-pixel refined.
-- `phase` — phase of a single dominant pixel. Closest to the published work that
-  reports success, but re-scoring found it returning one fixed frequency at 100%
-  window agreement for every injection *and* for a static scene.
+- `phase` — phase of a single dominant pixel, with the geometric carrier removed.
+  **The one setting that has passed the bar** (`FOLLOW-UPS.md` item 14): slope
+  1.008, rms 0.0070 Hz against a 0.0252 bound, pooled over three clutter seeds,
+  static controls outside the swept band. Closest to the published work that
+  reports success. Three things to know before using it: the observable **wraps
+  beyond about λ/4 of line-of-sight motion** (~8 mm at X band), so it needs a far
+  smaller motion than `correlation` and fails completely above that; it is
+  unvalidated on real data, where sub-look decorrelation the simulator cannot
+  produce is the obvious threat; and it fails on the dominant-scatterer fixture
+  for reasons not understood.
+- `correlation` (default) — cross-correlation peak, sub-pixel refined. Has not
+  been shown to recover a frequency on any fixture. Still the right choice for
+  motion too large for phase, since it has no ambiguity at all.
 - `splitband` — split-band phase linking over all N² interferograms. Returned one
   fixed frequency at every configuration swept.
+
+**The default is still `correlation`**, because the phase result is synthetic and
+amplitude-bounded and the default should not quietly become the untested-on-real-
+data path. Choose `phase` deliberately, for small motion, and run `--null-static`
+beside it.
 
 `--reference first|adjacent|pair|lag`
 

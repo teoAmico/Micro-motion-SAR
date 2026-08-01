@@ -1056,7 +1056,7 @@ int main(void)
      * collect. rs_sim_scene() has no sub-resolution scatterer model, so that
      * regime is measured in rs_microm_estimator_t and not reproduced here.
      * ------------------------------------------------------------------ */
-    RS_CASE("the phase estimator does NOT recover the frequency either");
+    RS_CASE("the phase estimator recovers the injected frequency");
     {
         /* A NEGATIVE RESULT, and a withdrawal.
          *
@@ -1169,18 +1169,129 @@ int main(void)
         printf("    slope %+.3f, rms %.4f Hz against a %.4f Hz bound "
                "(bin %.4f Hz)\n", slope, rms, 0.5 * df, df);
 
-        /* The assertions lock in the negative, so that a change which makes the
-         * phase route work fails here and has to arrive with its evidence --
-         * the same guard the master-slave case carries. A tracking chain gives
-         * slope near 1 and rms under half a bin. */
-        RS_CHECK(fabs(slope) < 0.5);
-        RS_CHECK(rms > 0.5 * df);
+        /* THE NEGATIVE THIS CASE USED TO LOCK IN HAS BEEN OVERTURNED, and the
+         * evidence it demanded arrived: FOLLOW-UPS.md item 14. The estimator
+         * was wrapping a phase ramp it should have removed first. A scatterer
+         * anywhere but exactly at its pixel's centre has a range that changes
+         * linearly as the aperture sweeps, so its phase is linear in the
+         * sub-look index -- 1.1 to 1.9 radians PER LOOK here, tens of cycles
+         * across the stack -- and folding that into (-pi, pi] makes a sawtooth
+         * whose line sits at the target's sub-pixel offset rather than at
+         * anything the scene is doing. That was the fixed frequency this case
+         * reported for every injection and for a motionless scene alike.
+         *
+         * rs_microm_track() now removes the carrier from the PHASORS before any
+         * wrapping, by the frequency that maximises the de-ramped phasor sum.
+         * The bar is the one README.md states, and it is asserted rather than
+         * printed because the measurement now supports it. */
+        RS_CHECK_NEAR(slope, 1.0, 0.15);
+        RS_CHECK(rms < 0.5 * df);
 
-        /* And the artefact is the scene-independent part: motion or no motion,
-         * the same frequency comes back. This is the assertion that makes the
-         * case a negative rather than a poor recovery. */
+        /* And the scene-dependence, which is what the artefact lacked: a
+         * motionless control must NOT land where the moving cases do. Note the
+         * assertion is the reverse of the one this case carried, on the same
+         * quantity, so a regression to the artefact fails here rather than
+         * quietly passing. */
         RS_CHECK(static_dom >= 0.0);
-        RS_CHECK(fabs(static_dom - mean_moving) < 2.0 * df);
+        RS_CHECK(fabs(static_dom - mean_moving) > 2.0 * df);
+    }
+
+    RS_CASE("phase recovery survives distributed clutter and a change of seed");
+    {
+        /* THE BAR IN README.md IS POOLED OVER INDEPENDENT REALISATIONS, and the
+         * case above is a single isolated point on empty background -- the
+         * easiest scene that exists. This is the same sweep on a coherently
+         * vibrating clutter patch at two seeds, which is what makes the result
+         * a recovery rather than a fixture artefact.
+         *
+         * Four frequencies rather than six, and two seeds rather than three, to
+         * hold the cost near fifty seconds; the full six-by-three measurement is
+         * in FOLLOW-UPS.md item 14 and gives slope 1.008, rms 0.0070 Hz at every
+         * seed. Amplitude is 2.442 mm, as above: the phase observable wraps
+         * beyond about lambda/4 of line-of-sight motion, and at the 20 mm the
+         * correlation fixtures use it is hopeless by construction rather than by
+         * defect. */
+        const double cf[] = { 0.3, 0.5, 0.9, 1.3 };
+        const size_t cn = sizeof cf / sizeof cf[0];
+        const unsigned seeds[] = { 7u, 23u };
+        double inj[16], got[16];
+        size_t n = 0;
+        double last_df = 0.0, static_hz[2] = { -1.0, -1.0 };
+
+        for (size_t si = 0; si < 2; si++) {
+            for (size_t fi = 0; fi <= cn; fi++) {
+                const int is_static = (fi == cn);
+                rs_sim_tgt_t tg[96];
+                unsigned rs = seeds[si] * 2654435761u + 1u;
+                for (size_t i = 0; i < 96; i++) {
+                    rs = rs * 1103515245u + 12345u;
+                    const double u1 = (double)(rs >> 8) / 16777216.0;
+                    rs = rs * 1103515245u + 12345u;
+                    const double u2 = (double)(rs >> 8) / 16777216.0;
+                    rs = rs * 1103515245u + 12345u;
+                    const double u3 = (double)(rs >> 8) / 16777216.0;
+                    tg[i].x = (u1 - 0.5) * 24.0;
+                    tg[i].y = (u2 - 0.5) * 24.0;
+                    tg[i].z = 0.0;
+                    tg[i].rcs = 0.3 * (-log(u3 > 1e-6 ? u3 : 1e-6));
+                    tg[i].vib_freq = is_static ? 0.0 : cf[fi];
+                    tg[i].vib_amp  = is_static ? 0.0 : 0.002442;
+                    tg[i].vib_phase = 0.0;
+                }
+
+                rs_cphd_t c;
+                RS_CHECK_OK(rs_sim_scene(&c, tg, 96, 20.0, 400.0, 256, 0.5));
+                rs_grid_t g = { .origin = {0,0,0}, .n_x = 64, .n_y = 64,
+                                .dx = 0.5, .dy = 0.5, .height = 0.0 };
+                rs_subap_params_t sp;
+                rs_subap_params_default(&sp);
+                sp.n_looks = 128;
+                sp.overlap = 0.0;
+                rs_subap_stack_t st;
+                RS_CHECK_OK(rs_subaperture_from_cphd(&c, &g, &sp, &st));
+
+                rs_microm_params_t mp;
+                rs_microm_params_default(&mp);
+                mp.estimator = RS_MICROM_EST_PHASE;
+                mp.win_az = mp.win_rg = 32;
+                mp.stride_az = mp.stride_rg = 16;
+                mp.coherence_min = 0.0;
+                rs_microm_t m;
+                RS_CHECK_OK(rs_microm_track(&st, &mp, &m));
+
+                rs_spectrum_t spec;
+                RS_CHECK_OK(rs_spectrum_compute(&m, RS_SPEC_VELOCITY, &spec));
+                last_df = spec.df;
+                size_t bw = 0; double prom = 0.0;
+                const resonarsat_status_t bst =
+                    rs_spectrum_best_window(&spec, &bw, &prom, NULL);
+                const double hz = (bst == RS_OK) ? spec.dominant_freq[bw] : -1.0;
+                if (is_static) {
+                    static_hz[si] = hz;
+                } else {
+                    inj[n] = cf[fi]; got[n] = hz; n++;
+                }
+                rs_spectrum_free(&spec);
+                rs_microm_free(&m);
+                rs_subap_stack_free(&st);
+                rs_cphd_free(&c);
+            }
+        }
+
+        double slope = 0.0, rms = 0.0;
+        RS_CHECK(rs_track_fit(inj, got, n, &slope, &rms) == 1);
+        printf("    clutter, %zu points over %zu seeds: slope %+.3f, rms "
+               "%.4f Hz (bound %.4f)\n", n, (size_t)2, slope, rms, 0.5 * last_df);
+        printf("    static controls: %.3f Hz, %.3f Hz\n",
+               static_hz[0], static_hz[1]);
+        RS_CHECK_NEAR(slope, 1.0, 0.15);
+        RS_CHECK(rms < 0.5 * last_df);
+        /* Each static control must sit outside the swept band entirely, which
+         * is a stronger statement than "not equal to the moving answers" and
+         * the one a common-mode artefact could not satisfy. */
+        for (size_t si = 0; si < 2; si++) {
+            RS_CHECK(static_hz[si] > cf[cn - 1] + 2.0 * last_df);
+        }
     }
 
     RS_CASE("phase displacement is bounded by lambda/4, i.e. does not accumulate");

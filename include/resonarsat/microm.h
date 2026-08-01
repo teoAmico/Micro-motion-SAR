@@ -229,11 +229,44 @@ typedef enum {
  *                              it has nothing to track if that is absent.
  *
  *   RS_MICROM_EST_PHASE        The phase of a single dominant pixel, read
- *                              directly from each sub-look and unwrapped across
- *                              them. This is the observable of Clemente et al.
- *                              (EuRAD 2025), the only one in this file with
- *                              published accelerometer validation on this class
- *                              of data.
+ *                              directly from each sub-look, with the geometric
+ *                              carrier removed. This is the observable of
+ *                              Clemente et al. (EuRAD 2025), the only one in
+ *                              this file with published accelerometer
+ *                              validation on this class of data.
+ *
+ *                              IT IS ALSO THE ONLY ESTIMATOR HERE THAT HAS BEEN
+ *                              SHOWN TO RECOVER AN INJECTED FREQUENCY. On the
+ *                              synthetic fixtures, swept and pooled over seeds
+ *                              with a static control through identical
+ *                              processing: slope 1.008 and rms 0.0070 Hz
+ *                              against a half-bin bound of 0.0252 Hz, on
+ *                              coherently vibrating clutter at three seeds, and
+ *                              slope 1.016 with rms 0.0078 Hz on an isolated
+ *                              point. Read FOLLOW-UPS.md item 14 before quoting
+ *                              that: it is a synthetic result, and rs_sim_scene()
+ *                              gives every scatterer analytically exact phase, so
+ *                              the sub-look decorrelation a real collect imposes
+ *                              on this observable is absent by construction.
+ *
+ *                              THE CARRIER MUST COME OFF BEFORE THE PHASE IS
+ *                              WRAPPED, and for most of this estimator's life it
+ *                              did not. A scatterer anywhere but exactly at its
+ *                              pixel's centre has a range that changes linearly
+ *                              as the aperture sweeps, so its phase is linear in
+ *                              the sub-look index at (4*pi/lambda)*dX*dx/R --
+ *                              measured at 1.1 to 1.9 radians PER LOOK, tens of
+ *                              full cycles across a stack. Folding that into
+ *                              (-pi, pi] makes a sawtooth whose line is set by
+ *                              the target's sub-pixel offset and the geometry,
+ *                              so it does not move when the scene does. That was
+ *                              the fixed frequency this estimator reported for
+ *                              every injection AND for a motionless scene, at a
+ *                              prominence higher than any moving case; it is the
+ *                              common-mode artefact FOLLOW-UPS.md item 11 uses
+ *                              to show the consensus gate blind. Detrending the
+ *                              displacement cannot undo it, because by then the
+ *                              wrap has happened and a sawtooth is not a trend.
  *
  *                              IT IS NOT A REFINEMENT OF THE OTHER TWO -- it
  *                              measures something different. Both of those
@@ -247,13 +280,21 @@ typedef enum {
  *                              predicts precisely zero. See
  *                              rs_spectrum_subaperture_response().
  *
- *                              The cost is ambiguity. Phase wraps every
- *                              lambda/2 of line-of-sight motion -- about 16 mm
- *                              at X band -- so a target moving further than
- *                              that between sub-looks unwraps wrongly and the
- *                              recovered series is nonsense. Correlation has no
- *                              such limit. Prefer phase for small fast motion
- *                              and correlation for large slow motion.
+ *                              The cost is ambiguity, and it is not a footnote:
+ *                              it decides which fixture the estimator can even
+ *                              be tested on. Phase wraps every lambda/2 of
+ *                              line-of-sight motion -- about 16 mm at X band --
+ *                              so a target moving further folds and the
+ *                              recovered series is nonsense. The 20 mm
+ *                              amplitude the correlation fixtures use is a 6.6
+ *                              radian swing, and the phase estimator fails on
+ *                              them completely and correctly; the sweeps above
+ *                              inject 2.442 mm, which is 0.81 radians. A
+ *                              measurement that puts this estimator on a
+ *                              correlation fixture is measuring the wrap, not
+ *                              the estimator. Correlation has no such limit.
+ *                              Prefer phase for small fast motion and
+ *                              correlation for large slow motion.
  *
  *                              SUB-LOOK COHERENCE IS SET BY PULSE SHARING, AND
  *                              THAT BOUNDS HOW LONG A SERIES CAN BE UNWRAPPED.

@@ -59,6 +59,29 @@ void rs_microm_params_default(rs_microm_params_t *params)
     params->no_optimize = 0;
 }
 
+/* Magnitude of the de-ramped phasor sum for one pixel at trial rate 'nu'.
+ *
+ * |sum_k z[k] * exp(-i*nu*k)|, the objective the phase estimator maximises to
+ * find the geometric carrier it must remove before wrapping. See the phase
+ * branch of rs_microm_track() for why that removal is the whole ballgame.
+ *
+ * Squared magnitude is returned rather than magnitude: the maximiser is the
+ * same and the square root is not free at N evaluations per golden-section
+ * step. */
+static double rs_phasor_mag(const rs_subap_stack_t *stack, size_t pa, size_t pr,
+                            size_t n_looks, double nu)
+{
+    double sr = 0.0, si = 0.0;
+    for (size_t k = 0; k < n_looks; k++) {
+        const rs_slc_t *im = &stack->look[k];
+        const float complex z = im->data[pa * im->n_rg + pr];
+        const double c = cos(nu * (double)k), s = sin(nu * (double)k);
+        sr += (double)crealf(z) * c + (double)cimagf(z) * s;
+        si += (double)cimagf(z) * c - (double)crealf(z) * s;
+    }
+    return sr * sr + si * si;
+}
+
 /* Median of a scratch array, which this reorders. */
 static int rs_cmp_dbl(const void *a, const void *b)
 {
@@ -351,35 +374,142 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
                      * Use the correlation estimator for motion larger than
                      * that; it has no ambiguity at all. */
                     double amp_sum = 0.0, amp_sq = 0.0;
-                    double ref_re = 0.0, ref_im = 0.0;
                     int ok = 1;
 
                     for (size_t k = 0; k < n_looks && ok; k++) {
                         const rs_slc_t *im = &stack->look[k];
                         if (pa >= im->n_az || pr >= im->n_rg) { ok = 0; break; }
-                        const float complex z = im->data[pa * im->n_rg + pr];
-                        const double a = (double)cabsf(z);
+                        const double a = (double)cabsf(im->data[pa * im->n_rg + pr]);
                         amp_sum += a;
                         amp_sq  += a * a;
-                        /* Amplitude-weighted, so looks in which the scatterer
-                         * faded contribute less to the reference they are all
-                         * measured against. */
-                        ref_re += (double)crealf(z);
-                        ref_im += (double)cimagf(z);
                     }
 
                     if (!ok) goto next_window;
 
+                    /* THE CARRIER MUST COME OFF BEFORE THE PHASE IS WRAPPED, AND
+                     * NOT DOING SO WAS THIS ESTIMATOR'S WHOLE FAILURE.
+                     *
+                     * A scatterer sitting anywhere but exactly at its pixel's
+                     * centre has a range to the platform that changes linearly
+                     * as the aperture sweeps, so its phase in sub-look k is
+                     * linear in k. The rate is (4*pi/lambda) * dX * dx / R --
+                     * platform travel per look times the target's offset from
+                     * the pixel centre, over the slant range -- and it has
+                     * nothing to do with the target moving. Measured on the
+                     * isolated-point fixture at 128 looks it is 1.1 to 1.9
+                     * radians PER LOOK, which is 23 to 39 full cycles across the
+                     * stack.
+                     *
+                     * Wrapping that ramp into (-pi, pi] turns it into a
+                     * SAWTOOTH, and a sawtooth has a strong line at its own
+                     * repetition rate. That line is set by the target's
+                     * sub-pixel offset and by the geometry, so it does not move
+                     * when the scene does: the chain reported one fixed
+                     * frequency for every injection AND for a scene with no
+                     * motion in it, at a prominence higher than any of the
+                     * moving cases. FOLLOW-UPS.md item 11 records it as the
+                     * common-mode artefact that proved the consensus gate blind;
+                     * this is where it came from.
+                     *
+                     * Detrending the DISPLACEMENT series cannot undo it, because
+                     * by then the wrap has already happened and the sawtooth is
+                     * not a trend. The removal has to happen on the phasors.
+                     *
+                     * The rate is the one that maximises the de-ramped phasor
+                     * sum,
+                     *
+                     *     nu = argmax_v | sum_k z[k] * exp(-i*v*k) |
+                     *
+                     * which is the maximum-likelihood frequency of a phasor in
+                     * noise and needs no unwrapping to compute. For a phase
+                     * MODULATED by a zero-mean vibration it returns the carrier
+                     * and leaves the modulation, which is exactly the split
+                     * wanted: the carrier is the geometry, the modulation is the
+                     * target.
+                     *
+                     * THE OBVIOUS CHEAPER ESTIMATOR IS NOT ACCURATE ENOUGH, and
+                     * this was measured rather than assumed. The mean lag-one
+                     * product, nu = arg(sum_k z[k+1]*conj(z[k])), is the
+                     * textbook one-line answer and it carries a bias of order
+                     * beta^2 from the modulation itself: on the isolated-point
+                     * fixture it returned -0.694 rad/look against a true -0.760
+                     * at 64 looks, and -1.879 against -1.909 at 128. Those look
+                     * like small errors and they are not, because the residual
+                     * ramp is the error times the LOOK COUNT: 4.2 radians over
+                     * 64 looks, which wraps, which puts the sawtooth straight
+                     * back. The requirement is error << pi/N, and only a proper
+                     * peak search meets it.
+                     *
+                     * Coarse search over the N Fourier bins, then a
+                     * golden-section refinement inside the winning bin. The
+                     * coarse pass is O(N^2) per window, which is affordable
+                     * because this estimator reads ONE PIXEL per window where
+                     * the correlator does two-dimensional transforms over the
+                     * whole patch, and because rs_microm_estimator_t advises the
+                     * fewest looks that sample the frequency of interest.
+                     *
+                     * IT ALIASES IF THE RAMP EXCEEDS pi RADIANS PER LOOK, which
+                     * is a real limit and not a defect of the estimator: at that
+                     * rate the sub-look series does not sample the target's own
+                     * Doppler, and no processing downstream can recover what was
+                     * not sampled. Fewer looks over a fixed dwell make it worse,
+                     * since the platform travels further between them. */
+                    double nu = 0.0;
+                    {
+                        double best_m = -1.0, nu_c = 0.0;
+                        const double step = 2.0 * M_PI / (double)n_looks;
+                        for (size_t b = 0; b < n_looks; b++) {
+                            /* Signed bin, so the ramp may run either way. */
+                            const double v = step * ((b < n_looks / 2)
+                                                   ? (double)b
+                                                   : (double)b - (double)n_looks);
+                            const double mag = rs_phasor_mag(stack, pa, pr, n_looks, v);
+                            if (mag > best_m) { best_m = mag; nu_c = v; }
+                        }
+                        /* Golden section inside the winning bin. The objective
+                         * is unimodal there, and 40 iterations take the bracket
+                         * far below the pi/N the residual ramp must stay under. */
+                        double lo = nu_c - step, hi = nu_c + step;
+                        const double gr = 0.6180339887498949;
+                        double c1 = hi - gr * (hi - lo), c2 = lo + gr * (hi - lo);
+                        double f1 = rs_phasor_mag(stack, pa, pr, n_looks, c1);
+                        double f2 = rs_phasor_mag(stack, pa, pr, n_looks, c2);
+                        for (int it = 0; it < 40; it++) {
+                            if (f1 > f2) {
+                                hi = c2; c2 = c1; f2 = f1;
+                                c1 = hi - gr * (hi - lo);
+                                f1 = rs_phasor_mag(stack, pa, pr, n_looks, c1);
+                            } else {
+                                lo = c1; c1 = c2; f1 = f2;
+                                c2 = lo + gr * (hi - lo);
+                                f2 = rs_phasor_mag(stack, pa, pr, n_looks, c2);
+                            }
+                        }
+                        nu = 0.5 * (lo + hi);
+                    }
+
+                    /* De-ramped phasors, and the reference they are measured
+                     * against. Amplitude-weighted as before, so looks in which
+                     * the scatterer faded count for less. */
+                    double ref_re = 0.0, ref_im = 0.0;
                     for (size_t k = 0; k < n_looks; k++) {
                         const rs_slc_t *im = &stack->look[k];
                         const float complex z = im->data[pa * im->n_rg + pr];
-                        /* arg(z * conj(reference)), which is the phase relative
-                         * to the mean and is already inside (-pi, pi] with no
-                         * folding needed. */
-                        const double pr_re = (double)crealf(z) * ref_re
-                                           + (double)cimagf(z) * ref_im;
-                        const double pr_im = (double)cimagf(z) * ref_re
-                                           - (double)crealf(z) * ref_im;
+                        const double c_ = cos(nu * (double)k), s_ = sin(nu * (double)k);
+                        ref_re += (double)crealf(z) * c_ + (double)cimagf(z) * s_;
+                        ref_im += (double)cimagf(z) * c_ - (double)crealf(z) * s_;
+                    }
+
+                    for (size_t k = 0; k < n_looks; k++) {
+                        const rs_slc_t *im = &stack->look[k];
+                        const float complex z = im->data[pa * im->n_rg + pr];
+                        const double c_ = cos(nu * (double)k), s_ = sin(nu * (double)k);
+                        const double dr_ = (double)crealf(z) * c_ + (double)cimagf(z) * s_;
+                        const double di_ = (double)cimagf(z) * c_ - (double)crealf(z) * s_;
+                        /* arg(deramped * conj(reference)): the phase relative to
+                         * the mean, already inside (-pi, pi] with no folding. */
+                        const double pr_re = dr_ * ref_re + di_ * ref_im;
+                        const double pr_im = di_ * ref_re - dr_ * ref_im;
                         const double psi = (pr_re != 0.0 || pr_im != 0.0)
                                          ? atan2(pr_im, pr_re) : 0.0;
 

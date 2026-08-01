@@ -150,7 +150,17 @@ catches that. Neither substitutes for the other.
 
 ## State of the work
 
-Nothing here has yet been shown to recover a vibration frequency it was not told. Every
+**`--estimator phase` now recovers** on synthetic fixtures: slope 1.008, rms 0.0070 Hz
+against a half-bin bound of 0.0252, pooled over three clutter seeds with static controls
+outside the swept band (`FOLLOW-UPS.md` item 14). It had returned a fixed 0.407 Hz for
+every injection and for motionless scenes alike, because it wrapped a geometric phase ramp
+of 1.1-1.9 rad per look instead of removing it first. Read item 14's caveats before quoting
+this: it is synthetic, `rs_sim_scene()` has no sub-look decorrelation to speak of, the
+observable wraps beyond ~lambda/4 so it needs a much smaller injected amplitude than the
+correlation fixtures use, and it fails on the dominant-scatterer fixture for reasons
+unknown.
+
+Nothing has been shown to recover a frequency on REAL data. Every
 estimator and reference mode has failed at operating points this project's own
 arithmetic calls admissible; the most recent finding (`FOLLOW-UPS.md` items 7-9) is that
 the tracker does recover the injected carrier in most windows and the *selection policy*

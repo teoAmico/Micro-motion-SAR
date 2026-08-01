@@ -44,9 +44,16 @@ exists and passes its tests:
 - a cross-check of the CPHD reader against SARPy (`tools/sarpy_crosscheck.py`),
   which is the only thing here that tests the parse of a real vendor product
 
-19 tests pass. **Nothing here has yet been shown to recover a vibration frequency it was not
-told.** That is the whole of the work ahead, and no output should be read as a demonstrated
-sensitivity until it is.
+21 tests pass. **The phase estimator recovers injected frequencies on synthetic fixtures**
+— slope 1.008 and rms 0.0070 Hz against a half-bin bound of 0.0252, swept and pooled over
+three clutter seeds, each with a static control that lands outside the swept band. That is
+the first thing here to meet the bar below, and `docs/FOLLOW-UPS.md` item 14 states plainly
+what it is not: the simulator gives every scatterer analytically exact phase, so the
+sub-look decorrelation that most threatens a phase observable is absent by construction.
+
+**Nothing here has been shown to recover a frequency on real data, and the correlation
+estimator has not been shown to recover one anywhere.** No output should be read as a
+demonstrated sensitivity until a real collect says so.
 
 ## The bar
 

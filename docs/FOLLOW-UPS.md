@@ -1529,3 +1529,113 @@ of the ceiling, not its height. And the incumbent's own sweep at seed 7 scores
 slope 0.950 and rms 0.0239, inside the bar, where the same sweep pooled over
 three seeds in `test_cullsweep.c` gives 0.811 and 0.2360: single-seed numbers
 overstate, including the ones in this entry.
+
+---
+
+## 14. The phase estimator was wrapping a ramp it should have removed. It now recovers.
+
+Item 13 closed by naming this the door to the literature's operating point and
+noting it was shut: the phase estimator returned a fixed 0.407 Hz for every
+injection from 0.2 to 0.7 Hz, and the same 0.407 Hz at higher prominence for a
+scene with no motion in it. Twelve operating points had been scanned. It was the
+project's most-investigated negative.
+
+**THE DEFECT.** A scatterer sitting anywhere but exactly at its pixel's centre
+has a range to the platform that changes linearly as the aperture sweeps, so its
+phase in sub-look k is linear in k, at a rate `(4*pi/lambda) * dX * dx / R` --
+platform travel per look, times the offset from the pixel centre, over the slant
+range. Measured on the isolated-point fixture: **1.1 to 1.9 radians per look**,
+which is 23 to 39 full cycles across a 128-look stack, on a scene where nothing
+moves.
+
+Wrapping that ramp into (-pi, pi] makes a **sawtooth**, and a sawtooth has a
+strong line at its own repetition rate. That rate is set by the target's
+sub-pixel offset and by the geometry -- so it does not move when the scene does,
+which is exactly the behaviour recorded: fixed across injections, present on
+static scenes, and "the artefact's value moves with the configuration; it does
+not move with the scene". This is also the common-mode artefact item 11 uses to
+show that the consensus gate is structurally blind. Item 11's conclusion is
+unaffected; its example now has a cause.
+
+Detrending the displacement series cannot undo it. By then the wrap has happened
+and a sawtooth is not a trend. The removal has to happen on the phasors, before
+any angle is taken.
+
+**THE FIX, AND THE ESTIMATOR THAT ALMOST WORKED.** The carrier is removed by
+de-ramping each pixel's phasor series at the frequency that maximises
+`|sum_k z[k] * exp(-i*nu*k)|` -- the maximum-likelihood frequency of a phasor in
+noise, computed with no unwrapping anywhere. For a phase modulated by a zero-mean
+vibration this returns the carrier and leaves the modulation, which is the split
+wanted: the carrier is geometry, the modulation is the target.
+
+The obvious one-line estimator is not good enough, and the margin is instructive.
+The mean lag-one product `arg(sum_k z[k+1]*conj(z[k]))` carries a bias of order
+beta^2 from the modulation itself: it returned -0.694 rad/look against a true
+-0.760 at 64 looks, and -1.879 against -1.909 at 128. Those look like small
+errors. They are not, because the residual ramp is the error times the LOOK
+COUNT -- 4.2 radians over 64 looks, which wraps, which puts the sawtooth straight
+back. With lag-one the chain recovered 0.2, 0.3 and 0.4 Hz and failed at 0.5, 0.6
+and 0.7. The requirement is error << pi/N, and only a proper peak search meets
+it.
+
+**THE RESULT.** Isolated point target, 64 looks at 0.5 overlap, six injections
+plus a static control:
+
+```
+injected  0.20   0.30   0.40   0.50   0.60   0.70   STATIC
+reported  0.203  0.305  0.407  0.508  0.610  0.711  0.051
+slope +1.016, rms 0.0078 Hz against a half-bin bound of 0.0254 Hz
+```
+
+Coherently vibrating clutter, 128 looks at zero overlap, six injections at each
+of three seeds:
+
+```
+seed    7   slope 1.008   rms 0.0070 Hz     static control 3.024 Hz
+seed   23   slope 1.008   rms 0.0070 Hz     static control 2.823 Hz
+seed  101   slope 1.008   rms 0.0070 Hz     static control 1.462 Hz
+per-frequency: 0.302 0.504 0.706 0.907 1.109 1.310 against 0.3 0.5 0.7 0.9 1.1 1.3
+```
+
+Every static control lands outside the swept band, and at a different frequency
+per seed. **This meets the bar in README.md** -- slope near one, rms under half a
+bin, pooled over independent clutter realisations, with a static control through
+identical processing -- and it is the first thing in this project that has.
+
+**WHAT IT IS NOT, AND THESE ARE NOT SMALL.**
+
+*It is synthetic.* `rs_sim_scene()` gives every scatterer analytically exact
+phase. Item 12f established that coherence in this simulator is a property of
+sub-look separation alone and invariant to scene content, which means the
+sub-look decorrelation a real collect imposes -- the very thing that destroys a
+phase series, and the reason the temporal unwrap was removed -- is absent by
+construction. A phase estimator is exactly the observable most exposed to that
+gap. **No real collect has been run through this.**
+
+*It is amplitude-bounded.* The sweeps inject 2.442 mm, a 0.81 radian swing. At
+the 20 mm the correlation fixtures use the swing is 6.6 radians and the estimator
+fails completely -- correctly, since phase wraps beyond lambda/4 of
+line-of-sight motion. Any comparison that puts this estimator on a correlation
+fixture measures the wrap.
+
+*It fails on the dominant-scatterer fixture.* The same sweep on
+`rs_sim_dominant_patch()` at 320 scatterers gives slopes of -0.324, -1.375 and
+-2.477. That fixture was built in item 12f to supply persistent bright
+scatterers, which is the precondition this estimator's own header names, so the
+failure is the opposite of what was expected and is unexplained. Scatterer
+density is the obvious suspect -- 320 against the clutter fixture's 96 -- and it
+is untested.
+
+*Only one selection policy recovers.* `best` (prominence) tracks; the consensus
+and the cull do not, returning slopes of -0.338 on the same spectra. After three
+commits arguing prominence is the weakest policy, it is the one that works here.
+Unexplained, and worth a measurement of its own.
+
+*One configuration.* 128 looks at zero overlap, and 64 at 0.5 for the isolated
+point. No sweep over look count or overlap.
+
+**WHERE THIS LEAVES THE PROJECT.** The sentence "nothing here has been shown to
+recover a vibration frequency it was not told" is no longer true of the phase
+estimator on synthetic data. It remains true of the correlation estimator, and it
+remains true of everything on real data. The next thing is a real collect, and
+the caveats above say what to expect and what to check first.

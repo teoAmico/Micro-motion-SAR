@@ -1,0 +1,2045 @@
+/* ResonarSat command-line driver. */
+
+#include "resonarsat/focus.h"
+#include "resonarsat/geom.h"
+#include "resonarsat/ccd.h"
+#include "resonarsat/validate.h"
+#include "resonarsat/microm.h"
+#include "resonarsat/raster.h"
+#include "resonarsat/simulate.h"
+#include "resonarsat/geocode.h"
+#include "resonarsat/readers.h"
+#include "resonarsat/subaperture.h"
+
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+/* Print the top-level usage summary. */
+static void rs_usage(void)
+{
+    printf(
+"micromotion -- measuring vibration of the ground and of structures\n"
+"               from a single satellite pass\n"
+"\n"
+"  info          print a product's geometry and timing\n"
+"  validate      can this collect support the measurement you want?\n"
+"  focus         form an image from phase history (backprojection)\n"
+"  mmotion       track sub-looks and extract vibration spectra\n"
+"\n"
+"Run 'micromotion <command>' with no arguments for command-specific help.\n");
+}
+
+/* Warn when a grid cell is coarser than the resolution the collect supports.
+ *
+ * Backprojecting onto an under-sampled grid aliases: each scatterer acquires
+ * ghost peaks that look like additional targets. Silence here would mean
+ * shipping artefacts that resemble structure, which is the one failure mode
+ * this project cannot afford, so the warning is unconditional and names the
+ * cell size that would be safe. */
+static void rs_warn_sampling(const rs_cphd_t *cphd, size_t pulse_count, double cell)
+{
+    const double res = rs_focus_azimuth_resolution(cphd, pulse_count);
+    if (res > 0.0 && cell > res) {
+        fprintf(stderr,
+            "warning: grid cell %.3f m is coarser than the %.3f m azimuth\n"
+            "         resolution this collect supports. The image will alias:\n"
+            "         each scatterer gains ghost peaks that resemble real\n"
+            "         targets. Use --cell %.3f or finer, or treat the result\n"
+            "         as deliberately multi-looked.\n",
+            cell, res, res);
+    }
+}
+
+/* Look up a --name value pair in an argument vector, returning the value or
+ * NULL. Keeps the subcommand parsers short; there are few enough options that a
+ * real parser would be more machinery than the problem needs. */
+static const char *rs_opt(int argc, char **argv, const char *name)
+{
+    for (int i = 0; i < argc - 1; i++) {
+        if (strcmp(argv[i], name) == 0) return argv[i + 1];
+    }
+    return NULL;
+}
+
+/* True when a valueless flag such as --no-detrend is present.
+ *
+ * Separate from rs_opt() because that one scans to argc-1, looking for a value
+ * after the name; a flag written last would be missed. */
+static int rs_opt_flag(int argc, char **argv, const char *name)
+{
+    for (int i = 0; i < argc; i++) {
+        if (strcmp(argv[i], name) == 0) return 1;
+    }
+    return 0;
+}
+
+/* As rs_opt(), but parsing the value as a double and falling back to a default
+ * when the option is absent. */
+static double rs_opt_double(int argc, char **argv, const char *name, double fallback)
+{
+    const char *v = rs_opt(argc, argv, name);
+    return v ? atof(v) : fallback;
+}
+
+/* Resolve --no-optimize and say on stderr exactly what it did and did not do.
+ *
+ * One flag rather than three because the audit is only meaningful if the whole
+ * chain is in the same mode, and a caller who has to remember three names will
+ * one day set two of them. The library keeps the settings separate per stage --
+ * rs_focus_opts_t, rs_subap_params_t, rs_microm_params_t -- so nothing here
+ * depends on global mutable state and each stage still documents its own
+ * behaviour; this function is the single place that ties them together.
+ *
+ * The notice is printed, and printed in this much detail, because the flag's name
+ * invites a claim it does not support. "Unoptimized baseline" suggests the
+ * numbers that come out are more trustworthy, and for the backprojection half
+ * that is not merely unsupported but false: the output is bitwise identical, so a
+ * run made with the flag is the same measurement, not a better one. Only the
+ * correlation peak search can move a number. Saying so at the point of use costs
+ * four lines and keeps a comparison from being read as a confirmation. */
+static int rs_opt_no_optimize(int argc, char **argv)
+{
+    if (!rs_opt_flag(argc, argv, "--no-optimize")) return 0;
+
+    fprintf(stderr,
+        "--no-optimize: unoptimised reference mode.\n"
+        "  correlation peak search  WHOLE zero-padded surface, global maximum,\n"
+        "                           instead of one pixel about the integer peak.\n"
+        "                           This is the only change that can move a number.\n"
+        "  backprojection           single-threaded, ascending cell order. The\n"
+        "                           samples are BITWISE IDENTICAL to a threaded run:\n"
+        "                           each cell accumulates privately over pulses in\n"
+        "                           chronological order and no accumulator is shared,\n"
+        "                           so there is no threading drift here to remove.\n"
+        "                           This half is a reproducibility check, not a fix.\n"
+        "  tracking loop            serial, so window visitation order is fixed.\n"
+        "                           Also cannot change a result; windows are\n"
+        "                           independent.\n"
+        "  Measured cost: the exhaustive search is 1.7-3.2x the optimised one per\n"
+        "  call (2.5x at these defaults), and running serially costs about 4x more\n"
+        "  on eight cores. Single digits overall, not orders of magnitude -- this\n"
+        "  is affordable on a full-scale scene.\n"
+        "  A result from this mode is a second measurement by a slower route, to be\n"
+        "  compared with the first -- not a more trustworthy one. Neither passes a\n"
+        "  null test alone.\n");
+    return 1;
+}
+
+/* Report the vibration band an acquisition can observe, and what each choice
+ * costs in azimuth resolution.
+ *
+ * This is the cheapest checkpoint in the whole project and belongs before any
+ * large download: it answers whether the structure of interest is observable at
+ * all, from geometry alone, in about a millisecond. */
+
+/* Write one horizontal slice of a tomogram as an image.
+ *
+ * This is the figure format the published work presents: both display axes are
+ * image coordinates -- azimuth and range -- and the depth is not an axis at all
+ * but a label attached to whichever slice you chose to look at. Understanding
+ * that is most of understanding what a tomogram of this kind shows.
+ *
+ * It follows that every shape in such a picture was inherited from the surface
+ * image geometry. Nothing about an outline was measured from below; the depth
+ * stage only decides which sheet of the stack is displayed, and the metres
+ * printed on that sheet come from the two assumed constants.
+ *
+ * Which makes this a demonstration as well as an export. Render the same
+ * normalised depth under two different assumed wavelengths and the images come
+ * out identical to the byte, while the captions differ by the ratio of the
+ * assumptions. That is the sweep's slope-of-one result expressed as a picture,
+ * and it can be checked with cmp(1) rather than a regression.
+ *
+ * 'depth_m' selects the nearest available slice; the depth actually used is
+ * written back through 'used' and its index through 'index' when non-NULL. */
+
+/* Write a vertical section of a tomogram along a line between two windows.
+ *
+ * This is the other figure the published work presents, and the one its claims
+ * actually rest on: an operator draws a line across the SAR image, and the
+ * section beneath that line is rendered with depth down the vertical axis and
+ * distance along the line across the horizontal.
+ *
+ * Two properties of that presentation are worth being able to reproduce, because
+ * they are easier to demonstrate than to argue.
+ *
+ * The horizontal axis is a count of samples along the line, not a distance, so a
+ * section can be stretched or squeezed horizontally at will. Shape and aspect
+ * ratio are therefore not readable from such a figure: whether a feature looks
+ * like a narrow vertical shaft or a broad blob depends on a display choice, and
+ * a claim about a shaft is a claim about shape. 'n_samp' is exposed for exactly
+ * this reason -- render the same section at two widths and the geometry of every
+ * feature changes while the data does not.
+ *
+ * The vertical axis is oversampled whenever the depth grid is finer than the
+ * resolution the geometry supports. A target that is not resolved in depth
+ * smears along that axis into a vertical streak, which is what an unresolved
+ * point looks like and also what a shaft looks like. Since rs_tomo_params_check()
+ * refuses grids finer than the resolution, a section rendered through this
+ * pipeline cannot manufacture that appearance by interpolation -- which makes it
+ * a fair control for a figure that can.
+ *
+ * The line runs from (az0,rg0) to (az1,rg1) in window indices. Samples are taken
+ * at nearest-neighbour window positions; interpolating between windows would
+ * invent smoothness the measurement does not have. */
+
+/* Load phase history from either the project's interchange format or a real
+ * CPHD 1.x product, chosen by inspecting the file rather than by a flag.
+ *
+ * The two are told apart by their first bytes: a CPHD product begins with the
+ * ASCII text "CPHD/", the interchange format with a binary magic number. Every
+ * command that takes phase history goes through here, so a real collect works
+ * anywhere a simulated one does and the commands themselves stay unaware of the
+ * distinction.
+ *
+ * Real products are read with a range window, because they are not sized for
+ * memory: the reference collect is 3.8 GB of signal over a 7 km swath, of which
+ * the sub-aperture stage uses a few hundred metres. See rs_cphd_read_opts_t.
+ *
+ * 'pulse_stride' keeps every nth pulse. It was for a time accepted on the
+ * command line, documented in the out-of-memory message below, and then
+ * discarded here in favour of a hard-coded 0 -- so runs that passed it read the
+ * whole collect anyway, at full azimuth resolution, and aliased when that
+ * resolution was rendered onto a coarse grid. Striding is a real cost and is
+ * reported rather than applied quietly: it lowers the effective PRF, and with it
+ * the vibration frequency the sub-aperture stage can reach without aliasing. */
+static resonarsat_status_t rs_load_cphd(rs_cphd_t *c, const char *path, size_t rbin_window,
+                                        size_t pulse_stride, size_t max_pulses)
+{
+    char probe[5] = { 0 };
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        rs_set_error("cannot open %s", path);
+        return RS_ERR_IO;
+    }
+    const size_t n = fread(probe, 1, sizeof probe, f);
+    fclose(f);
+
+    if (n == sizeof probe && memcmp(probe, "CPHD/", 5) == 0) {
+        const rs_cphd_read_opts_t o = { .rbin_window = rbin_window,
+                                        .pulse_stride = pulse_stride,
+                                        .max_pulses = max_pulses };
+        const resonarsat_status_t st = rs_read_cphd(path, &o, c);
+        if (st == RS_OK && pulse_stride > 1) {
+            fprintf(stderr,
+                "warning: --pulse-stride %zu keeps every %zuth pulse, lowering the\n"
+                "         effective PRF to %.2f Hz and the observable vibration\n"
+                "         band with it. Acceptable for a registration image;\n"
+                "         not for a measurement run.\n",
+                pulse_stride, pulse_stride, c->prf);
+
+            /* And it bounds how far from the motion-compensation reference the
+             * grid may extend, which is the part that bites silently.
+             *
+             * Azimuth sampling at PRF is unambiguous only over
+             * lambda*R*PRF/(2V) of ground. Beyond that the spectrum folds and
+             * the image does not degrade gracefully -- it fills with aliased
+             * energy that looks exactly like speckle, so a grid placed past the
+             * limit comes back plausible and empty. A whole-scene registration
+             * sweep is precisely where this happens, because the natural
+             * instinct on a slow backprojection is to raise the stride and
+             * widen the grid at the same time, and the two limits move in
+             * opposite directions. The figure is printed here so the caller can
+             * compare it against the grid they are about to ask for. */
+            const double R = (c->r_near > 0.0) ? c->r_near : 0.0;
+            /* Mean speed straight off the recorded track, rather than an
+             * assumed orbital value: the whole point of the figure is that it
+             * describes THIS collect. */
+            double V = 0.0;
+            if (c->n_pulse > 1 && c->pos && c->t) {
+                const size_t last = c->n_pulse - 1;
+                const double dt = c->t[last] - c->t[0];
+                const double dx = c->pos[3 * last + 0] - c->pos[0];
+                const double dy = c->pos[3 * last + 1] - c->pos[1];
+                const double dz = c->pos[3 * last + 2] - c->pos[2];
+                if (dt > 0.0) V = sqrt(dx * dx + dy * dy + dz * dz) / dt;
+            }
+            if (c->lambda > 0.0 && R > 0.0 && V > 0.0 && c->prf > 0.0) {
+                const double extent = c->lambda * R * c->prf / (2.0 * V);
+                fprintf(stderr,
+                    "         At this PRF the unambiguous azimuth extent is\n"
+                    "         %.0f m (+/-%.0f m from the scene reference). A grid\n"
+                    "         wider than that aliases into something that still\n"
+                    "         looks like speckle.\n", extent, 0.5 * extent);
+            }
+        }
+        return st;
+    }
+    if (pulse_stride > 1) {
+        fprintf(stderr, "warning: --pulse-stride applies to CPHD products only; "
+                        "ignored for this input\n");
+    }
+    return rs_cphd_read(c, path);
+}
+
+/* Parse --reference and --b-shift, which together select how master and slave
+ * sub-bands are paired.
+ *
+ * These are read before the stack is built, because 'pair' decides whether the
+ * slave bands are synthesised at all. Returns the reference mode; on an unknown
+ * name it reports and returns -1.
+ *
+ * Shared by mmotion and tomo so the two cannot drift apart on a choice that
+ * determines what the displacement series is. */
+static int rs_parse_reference(int argc, char **argv, rs_subap_params_t *sp)
+{
+    sp->b_shift_hz = rs_opt_double(argc, argv, "--b-shift", 0.0);
+
+    int ref = RS_MICROM_REF_FIRST;
+    const char *name = rs_opt(argc, argv, "--reference");
+    if (name) {
+        if      (strcmp(name, "first") == 0)    ref = RS_MICROM_REF_FIRST;
+        else if (strcmp(name, "adjacent") == 0) ref = RS_MICROM_REF_ADJACENT;
+        else if (strcmp(name, "pair") == 0)     ref = RS_MICROM_REF_PAIR;
+        else if (strcmp(name, "lag") == 0)      ref = RS_MICROM_REF_LAG;
+        else {
+            fprintf(stderr, "unknown --reference '%s'; expected first, "
+                            "adjacent, pair or lag\n", name);
+            return -1;
+        }
+    }
+    sp->pair = (ref == RS_MICROM_REF_PAIR);
+
+    if (sp->b_shift_hz > 0.0 && !sp->pair) {
+        fprintf(stderr,
+            "warning: --b-shift %g Hz sets the master-slave separation, which\n"
+            "         only has an effect under --reference pair. Ignored here.\n",
+            sp->b_shift_hz);
+    }
+    return ref;
+}
+
+/* Fill the tomographic geometry from the collect that was actually loaded.
+ *
+ * rs_tomo_params_default() carries the simulator's geometry -- 500 km slant,
+ * 75 km aperture, 35 degrees -- and before this existed those defaults survived
+ * into every run, including runs on real products whose geometry is nothing
+ * like them. On simulated input the defaults happened to match the simulator, so
+ * nothing disagreed and the substitution stayed invisible. The consequence on a
+ * real collect is that the depth resolution, the unambiguous extent and every
+ * absolute depth are computed for a scene that was not observed.
+ *
+ * All three quantities are already implied by the phase history. The slant range
+ * is the reference range at the middle of the dwell. The aperture is the
+ * straight-line distance the phase centre travelled between the first and last
+ * pulse. The incidence angle follows from the platform position expressed in the
+ * scene frame, whose z axis is the reference surface normal: the angle between
+ * the line of sight and that normal.
+ *
+ * Explicit --range, --aperture and --incidence still win, so a caller can force
+ * a geometry deliberately, but they are no longer required to avoid a wrong one
+ * silently. */
+
+/* Apply explicit geometry overrides from the command line, after
+ * rs_tomo_geometry_from_cphd() has taken what the collect implies. */
+
+/* Print a focused product's geometry and timing, and flag anything implausible.
+ *
+ * Azimuth sampling rate and transmit PRF are printed as separate labelled
+ * fields, deliberately: conflating them is the specific error the data model
+ * exists to prevent, and showing both makes a substitution visible. */
+static int rs_cmd_info(int argc, char **argv)
+{
+    if (argc < 2) {
+        printf("usage: resonarsat info --uavsar SLC --ann ANN\n"
+               "       resonarsat info --cphd FILE\n"
+               "       resonarsat info --sicd FILE.nitf\n");
+        return 1;
+    }
+
+    const char *sicd_path = rs_opt(argc, argv, "--sicd");
+    if (sicd_path) {
+        rs_slc_t img;
+        const resonarsat_status_t sst = rs_read_sicd(sicd_path, &img);
+        if (sst != RS_OK) { rs_report_error("info", sst); return 1; }
+        printf("source              %s (focused image)\n", img.source);
+        printf("dimensions          %zu azimuth x %zu range\n", img.n_az, img.n_rg);
+        printf("carrier             %.4f GHz\n", img.fc / 1e9);
+        printf("wavelength          %.4f m\n", img.lambda);
+        printf("azimuth spacing     %.4f m\n", img.az_spacing_m);
+        printf("range spacing       %.4f m\n", img.rg_spacing_m);
+        printf("slant range         %.1f km\n", img.r0 / 1000.0);
+        printf("incidence           %.2f deg\n", img.incidence * 180.0 / M_PI);
+        printf("platform speed      %.1f m/s\n", img.v_platform);
+        printf("collect duration    %.3f s\n", img.t_dwell);
+        const resonarsat_status_t vst = rs_slc_validate(&img);
+        if (vst != RS_OK) {
+            fprintf(stderr, "\nwarning: %s\n", rs_last_error());
+        }
+        if (img.plane.valid) {
+            double la, lo, he;
+            if (rs_geo_plane_llh(&img.plane, 0.0, 0.0, &la, &lo, &he) == RS_OK) {
+                printf("\nscene corners (WGS 84)%s:\n",
+                       img.plane.is_slant ? ", by range-Doppler" : "");
+                const struct { const char *name; double a, r; } pts[] = {
+                    { "first az, first rg", 0.0, 0.0 },
+                    { "last az,  first rg", (double)(img.n_az - 1), 0.0 },
+                    { "first az, last rg ", 0.0, (double)(img.n_rg - 1) },
+                    { "last az,  last rg ", (double)(img.n_az - 1), (double)(img.n_rg - 1) },
+                };
+                for (size_t k = 0; k < 4; k++) {
+                    double ecf[3];
+                    if (rs_geo_plane_point(&img.plane,
+                                           pts[k].a * img.az_spacing_m,
+                                           pts[k].r * img.rg_spacing_m, ecf) != RS_OK) {
+                        continue;
+                    }
+
+                    /* A slant-plane grid carries the right range and Doppler but
+                     * the wrong height; range-Doppler puts it on the ground. */
+                    if (img.plane.is_slant) {
+                        double g[3];
+                        if (rs_geo_slant_to_ground(img.plane.sensor, img.plane.sensor_vel,
+                                                   ecf, img.plane.ref_hae, g) == RS_OK) {
+                            memcpy(ecf, g, sizeof ecf);
+                        }
+                    }
+                    if (rs_geo_ecf_to_llh(ecf, &la, &lo, &he) == RS_OK) {
+                        printf("  %s  %10.6f, %11.6f   %7.1f m\n",
+                               pts[k].name, la, lo, he);
+                    }
+                }
+                double cecf[3];
+                if (rs_geo_plane_point(&img.plane,
+                                       0.5 * (double)img.n_az * img.az_spacing_m,
+                                       0.5 * (double)img.n_rg * img.rg_spacing_m,
+                                       cecf) == RS_OK) {
+                    if (img.plane.is_slant) {
+                        double g[3];
+                        if (rs_geo_slant_to_ground(img.plane.sensor, img.plane.sensor_vel,
+                                                   cecf, img.plane.ref_hae, g) == RS_OK) {
+                            memcpy(cecf, g, sizeof cecf);
+                        }
+                    }
+                    if (rs_geo_ecf_to_llh(cecf, &la, &lo, &he) == RS_OK) {
+                        printf("  centre              %10.6f, %11.6f   %7.1f m\n", la, lo, he);
+                    }
+                }
+            }
+        }
+
+        printf("\nThis product is already focused. Sub-apertures come from spectral\n"
+               "splitting (rs_subaperture_split), which is the route the published\n"
+               "method describes: transform, band-pass, inverse transform, track.\n");
+        rs_slc_free(&img);
+        return 0;
+    }
+
+    const char *cphd_path = rs_opt(argc, argv, "--cphd");
+    if (cphd_path) {
+        rs_cphd_t c;
+        const size_t rbin_window = (size_t)rs_opt_double(argc, argv, "--rbins", 0.0);
+        resonarsat_status_t st = rs_load_cphd(&c, cphd_path, rbin_window,
+                       (size_t)rs_opt_double(argc, argv, "--pulse-stride", 0.0),
+                       (size_t)rs_opt_double(argc, argv, "--max-pulses", 0.0));
+        if (st != RS_OK) { rs_report_error("info", st); return 1; }
+
+        printf("source              phase history (unfocused)\n");
+        printf("pulses              %zu\n", c.n_pulse);
+        printf("range bins          %zu\n", c.n_rbin);
+        printf("carrier             %.4f GHz\n", c.fc / 1e9);
+        printf("wavelength          %.4f m\n", c.lambda);
+        printf("transmit PRF        %.2f Hz    (NOT the vibration sampling rate)\n", c.prf);
+        printf("dwell               %.3f s\n", c.t[c.n_pulse - 1] - c.t[0]);
+        printf("near range          %.1f m\n", c.r_near);
+        printf("range bin spacing   %.4f m\n", c.dr);
+        printf("\nThis product carries no image. Run 'resonarsat focus' first;\n"
+               "quicklook and the processing stages need a focused product.\n");
+        rs_cphd_free(&c);
+        return 0;
+    }
+
+    const char *slc = rs_opt(argc, argv, "--uavsar");
+    const char *ann = rs_opt(argc, argv, "--ann");
+    if (!slc || !ann) {
+        fprintf(stderr, "info: --uavsar requires --ann\n");
+        return 1;
+    }
+
+    rs_slc_t img;
+    resonarsat_status_t st = rs_read_uavsar(slc, ann, &img);
+    if (st != RS_OK) { rs_report_error("info", st); return 1; }
+
+    printf("source              %s\n", img.source);
+    printf("dimensions          %zu azimuth x %zu range\n", img.n_az, img.n_rg);
+    printf("carrier             %.4f GHz\n", img.fc / 1e9);
+    printf("wavelength          %.4f m\n", img.lambda);
+    printf("azimuth line rate   %.3f Hz    (1/azimuth_time_interval)\n", img.fs_az);
+    printf("transmit PRF        %.3f Hz    (diagnostic only)\n", img.pulse_prf);
+    printf("azimuth spacing     %.4f m\n", img.az_spacing_m);
+    printf("range spacing       %.4f m\n", img.rg_spacing_m);
+    printf("platform speed      %.2f m/s\n", img.v_platform);
+    printf("dwell               %.3f s\n", img.t_dwell);
+
+    double fdc = 0.0, bw = 0.0;
+    if (rs_estimate_doppler_centroid(&img, &fdc) == RS_OK)
+        printf("Doppler centroid    %.3f Hz  (measured from data)\n", fdc);
+    if (rs_estimate_doppler_bandwidth(&img, 0.5, &bw) == RS_OK)
+        printf("Doppler bandwidth   %.3f Hz  (-3 dB, measured)\n", bw);
+
+    rs_slc_free(&img);
+    return 0;
+}
+
+/* Build a sub-look stack by the route the caller asked for.
+ *
+ * WHY THIS EXISTS. There are two ways to divide an aperture, they are not
+ * interchangeable, and for most of this project's life only one of them was
+ * reachable.
+ *
+ *   "pulse"    Focus n_looks shifted windows of the phase history. The aperture
+ *              is divided in TIME, so every timing quantity comes off the
+ *              recorded pulse times and none is inferred. Exact by construction.
+ *
+ *   "uniform"  Focus the full aperture once, then split the focused image's
+ *              Doppler spectrum into equal sub-bands.
+ *
+ *   "paper"    Focus the full aperture once, then apply the decomposition of
+ *              Biondi & Malanga (2022) section 3.1: hold out a fraction B_DL of
+ *              the Doppler band and step the remainder across the spectrum in
+ *              rigid shifts. The paper credits the held-out band with providing
+ *              "a sufficient sensitivity to estimate target motions", so it is
+ *              not a detail -- it is the stage the method's motion sensitivity
+ *              is attributed to.
+ *
+ * The default remains "pulse". It is the better measurement and it is what the
+ * end-to-end test exercises. But defaulting to it while describing this project
+ * as a reimplementation of the paper overstated the correspondence: every real
+ * result here was produced with a uniform filter bank the paper does not use.
+ *
+ * A CAVEAT THAT APPLIES TO BOTH SPECTRAL ROUTES. They need the focused image's
+ * azimuth sampling rate to map bands to times, and for a BACKPROJECTED image
+ * that quantity is nominal: rs_focus_backproject() derives it from the grid as
+ * t_dwell/(n_x-1), because a focused image's azimuth axis is spatial rather
+ * than temporal. Relative band positions are therefore trustworthy and the
+ * absolute time step between sub-looks is not, which makes the recovered
+ * vibration FREQUENCY axis uncertain by whatever that mapping is wrong by.
+ * Coherence and detection strength do not depend on it; reported frequencies
+ * do. The paper starts from a vendor-focused SLC carrying real azimuth timing
+ * and does not face this. */
+static resonarsat_status_t rs_build_subaps(const rs_cphd_t *c, const rs_grid_t *grid,
+                                           rs_subap_params_t *sp, const char *route,
+                                           rs_subap_stack_t *stack)
+{
+    if (!route || strcmp(route, "pulse") == 0) {
+        sp->mode = RS_SUBAP_UNIFORM;
+        return rs_subaperture_from_cphd(c, grid, sp, stack);
+    }
+
+    if (strcmp(route, "paper") == 0) {
+        sp->mode = RS_SUBAP_PAPER;
+    } else if (strcmp(route, "uniform") == 0) {
+        sp->mode = RS_SUBAP_UNIFORM;
+    } else {
+        rs_set_error("subap route '%s' is not pulse, uniform or paper", route);
+        return RS_ERR_ARG;
+    }
+
+    /* The spectral routes need a focused image first. Splitting one requires at
+     * least twice as many azimuth lines as looks, which is checked there and
+     * reported rather than silently reducing the look count. */
+    rs_slc_t full;
+    resonarsat_status_t st = rs_slc_alloc(&full, grid->n_x, grid->n_y);
+    if (st != RS_OK) return st;
+
+    fprintf(stderr, "subap route '%s': focusing the full aperture first ...\n", route);
+    {
+        const rs_focus_opts_t fopts = { .single_thread = sp->single_thread,
+                                        .range_taps = sp->range_taps };
+        st = rs_focus_backproject_opts(c, grid, 0, c->n_pulse, &fopts, &full);
+    }
+    if (st != RS_OK) { rs_slc_free(&full); return st; }
+
+    st = rs_subaperture_split(&full, sp, stack);
+    rs_slc_free(&full);
+    return st;
+}
+
+/* Parse "--offset X,Y" into a grid origin, in metres from the scene centre.
+ *
+ * WHY THIS EXISTS. The processing grid is smaller than the collect: a 2048-cell
+ * grid at 1 m covers 2.0 km of a 4 km scene, and hard-coding the origin at zero
+ * silently restricts every command to the middle quarter. That is invisible in
+ * the output -- the image looks complete, because it IS a complete image of
+ * somewhere -- and it is the failure that makes a target near the scene edge
+ * come back empty while appearing to have been processed.
+ *
+ * Structures worth pointing this software at are rarely at the scene centre,
+ * because the scene was framed by whoever tasked the collect and not by whoever
+ * is analysing it. So the origin is an input.
+ *
+ * 'x' runs along the platform track and 'y' across it, matching rs_grid_t; the
+ * pair is therefore in the scene's own planar frame rather than in north/east,
+ * and a caller converting from geodetic coordinates has to go through the image
+ * plane. A NULL or malformed specification leaves the origin at the scene
+ * centre, which is the historical behaviour. */
+static void rs_parse_offset(const char *spec, double origin[3])
+{
+    origin[0] = origin[1] = origin[2] = 0.0;
+    if (!spec || !*spec) return;
+
+    char buf[128];
+    snprintf(buf, sizeof buf, "%s", spec);
+    char *comma = strchr(buf, ',');
+    if (!comma) {
+        fprintf(stderr, "warning: --offset needs X,Y in metres; ignoring '%s'\n", spec);
+        return;
+    }
+    *comma = '\0';
+    origin[0] = atof(buf);
+    origin[1] = atof(comma + 1);
+}
+
+/* Resolve "--at LAT,LON" against the product's own image plane, overriding
+ * --offset when present.
+ *
+ * WHY THE PLAIN OFFSET IS NOT ENOUGH. The frame --offset speaks is the file's:
+ * CPHD's uIAX/uIAY, SICD's row and column vectors. Those axes point where the
+ * collector chose, so converting a place into them by assuming north/east, or
+ * azimuth/ground-range, produces a number that is wrong in a way no output
+ * reveals -- the image is a complete, well-focused image of the wrong ground.
+ * That happened on this project's own Giza runs, whose manifests recorded a
+ * hand-derived Khufu offset roughly 900 m from the pyramid; the geodetic values
+ * in data/README.md were right and were overridden as though measured.
+ *
+ * Giving the coordinates instead makes the product do the conversion, which it
+ * can do exactly. Returns non-zero on a malformed specification or a product
+ * that carries no plane, so the caller can refuse rather than silently fall
+ * back to a grid centred somewhere else. */
+static int rs_resolve_at(const char *spec, const rs_geo_plane_t *plane,
+                         double origin[3])
+{
+    if (!spec || !*spec) return 0;
+
+    char buf[128];
+    snprintf(buf, sizeof buf, "%s", spec);
+    char *comma = strchr(buf, ',');
+    if (!comma) {
+        fprintf(stderr, "--at needs LAT,LON in degrees; got '%s'\n", spec);
+        return 1;
+    }
+    *comma = '\0';
+    const double lat = atof(buf), lon = atof(comma + 1);
+
+    if (!plane || !plane->valid) {
+        fprintf(stderr, "--at needs the product's image plane, which this input "
+                        "does not carry; use --offset X,Y instead\n");
+        return 1;
+    }
+
+    double x = 0.0, y = 0.0;
+    const resonarsat_status_t st =
+        rs_geo_plane_offset(plane, lat, lon, plane->ref_hae, &x, &y);
+    if (st != RS_OK) {
+        rs_report_error("--at", st);
+        return 1;
+    }
+    origin[0] = x;
+    origin[1] = y;
+    printf("--at %.6f,%.6f resolves to --offset %.0f,%.0f in this product's "
+           "image plane\n", lat, lon, x, y);
+    return 0;
+}
+
+/* Form an image from phase history. */
+static int rs_cmd_focus(int argc, char **argv)
+{
+    const char *in = rs_opt(argc, argv, "--cphd");
+    const char *out = rs_opt(argc, argv, "--out");
+    if (!in || !out) {
+        printf("usage: resonarsat focus --cphd FILE --out FILE.png\n"
+               "                       [--size N] [--cell M] [--offset X,Y | --at LAT,LON]\n"
+               "                       [--pulse-start N --pulse-count N] [--raw FILE]\n"
+               "                       [--rbins N] [--max-pulses N] [--pulse-stride N]\n"
+               "                       [--range-taps N] [--no-optimize]\n"
+               "\n"
+               "--rbins reads a window of range bins and --max-pulses caps how many\n"
+               "pulses are READ, not merely used. A large collect will not fit in\n"
+               "memory otherwise: --pulse-count limits focusing but the whole\n"
+               "collect is still loaded first.\n"
+               "\n"
+               "--pulse-stride keeps every nth pulse. It does NOT coarsen azimuth\n"
+               "resolution: the aperture still spans the same dwell, so resolution\n"
+               "is unchanged and only the sampling within it thins, folding azimuth\n"
+               "ambiguities into the image. It lowers the effective PRF and so the\n"
+               "observable vibration band, which is why no measurement run may use\n"
+               "it.\n"
+               "\n"
+               "To coarsen resolution instead -- the honest way to match a large\n"
+               "grid cell, since focusing at full resolution onto cells far larger\n"
+               "than it aliases into ghost peaks that resemble targets -- shorten\n"
+               "the aperture with --max-pulses. The warning this command prints\n"
+               "names the cell the collect actually supports.\n"
+               "\n"
+               "The grid is centred on the scene reference point unless --offset\n"
+               "moves it, in metres on the product's own image plane. A grid\n"
+               "smaller than the collect otherwise silently covers only the\n"
+               "middle of it. Output format follows the extension: .png or .pgm.\n"
+               "\n"
+               "--at LAT,LON places the grid on a known place instead, and is the\n"
+               "safer of the two. The axes --offset speaks are the FILE's (CPHD's\n"
+               "uIAX/uIAY), which point where the collector chose -- not north and\n"
+               "east, and not azimuth and ground range. Converting coordinates into\n"
+               "them by hand yields a number that is wrong in a way the output\n"
+               "cannot reveal, because a misplaced grid still produces a complete,\n"
+               "well-focused image OF THE WRONG GROUND. --at makes the product do\n"
+               "the conversion, and prints the offset it resolved to.\n");
+        return 1;
+    }
+
+    rs_cphd_t c;
+    const size_t rbin_window = (size_t)rs_opt_double(argc, argv, "--rbins", 0.0);
+    resonarsat_status_t st = rs_load_cphd(&c, in, rbin_window,
+                       (size_t)rs_opt_double(argc, argv, "--pulse-stride", 0.0),
+                       (size_t)rs_opt_double(argc, argv, "--max-pulses", 0.0));
+    if (st != RS_OK) { rs_report_error("focus", st); return 1; }
+
+    const size_t size = (size_t)rs_opt_double(argc, argv, "--size", 256);
+    const double cell = rs_opt_double(argc, argv, "--cell", 1.0);
+
+    rs_grid_t grid = { .n_x = size, .n_y = size,
+                       .dx = cell, .dy = cell, .height = 0.0 };
+    rs_parse_offset(rs_opt(argc, argv, "--offset"), grid.origin);
+    if (rs_resolve_at(rs_opt(argc, argv, "--at"), &c.plane, grid.origin)) {
+        rs_cphd_free(&c); return 1;
+    }
+
+    const size_t p_start = (size_t)rs_opt_double(argc, argv, "--pulse-start", 0);
+    const size_t p_count = (size_t)rs_opt_double(argc, argv, "--pulse-count",
+                                                 (double)c.n_pulse);
+
+    rs_slc_t img;
+    if ((st = rs_slc_alloc(&img, grid.n_x, grid.n_y)) != RS_OK) {
+        rs_report_error("focus", st); rs_cphd_free(&c); return 1;
+    }
+
+    rs_warn_sampling(&c, p_count, cell);
+    printf("backprojecting %zu pulses onto %zux%zu cells of %.2f m ...\n",
+           p_count, grid.n_y, grid.n_x, cell);
+
+    const rs_focus_opts_t fopts = {
+        .single_thread = rs_opt_no_optimize(argc, argv),
+        .range_taps = (int)rs_opt_double(argc, argv, "--range-taps", 0.0)
+    };
+    if (fopts.range_taps >= 4) {
+        printf("range interpolation: %d-tap windowed sinc "
+               "(default is 2-tap linear)\n", fopts.range_taps);
+    }
+    st = rs_focus_backproject_opts(&c, &grid, p_start, p_count, &fopts, &img);
+    if (st != RS_OK) {
+        rs_report_error("focus", st);
+        rs_slc_free(&img); rs_cphd_free(&c);
+        return 1;
+    }
+
+    /* The quicklook is a 40 dB log stretch clipped at the 99th percentile,
+     * which is right for looking at a scene and wrong for measuring one: bright
+     * scatterers saturate, so a point-spread function measured off it comes out
+     * broader than it is, by an unknown factor. --raw writes the amplitudes
+     * themselves so resolution can be measured rather than estimated. */
+    const double dyn = rs_opt_double(argc, argv, "--dyn-range", 40.0);
+    st = rs_raster_write_quicklook(&img, out, dyn);
+
+    const char *raw = rs_opt(argc, argv, "--raw");
+    if (raw) {
+        double *amp = malloc(img.n_az * img.n_rg * sizeof *amp);
+        if (amp) {
+            for (size_t i = 0; i < img.n_az * img.n_rg; i++) {
+                amp[i] = (double)cabsf(img.data[i]);
+            }
+            /* The tag rides in the axis description because that is the only
+             * free-text field the .hdr sidecar has. A raw cube is the input to
+             * every measurement made off this image, so which arithmetic produced
+             * it has to travel with the pixels -- a bare .f32 carries nothing. */
+            if (rs_raster_write_cube(amp, img.n_az, img.n_rg, 1, raw,
+                                     fopts.single_thread
+                                       ? "azimuth, range, amplitude [UNOPTIMIZED]"
+                                       : "azimuth, range, amplitude") == RS_OK) {
+                printf("wrote %s (%zu x %zu float32 amplitudes) and %s.hdr\n",
+                       raw, img.n_az, img.n_rg, raw);
+            }
+            free(amp);
+        }
+    }
+    if (st != RS_OK) rs_report_error("focus", st);
+    else printf("wrote %s\n", out);
+
+    rs_slc_free(&img);
+    rs_cphd_free(&c);
+    return st == RS_OK ? 0 : 1;
+}
+
+/* Warn that a shuffled null floor does not bound a phase measurement.
+ *
+ * "Only the ordering is destroyed" holds for an observable each look carries on
+ * its own. Phase is unwrapped ACROSS looks, so a permutation sets
+ * non-consecutive looks side by side -- exactly where the series steps furthest
+ * -- and inflates the per-step noise the test exists to hold constant. Measured
+ * on the Giza collect at 128 looks and 0.99 overlap: median largest step 0.052
+ * rad in order against 1.878 rad shuffled, a factor of 36. A drifting series
+ * then beats its own shuffles by construction, and one did, at p = 0.03, while
+ * eight motionless simulations reproduced its frequency at 99 percent of its
+ * prominence.
+ *
+ * Printed rather than refused, because the floor is still worth seeing and a
+ * caller may want it for comparison. What must not happen is a reader taking it
+ * for a bound it is not, which is why this sits next to the number rather than
+ * only in the header. See rs_microm_estimator_t and
+ * runs/giza/2026-07-30-uniform-phase-khufu/. */
+static void rs_warn_shuffle_null_on_phase(rs_microm_estimator_t est)
+{
+    if (est != RS_MICROM_EST_PHASE) return;
+    printf("  WARNING: this is a PHASE measurement, and a shuffle does not bound\n"
+           "           one. Unwrapping runs ACROSS looks, so reordering inflates\n"
+           "           the per-step noise the test is meant to hold fixed -- 36x\n"
+           "           on the Giza collect -- and a drifting series beats its own\n"
+           "           shuffles whatever it contains. This floor is not a bound.\n"
+           "           Use --null-static, which a motionless scene carries the\n"
+           "           same overlap, unwrap and detrend through and so cannot\n"
+           "           walk over.\n");
+}
+
+/* Permute the time order of a sub-aperture stack in place, for a null test.
+ *
+ * On synthetic data a null test is easy: generate the scene again with nothing
+ * moving and see what the pipeline claims anyway. Real data offers no such
+ * control -- the motion, whatever it is, cannot be switched off. Shuffling the
+ * looks supplies the missing control from the other direction. Scene content,
+ * brightness, coherence, speckle, geometry and the number of looks are all
+ * exactly preserved; the only thing destroyed is the order in which the looks
+ * were taken, and that ordering is the entire basis of a vibration measurement.
+ *
+ * So a peak that survives the shuffle was never temporal. It is the spectrum of
+ * a fixed spatial pattern being read out in some order, and the prominence it
+ * scores is the floor that a genuine detection has to clear. This is the same
+ * question bug 15 was about, asked where no second scene can be generated.
+ *
+ * 'seed' selects the permutation so a run can be repeated. The centre times are
+ * deliberately left alone: the sampling grid must stay uniform, or the spectrum
+ * would change for a second reason and the test would no longer be clean. */
+static void rs_shuffle_looks(rs_subap_stack_t *stack, unsigned seed)
+{
+    if (!stack || stack->n_looks < 2) return;
+    unsigned st = seed ? seed : 1u;
+    for (size_t i = stack->n_looks - 1; i > 0; i--) {
+        /* xorshift keeps the permutation reproducible across platforms, which
+         * rand() would not. */
+        st ^= st << 13; st ^= st >> 17; st ^= st << 5;
+        const size_t j = (size_t)(st % (unsigned)(i + 1));
+        const rs_slc_t tmp = stack->look[i];
+        stack->look[i] = stack->look[j];
+        stack->look[j] = tmp;
+    }
+}
+
+/* Measure the null floor by repeated shuffling, and report the margin.
+ *
+ * NOT VALID FOR RS_MICROM_EST_PHASE. This holds everything but the time order
+ * constant only for an observable that reads each look independently. A phase
+ * series is unwrapped ACROSS looks, so reordering -- which sets non-consecutive
+ * looks side by side -- inflates the very per-step noise the test is supposed to
+ * preserve: 0.052 rad in order against 1.878 rad shuffled on the Giza collect at
+ * 128 looks and 0.99 overlap, a factor of 36. A drifting phase series then beats
+ * its own shuffles by construction, and one did, at p = 0.03, while a motionless
+ * simulation reproduced its frequency at 99 percent of its prominence. Use
+ * rs_null_static() for phase. See rs_microm_estimator_t and
+ * runs/giza/2026-07-30-uniform-phase-khufu/.
+ *
+ * Loads nothing and focuses nothing: the caller's stack is reused, so a trial
+ * costs a track and a spectrum rather than another read and range compression
+ * of a multi-gigabyte collect. That matters because a floor is only as good as
+ * the number of samples behind it, and a floor built from a handful of trials
+ * misleads. Thirteen trials of one Melbourne configuration put every null below
+ * the real measurement; forty-nine put one above it, and the margin over the
+ * worst null went from 1.08 to 0.96. The tail is the whole question, so trials
+ * have to be cheap enough to run in bulk.
+ *
+ * Each trial shuffles again from wherever the previous one left the stack. Any
+ * permutation is as good as any other for this purpose, so there is no need to
+ * restore the original order between trials.
+ *
+ * Returns RS_OK and writes the mean, standard deviation and maximum prominence
+ * over 'trials' shuffles, plus how many reached 'real'. */
+static resonarsat_status_t rs_null_floor(rs_subap_stack_t *stack,
+                                         const rs_microm_params_t *mp,
+                                         size_t trials, double real, double f_min,
+                                         double *mean, double *sd, double *max_out,
+                                         size_t *n_ge)
+{
+    if (!stack || !mp || trials == 0) return RS_ERR_ARG;
+
+    double sum = 0.0, sum2 = 0.0, hi = 0.0;
+    size_t n = 0, ge = 0;
+
+    for (size_t i = 0; i < trials; i++) {
+        rs_shuffle_looks(stack, (unsigned)(i * 2654435761u + 1u));
+
+        rs_microm_t m;
+        if (rs_microm_track(stack, mp, &m) != RS_OK) continue;
+
+        rs_spectrum_t sp;
+        if (rs_spectrum_compute_band(&m, RS_SPEC_VELOCITY, f_min, &sp) == RS_OK) {
+            size_t best = 0;
+            double prom = 0.0;
+            const resonarsat_status_t bst = rs_spectrum_best_window(&sp, &best, &prom, NULL);
+            /* A trial in which nothing cleared the quantisation floor is a
+             * trial that produced NO detection, and that is a sample of the
+             * null distribution rather than a missing one. Recording it as zero
+             * keeps it in the count; dropping it would retain only the trials
+             * that happened to produce something and inflate the null. */
+            if (bst == RS_OK || bst == RS_ERR_RANGE) {
+                if (bst != RS_OK) prom = 0.0;
+                sum += prom;
+                sum2 += prom * prom;
+                if (prom > hi) hi = prom;
+                if (prom >= real) ge++;
+                n++;
+            }
+            rs_spectrum_free(&sp);
+        }
+        rs_microm_free(&m);
+    }
+
+    if (n == 0) return RS_ERR_SINGULAR;
+    *mean = sum / (double)n;
+    const double var = sum2 / (double)n - (*mean) * (*mean);
+    *sd = var > 0.0 ? sqrt(var) : 0.0;
+    *max_out = hi;
+    *n_ge = ge;
+    return RS_OK;
+}
+
+/* Measure the null floor from a STATIC SIMULATED SCENE, not from a shuffle.
+ *
+ * The shuffled floor above answers "is there temporal structure". That is the
+ * wrong question for an overlapping decomposition, which manufactures temporal
+ * structure regardless of the ground: adjacent sub-looks sharing most of their
+ * bandwidth share most of their speckle, so their shifts are correlated before
+ * anything moves, the series is smooth by construction, and shuffling destroys
+ * exactly that smoothness. The unshuffled series then wins for a reason that is
+ * not motion.
+ *
+ * This floor answers "is there more than a motionless world would give through
+ * this same processing". Each trial synthesises phase history for static
+ * scatterers over the reference collect's own geometry and runs the identical
+ * chain -- same sub-aperture route, same tracker, same estimator -- so overlap,
+ * tracker bias and estimator behaviour are all inherited. Only the motion is
+ * missing.
+ *
+ * It costs far more than a shuffle: every trial refocuses. That is the price of
+ * a floor that a heavily overlapped decomposition cannot walk over.
+ *
+ * Returns RS_OK and writes the mean, standard deviation and maximum prominence
+ * over 'trials' realisations, plus how many reached 'real'. */
+static resonarsat_status_t rs_null_static(const rs_cphd_t *ref, const rs_grid_t *grid,
+                                          rs_subap_params_t *sp, const char *route,
+                                          const rs_microm_params_t *mp,
+                                          size_t trials, double real, double f_min,
+                                          size_t sim_rbin, double extent_m,
+                                          double *mean, double *sd, double *max_out,
+                                          size_t *n_ge)
+{
+    if (!ref || !grid || !sp || !mp || trials == 0) return RS_ERR_ARG;
+
+    double sum = 0.0, sum2 = 0.0, hi = 0.0;
+    size_t n = 0, ge = 0;
+
+    for (size_t i = 0; i < trials; i++) {
+        rs_cphd_t sim;
+        const double centre[2] = { grid->origin[0], grid->origin[1] };
+        if (rs_simulate_static_like(ref, (unsigned)(i + 1), 0, centre, extent_m,
+                                    sim_rbin, &sim) != RS_OK) {
+            continue;
+        }
+
+        rs_subap_stack_t st;
+        if (rs_build_subaps(&sim, grid, sp, route, &st) == RS_OK) {
+            rs_microm_t m;
+            if (rs_microm_track(&st, mp, &m) == RS_OK) {
+                rs_spectrum_t spx;
+                if (rs_spectrum_compute_band(&m, RS_SPEC_VELOCITY, f_min, &spx) == RS_OK) {
+                    size_t best = 0;
+                    double prom = 0.0;
+                    const resonarsat_status_t bst =
+                        rs_spectrum_best_window(&spx, &best, &prom, NULL);
+                    /* As above: nothing resolved is a null sample of zero, not
+                     * a trial to discard. */
+                    if (bst == RS_OK || bst == RS_ERR_RANGE) {
+                        if (bst != RS_OK) prom = 0.0;
+                        sum += prom; sum2 += prom * prom;
+                        if (prom > hi) hi = prom;
+                        if (prom >= real) ge++;
+                        n++;
+                        if (bst == RS_OK) {
+                            fprintf(stderr, "  static trial %zu/%zu: prominence %.1f "
+                                            "at %.3f Hz\n",
+                                    i + 1, trials, prom, spx.dominant_freq[best]);
+                        } else {
+                            fprintf(stderr, "  static trial %zu/%zu: nothing resolved "
+                                            "above the quantisation floor\n",
+                                    i + 1, trials);
+                        }
+                    }
+                    rs_spectrum_free(&spx);
+                }
+                rs_microm_free(&m);
+            }
+            rs_subap_stack_free(&st);
+        }
+        rs_cphd_free(&sim);
+    }
+
+    if (n == 0) return RS_ERR_SINGULAR;
+    *mean = sum / (double)n;
+    const double var = sum2 / (double)n - (*mean) * (*mean);
+    *sd = var > 0.0 ? sqrt(var) : 0.0;
+    *max_out = hi;
+    *n_ge = ge;
+    return RS_OK;
+}
+
+/* Run the full micro-motion chain on a phase-history file.
+ *
+ * Focus, decompose into sub-looks, track, and estimate spectra. Prints the
+ * observable band and the resolution it cost on the same line, since reporting
+ * either alone is how the trade gets misread. */
+static int rs_cmd_mmotion(int argc, char **argv)
+{
+    const char *in = rs_opt(argc, argv, "--cphd");
+    if (!in) {
+        printf("usage: resonarsat mmotion --cphd FILE [--n N] [--overlap F]\n"
+               "                          [--offset X,Y | --at LAT,LON]\n"
+               "                          [--subap pulse|uniform|paper]\n"
+               "                          [--no-detrend] [--null-static N]\n"
+               "                          [--estimator correlation|phase|splitband]\n"
+               "                          [--shuffle-looks SEED] [--null-trials N]\n"
+               "                          [--fmin HZ]\n"
+               "                          [--reference first|adjacent|pair|lag]\n"
+               "                          [--lag N]\n"
+               "                          [--b-shift HZ] [--shifts FILE.csv]\n"
+               "                          [--upsample N]\n"
+               "                          [--size N] [--cell M] [--win N]\n"
+               "                          [--coherence F] [--out PREFIX]\n"
+               "                          [--ccd-out PREFIX] [--ccd-win N]\n"
+               "                          [--ccd-loading F]\n"
+               "                          [--no-optimize]\n"
+               "\n"
+               "--ccd-out runs the scale-invariant change-detection LOCATOR over\n"
+               "the same sub-aperture stack and writes a map. It answers 'where in\n"
+               "this scene is something moving', not 'at what frequency' -- a\n"
+               "different question from everything else this command does, and one\n"
+               "that does not need the tracker to succeed. The statistic's\n"
+               "no-change value is 1.0; a bright but STATIONARY target scores near\n"
+               "1.0 too, which is the point of it. It has no detection threshold:\n"
+               "compare a map against one from a motionless scene before reading\n"
+               "structure into it. --ccd-win sets the sliding window (default 5)\n"
+               "and --ccd-loading the noise floor as a fraction of mean scene\n"
+               "power (default 1e-3; zero shows the unregularised behaviour).\n"
+               "\n"
+               "--no-optimize is an audit baseline, not a better measurement. It\n"
+               "searches the WHOLE upsampled correlation surface for the peak instead\n"
+               "of the neighbourhood of the integer peak, and runs serially. Only the\n"
+               "first of those can change a number; backprojection is bitwise identical\n"
+               "either way (see rs_focus_opts_t). Measured cost is 2.5x per correlator\n"
+               "call at these defaults plus about 4x for losing the threads -- single\n"
+               "digits, so it is affordable on a full-scale scene.\n"
+               "\n"
+               "--coherence masks windows whose sub-looks do not correlate (default\n"
+               "0.4). Isolated point targets on an empty scene score below that even\n"
+               "when tracking perfectly; pass 0 to inspect an unmasked result.\n"
+               "\n"
+               "--reference selects which images each correlation is taken between.\n"
+               "'first' (default) compares every look to look 0. 'pair' compares each\n"
+               "look's slave to its own master, the two held --b-shift apart and swept\n"
+               "together, which is what WO2024008365A1 and the Giza paper describe.\n"
+               "'adjacent' accumulates consecutive differences.\n"
+               "\n"
+               "NEITHER 'pair' NOR 'adjacent' RECOVERS A FREQUENCY on the synthetic\n"
+               "single-target fixture: both return the lowest spectral bin whatever is\n"
+               "injected. 'pair' is exposed because it is what the sources describe and\n"
+               "it should be testable, not because it works. Do not read a measurement\n"
+               "out of either. See rs_microm_ref_t.\n"
+               "\n"
+               "--b-shift sets the master-slave separation in Hz and needs --subap\n"
+               "paper and --reference pair. Zero derives it from the sweep step. The\n"
+               "gap is a time lag, so a larger --b-shift observes a LOWER mechanical\n"
+               "frequency. 'pair' measures a difference across that lag, which\n"
+               "high-passes the series: amplitudes are attenuated by |2 sin(pi f dt)|\n"
+               "and are not comparable to 'first'.\n"
+               "\n"
+               "AT THE DEFAULT --b-shift THE PAIR IS DEGENERATE: the separation equals\n"
+               "the sweep step, so each slave IS its neighbour's master, sample for\n"
+               "sample, and 'pair' reduces to differencing consecutive looks. The band\n"
+               "layout holds one step of headroom, so any --b-shift that makes the\n"
+               "slave a distinct band must be SMALLER than the step -- a shorter lag,\n"
+               "and a weaker difference. Larger values are refused.\n"
+               "\n"
+               "--shifts writes the raw per-look shift series to CSV before detrending\n"
+               "or any spectral estimation. Use it with sim_cphd --clutter to tell a\n"
+               "real low-frequency motion from correlator bias: the spectrum cannot\n"
+               "separate them, the series can.\n"
+               "\n"
+               "--upsample N locates the correlation peak to 1/N of a pixel, which is\n"
+               "also the QUANTISATION of the reported series. A motion whose excursion\n"
+               "is under one step comes back as a two-level series whose energy sits at\n"
+               "low frequency regardless of what drove it. Check the peak-to-peak in\n"
+               "--shifts against 1/N before believing any lowest-bin result.\n");
+        return 1;
+    }
+
+    const char *prefix = rs_opt(argc, argv, "--out");
+
+    rs_cphd_t c;
+    const size_t rbin_window = (size_t)rs_opt_double(argc, argv, "--rbins", 0.0);
+    resonarsat_status_t st = rs_load_cphd(&c, in, rbin_window,
+                       (size_t)rs_opt_double(argc, argv, "--pulse-stride", 0.0),
+                       (size_t)rs_opt_double(argc, argv, "--max-pulses", 0.0));
+    if (st != RS_OK) { rs_report_error("mmotion", st); return 1; }
+
+    const size_t size = (size_t)rs_opt_double(argc, argv, "--size", 128);
+    const double cell = rs_opt_double(argc, argv, "--cell", 1.0);
+    rs_grid_t grid = { .n_x = size, .n_y = size,
+                       .dx = cell, .dy = cell, .height = 0.0 };
+    rs_parse_offset(rs_opt(argc, argv, "--offset"), grid.origin);
+    if (rs_resolve_at(rs_opt(argc, argv, "--at"), &c.plane, grid.origin)) {
+        rs_cphd_free(&c); return 1;
+    }
+
+    rs_warn_sampling(&c, c.n_pulse, cell);
+
+    /* Resolved before the sub-apertures are built, because that is the stage it
+     * first has to reach. */
+    const int no_optimize = rs_opt_no_optimize(argc, argv);
+
+    rs_subap_params_t sp;
+    rs_subap_params_default(&sp);
+    sp.n_looks = (size_t)rs_opt_double(argc, argv, "--n", 16);
+    sp.overlap = rs_opt_double(argc, argv, "--overlap", 0.40);
+    sp.single_thread = no_optimize;
+    sp.range_taps = (int)rs_opt_double(argc, argv, "--range-taps", 0.0);
+    if (sp.range_taps >= 4) {
+        printf("range interpolation: %d-tap windowed sinc\n", sp.range_taps);
+    }
+    const int ref_mode = rs_parse_reference(argc, argv, &sp);
+    if (ref_mode < 0) { rs_cphd_free(&c); return 1; }
+    const char *subap_route = rs_opt(argc, argv, "--subap");
+    if (!subap_route && ref_mode == RS_MICROM_REF_PAIR) subap_route = "paper";
+
+    /* Pair mode is defined by two Doppler filters and therefore selects the
+     * paper route when the caller did not choose a route explicitly. */
+    rs_subap_stack_t stack;
+    if ((st = rs_build_subaps(&c, &grid, &sp, subap_route, &stack)) != RS_OK) {
+        rs_report_error("mmotion", st); rs_cphd_free(&c); return 1;
+    }
+
+    rs_microm_params_t mp;
+    rs_microm_params_default(&mp);
+    mp.reference = (rs_microm_ref_t)ref_mode;
+    mp.ref_lag   = (size_t)rs_opt_double(argc, argv, "--lag", 1.0);
+    mp.no_optimize = no_optimize;
+    {
+        /* --estimator selects WHAT is measured, not merely how well. Phase and
+         * correlation live in different regimes; see rs_microm_estimator_t.
+         *
+         * Read before the shuffle below rather than after it, because whether a
+         * shuffled floor bounds anything depends on the answer, and the caveat
+         * belongs beside the notice rather than several screens later. */
+        const char *est = rs_opt(argc, argv, "--estimator");
+        if (est) {
+            if (strcmp(est, "phase") == 0)            mp.estimator = RS_MICROM_EST_PHASE;
+            else if (strcmp(est, "correlation") == 0) mp.estimator = RS_MICROM_EST_CORRELATION;
+            else if (strcmp(est, "splitband") == 0)   mp.estimator = RS_MICROM_EST_SPLITBAND;
+            else fprintf(stderr, "warning: unknown --estimator '%s'; "
+                                 "using correlation\n", est);
+        }
+    }
+
+    const unsigned shuffle = (unsigned)rs_opt_double(argc, argv, "--shuffle-looks", 0.0);
+    if (shuffle) {
+        rs_shuffle_looks(&stack, shuffle);
+        printf("NULL TEST: sub-look time order shuffled with seed %u. Scene, coherence\n"
+               "  and geometry are unchanged; only the ordering is destroyed. Whatever\n"
+               "  prominence appears below is the floor, not a detection.\n", shuffle);
+        rs_warn_shuffle_null_on_phase(mp.estimator);
+    }
+
+    printf("sub-apertures: %zu looks, dt %.4f s\n", stack.n_looks, stack.dt);
+    printf("  observable band  f_max %.2f Hz   AT sub-look resolution %.2f m\n",
+           stack.f_max, stack.az_resolution);
+
+    /* The change-detection locator, run here rather than beside the other
+     * outputs at the end of this function.
+     *
+     * Placement is deliberate. It needs only the sub-aperture stack, and every
+     * Giza run so far has exited at the spectrum stage with RS_ERR_RANGE --
+     * honestly, because no window resolved motion -- which is upstream of the
+     * --out block. A locator written down there would never run on precisely
+     * the scenes it exists to say something about. See rs_ccd_t. */
+    {
+        const char *ccd_out = rs_opt(argc, argv, "--ccd-out");
+        if (ccd_out) {
+            rs_ccd_params_t cp;
+            rs_ccd_params_default(&cp);
+            const double cw = rs_opt_double(argc, argv, "--ccd-win", 0.0);
+            if (cw > 0.0) cp.win = (size_t)cw;
+            const double cl = rs_opt_double(argc, argv, "--ccd-loading", -1.0);
+            if (cl >= 0.0) cp.loading = cl;
+
+            rs_ccd_t ccd;
+            if (rs_ccd_locate(&stack, &cp, &ccd) != RS_OK) {
+                rs_report_error("mmotion", RS_ERR_ARG);
+            } else {
+                /* Reported rather than only written, because the map's absolute
+                 * level is the whole of its meaning: 1.0 is the no-change value,
+                 * and a map whose median sits there has found nothing however
+                 * structured its picture looks. */
+                double lo = 0.0, hi = 0.0, sum = 0.0;
+                size_t n = 0;
+                for (size_t p = 0; p < ccd.n_row * ccd.n_col; p++) {
+                    const double v = ccd.map[p];
+                    /* The border is not computed and holds zero; seeding the
+                     * extremes from it reported a minimum of 0.000 for every
+                     * scene, which reads as a pixel where the statistic
+                     * collapsed rather than one that was never evaluated. */
+                    if (v <= 0.0) continue;
+                    if (n == 0 || v < lo) lo = v;
+                    if (n == 0 || v > hi) hi = v;
+                    sum += v; n++;
+                }
+                printf("CCD locator: %zux%zu window over %zu sub-aperture triples\n",
+                       cp.win, cp.win, ccd.n_triples);
+                printf("  statistic  min %.3f  mean %.3f  max %.3f   "
+                       "(1.000 is the no-change value)\n",
+                       lo, n ? sum / (double)n : 0.0, hi);
+                printf("  A MAP IS NOT EVIDENCE WITHOUT A FLOOR. The source method\n"
+                       "  implements no detection threshold; compare against a\n"
+                       "  motionless scene through this same chain before reading\n"
+                       "  structure into it.\n");
+
+                char path[512];
+                snprintf(path, sizeof path, "%s_ccd.png", ccd_out);
+                rs_raster_write_map(ccd.map, ccd.n_row, ccd.n_col,
+                                    path, 0.0, 0.0, RS_PALETTE_VIRIDIS);
+                snprintf(path, sizeof path, "%s_ccd.f32", ccd_out);
+                rs_raster_write_cube(ccd.map, 1, ccd.n_row, ccd.n_col, path,
+                                     "axes row (grid x), col (grid y); "
+                                     "scale-invariant CCD statistic, 1 = no change");
+                printf("wrote %s_ccd.png and %s_ccd.f32\n", ccd_out, ccd_out);
+                rs_ccd_free(&ccd);
+            }
+        }
+    }
+
+    mp.win_az = mp.win_rg = (size_t)rs_opt_double(argc, argv, "--win", 32);
+    mp.stride_az = mp.stride_rg = mp.win_az / 2;
+    mp.coherence_min = rs_opt_double(argc, argv, "--coherence", 0.4);
+
+    /* Sub-pixel refinement factor, exposed because it is a FLOOR on what can be
+     * measured and not merely a precision setting.
+     *
+     * The correlation peak is located to 1/upsample of a pixel, so the shift
+     * series is quantised at that step. Any motion whose apparent excursion is
+     * smaller than one step comes back as a series that is constant, or that
+     * flips between two adjacent levels -- and a two-level series has its
+     * energy at low frequency whatever drove the flips. That is
+     * indistinguishable, in the spectrum, from a drift.
+     *
+     * It binds hardest on --reference pair. That observable is a difference
+     * across one fixed lag, so its excursion is smaller than the full
+     * displacement by roughly 2*sin(pi*f*dt), and at the default upsampling a
+     * pair series can sit entirely inside one quantisation step while the same
+     * scene measured against a fixed reference does not. Raising this is the
+     * first thing to try before concluding the pair carries no signal.
+     *
+     * The cost is quadratic in the refinement window, so it is left at the
+     * published default rather than raised globally. */
+    {
+        const double up = rs_opt_double(argc, argv, "--upsample", 0.0);
+        if (up > 0.0) {
+            mp.upsample_az = (size_t)up;
+            mp.upsample_rg = (size_t)up;
+            printf("sub-pixel refinement: 1/%zu px "
+                   "(default 1/%d azimuth, 1/%d range)\n",
+                   mp.upsample_az, 10, 20);
+        }
+    }
+
+    rs_microm_t m;
+    if ((st = rs_microm_track(&stack, &mp, &m)) != RS_OK) {
+        rs_report_error("mmotion", st);
+        rs_subap_stack_free(&stack); rs_cphd_free(&c);
+        return 1;
+    }
+    size_t n_pass = 0;
+    for (size_t w = 0; w < m.n_win; w++) if (m.quality[w] >= mp.coherence_min) n_pass++;
+    printf("tracked %zu windows (%zu x %zu); %zu pass the %.2f coherence mask\n",
+           m.n_win, m.n_win_az, m.n_win_rg, n_pass, mp.coherence_min);
+    if (n_pass == 0) {
+        printf("  no window is coherent enough to carry a measurement. Any\n"
+               "  frequency reported below is tracking noise, not a mode.\n");
+    }
+
+    /* Raw per-look shifts, dumped BEFORE any spectral estimation.
+     *
+     * WHY THIS IS SEPARATE FROM EVERY OTHER OUTPUT. Everything else this command
+     * prints has been through rs_spectrum_compute(): detrended, windowed,
+     * periodogrammed, and reduced to one dominant frequency per window. That
+     * chain is where a weak observable becomes indistinguishable from a biased
+     * one -- a slowly varying correlator bias and a genuine low-frequency motion
+     * both end up as energy in the lowest bins, and no amount of staring at the
+     * spectrum separates them.
+     *
+     * The shift series itself does separate them. A real sinusoid at f is
+     * visible in the raw series as a sinusoid; correlator bias is monotone or
+     * smoothly curved across the sweep, because it follows the sub-look's own
+     * point response rather than the scene. Writing the series out is what makes
+     * that a matter of looking rather than of argument.
+     *
+     * This is the measurement RS_MICROM_REF_PAIR needs. Its samples are first
+     * differences across a fixed lag, so they are small by construction, and
+     * whether they are dominated by bias is precisely the open question in
+     * rs_microm_ref_t. Pair it with sim_cphd --clutter, which removes the
+     * empty-window confound that makes the bias largest. */
+    {
+        const char *shift_out = rs_opt(argc, argv, "--shifts");
+        if (shift_out) {
+            FILE *sf = fopen(shift_out, "w");
+            if (!sf) {
+                rs_report_error("mmotion", RS_ERR_IO);
+            } else {
+                fprintf(sf, "# raw tracked shifts, before detrend or spectrum\n");
+                fprintf(sf, "# reference=%s b_shift_hz=%.12g pair_lag_s=%.12g "
+                            "dt_s=%.12g looks=%zu\n",
+                        (mp.reference == RS_MICROM_REF_PAIR) ? "pair" :
+                        (mp.reference == RS_MICROM_REF_ADJACENT) ? "adjacent" :
+                        (mp.reference == RS_MICROM_REF_LAG)      ? "lag"      : "first",
+                        stack.b_shift_hz, stack.pair_lag_s, stack.dt, stack.n_looks);
+                /* disp_los and phase are written too, because without them this
+                 * file cannot describe a phase run at all: that estimator
+                 * leaves disp_az and disp_rg identically zero, so the three
+                 * original columns showed nothing but the differenced velocity
+                 * and a diagnostic dump could not see the primary observable. */
+                fprintf(sf, "window,look,centre_time_s,disp_az_px,disp_rg_px,"
+                            "vel_los_ms,disp_los_m,phase_rad,quality\n");
+                for (size_t w = 0; w < m.n_win; w++) {
+                    for (size_t k = 0; k < m.n_looks; k++) {
+                        const size_t idx = w * m.n_looks + k;
+                        fprintf(sf, "%zu,%zu,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.6f\n",
+                                w, k,
+                                (k < stack.n_looks) ? stack.centre_time[k] : 0.0,
+                                m.disp_az[idx], m.disp_rg[idx], m.vel_los[idx],
+                                m.disp_los[idx], m.phase[idx],
+                                m.quality[w]);
+                    }
+                }
+                fclose(sf);
+                printf("wrote %s (%zu windows x %zu looks, pre-spectrum)\n",
+                       shift_out, m.n_win, m.n_looks);
+            }
+        }
+    }
+
+    const double f_min = rs_opt_double(argc, argv, "--fmin", 0.0);
+    if (f_min > 0.0) {
+        printf("band floor: ignoring bins below %.3f Hz when picking the peak\n", f_min);
+    }
+
+    /* WHICH OBSERVABLE THE SPECTRUM IS TAKEN OF DEPENDS ON THE ESTIMATOR, and
+     * getting it wrong costs a whole spectrum's worth of meaning.
+     *
+     * Correlation measures WHERE a patch sits, and a radially moving target is
+     * displaced in azimuth by dx = R*v/V -- so the tracked shift is
+     * proportional to VELOCITY, and 'vel_los' is the natural observable.
+     *
+     * Phase measures displacement directly, d = -psi*lambda/(4*pi). Feeding the
+     * spectrum 'vel_los' there differentiates it first, and a derivative
+     * multiplies each Fourier component by its own frequency -- which turns
+     * flat noise into blue noise and puts the peak at the top of the band for
+     * no physical reason. Measured on the Giza control: the same series gives a
+     * median dominant frequency of 20.7 Hz through velocity, with 47 of 49
+     * windows above 12 Hz, and 0.53 Hz through displacement, with none above
+     * 12 Hz. The 20.7 Hz was an artefact of differencing. */
+    const rs_spectrum_source_t src = (mp.estimator == RS_MICROM_EST_PHASE)
+                                   ? RS_SPEC_DISPLACEMENT : RS_SPEC_VELOCITY;
+    if (mp.estimator == RS_MICROM_EST_PHASE) {
+        printf("spectrum taken of line-of-sight DISPLACEMENT, which is what the "
+               "phase estimator measures directly\n");
+    }
+
+    rs_spectrum_t spec;
+    if ((st = rs_spectrum_compute_opts(&m, src, f_min,
+                                 rs_opt_flag(argc, argv, "--no-detrend")
+                                     ? RS_DETREND_NONE : RS_DETREND_LINEAR,
+                                 &spec)) != RS_OK) {
+        rs_report_error("mmotion", st);
+        rs_microm_free(&m); rs_subap_stack_free(&stack);
+        rs_cphd_free(&c);
+        return 1;
+    }
+
+    printf("spectra: %zu bins, %.4f Hz resolution\n", spec.n_freq, spec.df);
+
+    /* Report the window with the most prominent spectral peak.
+     *
+     * Not the largest displacement excursion: that selects the NOISIEST window,
+     * because noise excursions exceed real ones, and it is why this command
+     * previously returned the same answer whatever motion was injected. Not the
+     * highest tracking coherence either: that selects static ground. Prominence
+     * asks whether a window's motion concentrates at one frequency, which is the
+     * question being posed. */
+    size_t best = 0;
+    double prom = 0.0;
+    size_t n_cand = 0;
+    {
+        /* The real status, not a substituted one. This reported RS_ERR_ARG
+         * whatever went wrong, which hid the message the failing call had
+         * already written -- and the interesting case now is RS_ERR_RANGE,
+         * meaning no window resolved motion above the tracker's own
+         * resolution. That is a result about the scene, so it is worth saying
+         * plainly rather than as a generic argument error. */
+        const resonarsat_status_t bst =
+            rs_spectrum_best_window(&spec, &best, &prom, &n_cand);
+        if (bst != RS_OK) {
+            rs_report_error("mmotion", bst);
+            if (bst == RS_ERR_RANGE) {
+                fprintf(stderr,
+                    "  No frequency is reported because none is supported by the\n"
+                    "  data, which is a different statement from finding none.\n"
+                    "  Raise --upsample to resolve a smaller excursion, or check\n"
+                    "  with --shifts whether the series moves at all.\n");
+            }
+            rs_spectrum_free(&spec); rs_microm_free(&m);
+            rs_subap_stack_free(&stack); rs_cphd_free(&c);
+            return 1;
+        }
+    }
+
+    double pp = 0.0;
+    {
+        double lo = m.vel_los[best * m.n_looks], hi = lo;
+        for (size_t k = 1; k < m.n_looks; k++) {
+            const double v = m.vel_los[best * m.n_looks + k];
+            if (v < lo) lo = v;
+            if (v > hi) hi = v;
+        }
+        pp = hi - lo;
+    }
+
+    double cons_hz = 0.0;
+    size_t cons_agree = 0, cons_distinct = 0, cons_vote = 0, cons_block = 0;
+    double qmax_rep = 0.0;
+    for (size_t w = 0; w < spec.n_win; w++) {
+        if (spec.quality[w] > qmax_rep) qmax_rep = spec.quality[w];
+    }
+    (void)rs_spectrum_consensus(&spec, &cons_hz, &cons_agree, &cons_distinct,
+                                &cons_vote, &cons_block);
+
+    /* THE GATE. Refuse to report a frequency when the windows do not agree.
+     *
+     * AN EARLIER VERSION GATED ON CONTIGUITY INSTEAD, and it was wrong. The
+     * argument was that a largest 4-connected block under four cannot be a
+     * spatially resolved mode, since overlapping windows put a resolvable
+     * target in a 2x2 block at minimum -- a bound from the window layout rather
+     * than a constant anyone chose. That provenance is real and it does not
+     * survive contact with the data: at the documented working operating point
+     * the consensus returned 0.302, 0.504 and 0.706 Hz against injections of
+     * 0.3, 0.5 and 0.7 Hz, with 75%, 80% and 67% of windows agreeing, and a
+     * largest block of 3 refused all three. Windows drop out of the vote for
+     * other reasons -- the coherence gate, the quantisation floor -- so three
+     * contiguous agreeing windows is exactly what a 2x2 block looks like when
+     * one corner is excluded.
+     *
+     * Agreement separates the measured cases and contiguity does not. Correct
+     * recoveries run 47-80%; motionless scenes and wrong answers run 11-16%,
+     * with no overlap across the eight cases measured. So the gate is the
+     * statistic that discriminates, not the one with the better-sounding
+     * derivation, and the contiguity figure is reported beside it.
+     *
+     * THE THRESHOLD IS TUNED and its evidence is thin -- eight cases, one
+     * fixture family, two seeds. It is one third because that is where the two
+     * populations separate with room on either side, not because anything
+     * derives it.
+     *
+     * Refusing rather than reporting-with-a-caveat follows the precedent
+     * rs_spectrum_best_window() set one stage down, where falling back to
+     * window zero was replaced by an error: an absent measurement and a wrong
+     * one are not the same answer. Everything needed to second-guess this is in
+     * PREFIX_windows.csv. */
+    const int gated = (cons_vote > 0 &&
+                       (double)cons_agree < (1.0 / 3.0) * (double)cons_vote);
+
+    if (gated) {
+        printf("NO FREQUENCY REPORTED: only %zu of %zu windows agree (%.0f%%), "
+               "which is what a\n"
+               "  MOTIONLESS scene produces. Diagnostics only, NOT a "
+               "measurement -- strongest\n"
+               "  window %zu: %.3f Hz, prominence %.1f, quality %.3f, "
+               "peak-to-peak velocity %.1f mm/s\n",
+               cons_agree, cons_vote, 100.0 * (double)cons_agree / (double)cons_vote,
+               best, spec.dominant_freq[best], prom, spec.quality[best], pp * 1e3);
+    } else {
+        printf("strongest peak in window %zu: %.3f Hz, prominence %.1f, "
+               "quality %.3f, peak-to-peak velocity %.1f mm/s\n",
+               best, spec.dominant_freq[best], prom, spec.quality[best], pp * 1e3);
+    }
+
+    /* Is the winner even inside the band the sub-apertures can carry?
+     *
+     * Each sub-aperture averages the motion over its own duration, so the
+     * series carries nothing above 1/(2*t_sap) however finely overlap samples
+     * it. Reporting a peak from beyond that is reporting an artefact: on a
+     * motionless scene the uniform route at 0.88 overlap returns 1.569 Hz here
+     * at prominence 27.9, against a t_sap of 1.002 s that reaches 0.499 Hz.
+     * Prominence cannot be used to notice -- across the measured set it runs
+     * ANTI-correlated with correctness -- so the check has to be this one. */
+    if (stack.t_sap > 0.0) {
+        const double f_band = 1.0 / (2.0 * stack.t_sap);
+        if (spec.dominant_freq[best] >= f_band) {
+            printf("  WARNING: that is above %.3f Hz, the most this %.4f s "
+                   "sub-aperture\n  can carry. Overlap samples the series more "
+                   "finely but does not widen\n  the band. A peak from beyond "
+                   "it is an artefact of the processing,\n  not a property of "
+                   "the scene -- a motionless target produces one too.\n",
+                   f_band, stack.t_sap);
+        }
+    }
+
+    /* How many windows were eligible, printed beside the winner rather than
+     * left implicit.
+     *
+     * The floor is three sigma for ONE window and is applied to every window
+     * independently, so the chance that something crosses it on quantisation
+     * noise alone rises with the grid. On the Giza collect the identical chain
+     * refused honestly at 225 windows and reported "0.183 Hz, prominence 29.9"
+     * at 961, off two crossings -- the observable was the same in both, only
+     * the number of tries changed. A reader given the count sees that; a reader
+     * given the prominence alone does not. See rs_spectrum_best_window(). */
+    /* Name the gates that actually ran. The count is taken after BOTH the
+     * relative coherence gate and the quantisation floor, and the floor is
+     * skipped entirely when 'quant_px' is zero -- which is the phase
+     * estimator's value, since it has no correlation surface. Reporting "126 of
+     * 225 cleared the quantisation floor" on a phase run would name the one
+     * gate that did not run: those 99 exclusions were the coherence gate. */
+    printf("  %zu of %zu windows were eligible for selection (coherence gate%s)\n",
+           n_cand, spec.n_win,
+           (spec.quant_px > 0.0) ? " and quantisation floor"
+                                 : "; the floor does not apply to this estimator");
+
+    /* What the windows AGREE on, beside what the most prominent one said. The
+     * two answer different questions and can differ: measured on a 3.000 Hz
+     * injection, 23 of 49 windows made 2.995 Hz their top bin while the single
+     * most prominent window reported 2.604 Hz. A fragmented vote looks like a
+     * motionless scene, which is the uncertainty a single window's argmax
+     * cannot express. */
+    {
+        const double cf = cons_hz;
+        const size_t n_agree = cons_agree, n_distinct = cons_distinct;
+        const size_t n_vote = cons_vote, n_block = cons_block;
+        if (n_vote > 0) {
+            printf("  consensus: %.3f Hz, agreed by %zu of %zu voting windows "
+                   "(%.0f%%), %zu distinct answers, largest contiguous block %zu\n",
+                   cf, n_agree, n_vote, 100.0 * (double)n_agree / (double)n_vote,
+                   n_distinct, n_block);
+            /* The geometric bound, not a tuned one: overlapping windows put a
+             * resolvable target in a 2x2 block at minimum, so a largest block
+             * below four cannot be a spatially resolved mode. */
+            if (n_block > 0 && n_block < 4) {
+                printf("  WARNING: the agreeing windows are SCATTERED (largest "
+                       "block %zu < 4).\n"
+                       "           Windows overlap at the tracking stride, so a "
+                       "resolvable mode\n"
+                       "           occupies a 2x2 block at minimum. This is the "
+                       "shape of coincidence.\n", n_block);
+            }
+            /* One third, on the agreement share rather than the distinct
+             * count -- the share separated the measured cases cleanly where the
+             * count did not. Synthetic fixtures with known ground truth put
+             * correct recoveries at 47-61% and everything wrong, including
+             * motionless scenes, at 14-29%.
+             *
+             * THE EVIDENCE UNDER THIS CONSTANT IS THIN: three correct
+             * detections, one seed, one fixture family. It warns rather than
+             * gates for that reason, and rs_spectrum_consensus() applies no
+             * threshold at all so a caller is never silently bound by it. */
+            /* The agreement gate above already refused this case; nothing
+             * further to warn about here. */
+        }
+    }
+    if (spec.quant_px > 0.0 && n_cand > 0 && n_cand < 4) {
+        printf("  WARNING: windows overlap at the tracking stride, so a target\n"
+               "           large enough to resolve falls in a 2x2 block of them\n"
+               "           at minimum. Fewer than four qualifying windows cannot\n"
+               "           describe a spatially resolved mode, and is the\n"
+               "           signature of a threshold crossed by chance across\n"
+               "           many tries rather than of motion.\n");
+    }
+
+    if (prom < 3.0) {
+        printf("  WARNING: prominence %.1f is close to the flat-spectrum value of\n"
+               "           1.0. No window holds motion concentrated at a single\n"
+               "           frequency; the figure above is not a detection.\n", prom);
+    }
+
+    /* The observation ratio can only be checked once a frequency exists, since
+     * it is the measurement that supplies the period. */
+    const double eta = rs_spectrum_observation_ratio(stack.t_sap,
+                                                     spec.dominant_freq[best]);
+    const double resp = rs_spectrum_subaperture_response(stack.t_sap,
+                                                         spec.dominant_freq[best]);
+    printf("  sub-aperture response %.4f (%.1f dB) at an observation ratio of %.2f\n",
+           resp, 20.0 * log10(resp > 1e-12 ? resp : 1e-12), eta);
+
+    /* Amplitude attenuation, not invalidity. An earlier version called any
+     * ratio above 0.5 unreliable, which would reject two accelerometer-
+     * validated measurements in the literature at ratios of 18 and 36. */
+    if (resp < 0.1) {
+        printf("     Amplitudes here are attenuated by the sub-aperture window\n"
+               "     and are underestimates; frequencies are not affected.\n"
+               "     Note the response above assumes displacement averaging,\n"
+               "     which is what this tracker measures. Phase-based micro-\n"
+               "     Doppler is not bound by it: the literature recovers 36 Hz\n"
+               "     at an observation ratio of exactly 18, where this model\n"
+               "     predicts zero.\n");
+    }
+
+    /* The comb of blind frequencies, which a bare ratio hides entirely. */
+    {
+        const double near = fabs(eta - floor(eta + 0.5));
+        if (eta > 0.5 && near < 0.15) {
+            printf("     WARNING: that frequency sits within %.2f of an integer\n"
+                   "     observation ratio, where the sub-aperture averages a whole\n"
+                   "     number of cycles and the response is exactly zero. The\n"
+                   "     blind frequencies here are multiples of %.3f Hz. A peak\n"
+                   "     beside a null is more likely to be an artefact of the\n"
+                   "     window than a mode of the scene -- for THIS observable.\n",
+                   near, 1.0 / stack.t_sap);
+        }
+    }
+
+    if (spec.dominant_freq[best] > 0.9 * stack.f_max) {
+        printf("  WARNING: that is close to the %.2f Hz Nyquist limit; the true\n"
+               "           frequency may be higher and aliased. Raise --n.\n",
+               stack.f_max);
+    }
+    /* The static-scene floor, which an overlapping decomposition cannot walk
+     * over the way it can walk over a shuffle. Costs a refocus per trial. */
+    const size_t s_trials = (size_t)rs_opt_double(argc, argv, "--null-static", 0.0);
+    if (s_trials > 0) {
+        double nm = 0.0, nsd = 0.0, nmax = 0.0;
+        size_t nge = 0;
+        const double extent = 0.5 * (double)grid.n_x * grid.dx;
+        printf("\nSTATIC-SCENE NULL FLOOR from %zu simulated motionless collects\n"
+               "with this collect's own geometry, through the identical chain:\n",
+               s_trials);
+        if (rs_null_static(&c, &grid, &sp, rs_opt(argc, argv, "--subap"), &mp,
+                           s_trials, prom, f_min, 1024, extent,
+                           &nm, &nsd, &nmax, &nge) == RS_OK) {
+            printf("  mean %.1f, sd %.1f, worst %.1f\n", nm, nsd, nmax);
+            printf("  detection %.1f is %.2fx the mean and %.2fx the worst\n",
+                   prom, nm > 0.0 ? prom / nm : 0.0, nmax > 0.0 ? prom / nmax : 0.0);
+            printf("  %zu of %zu reached it -- empirical p = %.4f\n",
+                   nge, s_trials, (double)(nge + 1) / (double)(s_trials + 1));
+            if (nge > 0) {
+                printf("  A MOTIONLESS SCENE REACHED THIS MEASUREMENT through the\n"
+                       "  same processing. Whatever the peak is, it is not\n"
+                       "  evidence of motion.\n");
+            } else {
+                printf("  No motionless realisation reached it.\n");
+            }
+        } else {
+            rs_report_error("mmotion", RS_ERR_SINGULAR);
+        }
+    }
+
+    const size_t trials = (size_t)rs_opt_double(argc, argv, "--null-trials", 0.0);
+    if (trials > 0) {
+        double nm = 0.0, nsd = 0.0, nmax = 0.0;
+        size_t nge = 0;
+        if (rs_null_floor(&stack, &mp, trials, prom, f_min,
+                          &nm, &nsd, &nmax, &nge) == RS_OK) {
+            printf("\nNULL FLOOR from %zu shuffles of the sub-look time order:\n", trials);
+            printf("  mean %.1f, sd %.1f, worst %.1f\n", nm, nsd, nmax);
+            printf("  detection %.1f is %.2fx the mean and %.2fx the worst null\n",
+                   prom, nm > 0.0 ? prom / nm : 0.0, nmax > 0.0 ? prom / nmax : 0.0);
+            printf("  %zu of %zu nulls reached it -- empirical p = %.4f\n",
+                   nge, trials, (double)(nge + 1) / (double)(trials + 1));
+            if (nge > 0 || prom < nmax) {
+                printf("  A null matched or beat the measurement. At this operating point\n"
+                       "  the detection is not distinguishable from shuffled noise.\n");
+            }
+            /* The warning matters most in the case that looks like success: a
+             * phase run clearing every shuffle prints nothing above, and that
+             * silence is what a reader would otherwise take for a bound. */
+            rs_warn_shuffle_null_on_phase(mp.estimator);
+        }
+    }
+
+    printf("  (amplitude is QUALITATIVE -- relative amplitudes do not validate\n"
+           "   against ground truth even where frequencies do)\n");
+
+    if (prefix) {
+        char path[512];
+        snprintf(path, sizeof path, "%s_freq.png", prefix);
+        rs_raster_write_map(spec.dominant_freq, spec.n_win_az, spec.n_win_rg,
+                            path, 0.0, 0.0, RS_PALETTE_VIRIDIS);
+        snprintf(path, sizeof path, "%s_quality.png", prefix);
+        rs_raster_write_map(spec.quality, spec.n_win_az, spec.n_win_rg,
+                            path, 0.0, 1.0, RS_PALETTE_VIRIDIS);
+
+        /* The per-window evidence the selection was made FROM, not just the
+         * selection.
+         *
+         * Every result this project has recorded kept the answer and discarded
+         * what produced it, so a later question about the selection policy --
+         * and there has been one -- cannot be asked of a finished run without
+         * reprocessing the collect. That is why the Giza runs cannot now be
+         * re-read to see whether their nulls were nulls or scattered noise.
+         *
+         * This costs one small text file per run and changes no reported
+         * number. It is the cheapest thing here and the only one whose value
+         * does not depend on any threshold being right. */
+        snprintf(path, sizeof path, "%s_windows.csv", prefix);
+        FILE *wf = fopen(path, "w");
+        if (!wf) {
+            fprintf(stderr, "warning: cannot write %s\n", path);
+        } else {
+            const double q_min_rep = 0.5 * qmax_rep;
+            const double floor_rep = (spec.quant_px > 0.0)
+                                   ? 2.449 * spec.quant_px : 0.0;
+            fprintf(wf, "# per-window evidence behind the reported selection\n");
+            fprintf(wf, "# consensus_hz=%.12g agree=%zu voting=%zu distinct=%zu "
+                        "largest_block=%zu\n",
+                    cons_hz, cons_agree, cons_vote, cons_distinct, cons_block);
+            fprintf(wf, "# df_hz=%.12g quant_px=%.12g coherence_gate=%.12g "
+                        "floor_px=%.12g n_win_az=%zu n_win_rg=%zu\n",
+                    spec.df, spec.quant_px, q_min_rep, floor_rep,
+                    spec.n_win_az, spec.n_win_rg);
+            fprintf(wf, "window,iaz,irg,dominant_hz,prominence,quality,"
+                        "excursion_px,passed_gates,agrees_with_consensus\n");
+            for (size_t w = 0; w < spec.n_win; w++) {
+                const double exc = spec.excursion_px ? spec.excursion_px[w] : 0.0;
+                const int passed = (spec.quality[w] >= q_min_rep) &&
+                                   (floor_rep <= 0.0 || !spec.excursion_px ||
+                                    exc >= floor_rep);
+                const int agrees = passed && spec.df > 0.0 &&
+                    fabs(spec.dominant_freq[w] - cons_hz) <= 0.5 * spec.df;
+                fprintf(wf, "%zu,%zu,%zu,%.12g,%.12g,%.12g,%.12g,%d,%d\n",
+                        w, w / spec.n_win_rg, w % spec.n_win_rg,
+                        spec.dominant_freq[w], spec.prominence[w],
+                        spec.quality[w], exc, passed, agrees);
+            }
+            fclose(wf);
+        }
+        printf("wrote %s_freq.png, %s_quality.png and %s_windows.csv\n",
+               prefix, prefix, prefix);
+    }
+
+    rs_spectrum_free(&spec);
+    rs_microm_free(&m);
+    rs_subap_stack_free(&stack);
+    rs_cphd_free(&c);
+    return 0;
+}
+
+/* Focus vibration observations into a depth profile.
+ *
+ * Requires --velocity and --frequency with no defaults, and prints the full
+ * assumption set alongside the result. Both requirements are deliberate: they
+ * are what stops a depth axis being fabricated from library defaults. */
+
+/* Parse "--offsets x1,y1:x2,y2:..." into a flat array of metre pairs.
+ *
+ * Writes at most 'cap' pairs and returns how many were parsed. A NULL or empty
+ * specification yields the single offset {0,0}, so the option is additive and
+ * callers that do not pass it behave exactly as before. */
+static size_t rs_parse_offsets(const char *spec, double *out, size_t cap)
+{
+    if (!spec || !*spec || cap == 0) {
+        if (cap > 0) { out[0] = 0.0; out[1] = 0.0; return 1; }
+        return 0;
+    }
+    char buf[512];
+    snprintf(buf, sizeof buf, "%s", spec);
+
+    size_t n = 0;
+    for (char *tok = strtok(buf, ":;"); tok && n < cap; tok = strtok(NULL, ":;")) {
+        char *comma = strchr(tok, ',');
+        if (!comma) continue;
+        *comma = '\0';
+        out[2 * n] = atof(tok);
+        out[2 * n + 1] = atof(comma + 1);
+        n++;
+    }
+    if (n == 0) { out[0] = 0.0; out[1] = 0.0; n = 1; }
+    return n;
+}
+
+/* Vary the two assumed constants and report where the recovered depth goes.
+ *
+ * This is the experiment that tells a reader how much of a tomogram's depth
+ * axis is measurement and how much is the assumption fed in. It belongs beside
+ * the null test in any publication of results from this software, and running
+ * it costs seconds. */
+/* Run the chain over one collect at several grid offsets, appending sweep rows.
+ *
+ * The offsets are what make the experiment valid. Merging results by wavelength
+ * assumes the realisations differ only in scene content, so that a depth which
+ * moves must have moved because the assumed constants moved. Three separate
+ * collects violate that: they differ in slant range, incidence, dwell and
+ * aperture as well, and geometry variation then arrives disguised as wavelength
+ * dependence. Chipping one collect at several positions holds every geometric
+ * quantity fixed and varies only what is on the ground, which is the real-data
+ * counterpart of translating the scatterers in the synthetic fixture.
+ *
+ * The collect is read and range compressed once and reused across offsets,
+ * because that is the expensive step and it does not depend on where the grid
+ * sits.
+ *
+ * Returns the number of rows appended. An offset that cannot be processed is
+ * skipped with a message rather than aborting, since the point of running
+ * several is to tolerate one going wrong. */
+
+/* Vary the two assumed constants across several scenes and report where the
+ * recovered depth goes.
+ *
+ * This is the experiment that tells a reader how much of a tomogram's depth axis
+ * is measurement and how much is the assumption fed in, and it belongs beside the
+ * null test in any publication of results from this software.
+ *
+ * Several scenes are accepted, comma-separated, and it matters that they are. A
+ * single realisation cannot separate a real trend from the depth grid's
+ * quantisation: the peak lands in whichever cell it lands in, and one such point
+ * looks identical to a measurement. With several scenes the depths are averaged
+ * per wavelength, each carries a spread, and the fit is additionally reported
+ * over those that reproduce. Given one scene the command says so and withholds
+ * the filtered fit rather than presenting a number it cannot support. */
+
+
+/* Ascending comparison for qsort over doubles, for the PRI percentiles. */
+static int rs_cmp_double_asc(const void *a, const void *b)
+{
+    const double x = *(const double *)a, y = *(const double *)b;
+    return (x > y) - (x < y);
+}
+
+/* Validate a collect against a measurement, before spending hours on it.
+ *
+ * Reads the collect for its geometry AND its per-pulse timing -- the PRF
+ * stability check needs the actual pulse times, which no annotation carries --
+ * then runs the arithmetic in rs_validate(). A single range bin is retained,
+ * because nothing here reads the signal. */
+static int rs_cmd_validate(int argc, char **argv)
+{
+    const char *in       = rs_opt(argc, argv, "--cphd");
+    const char *sicd_in  = rs_opt(argc, argv, "--sicd");
+    if (in && sicd_in) {
+        rs_set_error("validate: give --cphd or --sicd, not both");
+        rs_report_error("validate", RS_ERR_ARG);
+        return 1;
+    }
+    if (!in && !sicd_in) {
+        printf("usage: resonarsat validate --cphd FILE [--frequency HZ]\n"
+               "       resonarsat validate --sicd FILE [--frequency HZ]\n"
+               "                           [--amplitude MM] [--alpha F]\n"
+               "                           [--overlap F] [--upsample N]\n"
+               "                           [--cell M] [--size N]\n"
+               "\n"
+               "Answers whether this collect can support the measurement you\n"
+               "intend, before any of it is processed. Every check is arithmetic\n"
+               "on the collect's geometry and costs milliseconds; the read of the\n"
+               "file is the only slow part, and it retains one range bin.\n"
+               "\n"
+               "--sicd reads a focused product's metadata only, leaving its\n"
+               "pixels on disk, so screening a 12 GB image costs a header read.\n"
+               "Two checks differ for a focused product and say so: PRF\n"
+               "stability does not apply, because the azimuth axis was\n"
+               "resampled uniformly when the product was made, and --cell\n"
+               "defaults to the product's own azimuth spacing rather than\n"
+               "being yours to choose.\n"
+               "\n"
+               "--frequency is the vibration you are looking for and is what\n"
+               "makes most of the checks answerable. Without it only the\n"
+               "geometry and timing checks run.\n"
+               "\n"
+               "EVERY CHECK IS NECESSARY AND NONE IS SUFFICIENT. A collect that\n"
+               "passes all of them may still measure nothing, because whether the\n"
+               "ground moves is not a property of the file. The ground-truth line\n"
+               "always reports UNKNOWN and says why.\n");
+        return 1;
+    }
+
+    const int is_sicd = (sicd_in != NULL);
+    const char *path = is_sicd ? sicd_in : in;
+
+    rs_cphd_t c;
+    rs_slc_t img;
+    memset(&c, 0, sizeof c);
+    memset(&img, 0, sizeof img);
+    resonarsat_status_t st;
+
+    rs_validate_req_t req;
+    rs_validate_req_default(&req);
+
+    if (is_sicd) {
+        /* Metadata only. The pixels answer no question this command asks, and a
+         * spotlight SICD carries enough of them to make reading them the whole
+         * cost of the run. */
+        st = rs_read_sicd_meta(sicd_in, &img);
+        if (st != RS_OK) { rs_report_error("validate", st); return 1; }
+
+        req.dwell_s  = img.t_dwell;
+        /* fs_az, never pulse_prf. The two differ by the sub-swath count on some
+         * products, and slc.h exists because substituting one for the other
+         * scales every Doppler axis while still landing on plausible numbers.
+         * A focused product records no transmit PRF at all, so pulse_prf is
+         * zero here by construction. */
+        req.prf_hz   = img.fs_az;
+        req.lambda_m = img.lambda;
+        req.n_pulse  = img.n_az;
+        req.n_rbin   = img.n_rg;
+
+        /* Taken as-is, and deliberately not re-centred.
+         *
+         * slc.h documents r0 as the slant range of the FIRST range sample, but
+         * the SICD reader fills it from SCPCOA/SlantRange, which is the range to
+         * the scene centre point. An earlier version of this code added half a
+         * swath to reach the scene centre and so double-counted it by tens of
+         * metres. The field's meaning differing by reader is a real defect and
+         * is recorded in docs/FOLLOW-UPS.md; papering over it here would hide it
+         * behind a command that looks correct. */
+        req.slant_range_m = img.r0;
+        req.v_platform_ms = img.v_platform;
+        req.incidence_rad = img.incidence;
+
+        /* prf_min_hz and prf_max_hz stay zero, which omits the PRF-stability
+         * check rather than passing it. A focused product's azimuth axis was
+         * resampled onto a uniform grid when it was made, so there is no
+         * instantaneous PRF left to be unstable -- and reporting a 0.00% spread
+         * would be a fabricated pass, which is the failure mode this whole
+         * command exists to prevent. rs_cmd_validate() says so in its output. */
+
+        /* The cell is the product's, not the caller's. Backprojection lets a
+         * caller choose a grid; a focused image arrives on its own. */
+        if (img.az_spacing_m > 0.0) req.cell_m = img.az_spacing_m;
+    } else {
+        /* Eight bins rather than one: the reader refuses a window too narrow
+         * to focus, and this command has no use for the samples either way. */
+        const rs_cphd_read_opts_t opts = { .rbin_window = 8 };
+        st = rs_read_cphd(in, &opts, &c);
+        if (st != RS_OK) { rs_report_error("validate", st); return 1; }
+
+        req.dwell_s       = (c.n_pulse > 1) ? c.t[c.n_pulse - 1] - c.t[0] : 0.0;
+        req.prf_hz        = c.prf;
+        req.lambda_m      = c.lambda;
+        req.n_pulse       = c.n_pulse;
+        /* The read above retains a narrow window, so the collect's own range-bin
+         * count is not in 'c'. Report the memory a real read would cost at the
+         * --rbins the caller intends to use. */
+        req.n_rbin        = (size_t)rs_opt_double(argc, argv, "--rbins", 4096.0);
+
+        /* Slant range, platform speed and incidence measured from the recorded
+         * positions rather than assumed, matching what rs_focus_backproject()
+         * derives for the image it produces. */
+        if (c.n_pulse > 1) {
+            const double *p0 = &c.pos[0];
+            const double r0 = sqrt(p0[0]*p0[0] + p0[1]*p0[1] + p0[2]*p0[2]);
+            req.slant_range_m = (c.r_ref && c.r_ref[0] > 0.0) ? c.r_ref[0] : r0;
+            double d[3];
+            for (int k = 0; k < 3; k++) d[k] = c.pos[3*(c.n_pulse-1)+k] - c.pos[k];
+            req.v_platform_ms = sqrt(d[0]*d[0] + d[1]*d[1] + d[2]*d[2]) / req.dwell_s;
+            const double h = fabs(p0[2]);
+            req.incidence_rad = (req.slant_range_m > 0.0)
+                              ? acos(fmin(1.0, h / req.slant_range_m)) : 0.0;
+        }
+
+        /* Timing, measured. The annotated PRF is one number; the real thing is
+         * not.
+         *
+         * The spread is taken from the 1st and 99th percentiles rather than the
+         * extremes, because a single dropped vector leaves one interval of nine
+         * ordinary ones and would otherwise be reported as an 89% PRF excursion.
+         * The gap is what that interval actually is, and it is reported
+         * separately as itself. */
+        if (c.n_pulse > 2) {
+            const size_t m = c.n_pulse - 1;
+            double *pri = malloc(m * sizeof *pri);
+            if (pri) {
+                double worst = 0.0;
+                for (size_t i = 0; i < m; i++) {
+                    pri[i] = c.t[i+1] - c.t[i];
+                    if (pri[i] > worst) worst = pri[i];
+                }
+                qsort(pri, m, sizeof *pri, rs_cmp_double_asc);
+                const double p01 = pri[m / 100], p99 = pri[(m * 99) / 100];
+                req.prf_min_hz = (p99 > 0.0) ? 1.0 / p99 : 0.0;
+                req.prf_max_hz = (p01 > 0.0) ? 1.0 / p01 : 0.0;
+                req.worst_gap_s = worst;
+                free(pri);
+            }
+        }
+    }
+
+    req.target_freq_hz = rs_opt_double(argc, argv, "--frequency", 0.0);
+    req.target_amp_m   = rs_opt_double(argc, argv, "--amplitude", 0.0) / 1000.0;
+    req.alpha    = rs_opt_double(argc, argv, "--alpha", req.alpha);
+    req.overlap  = rs_opt_double(argc, argv, "--overlap", req.overlap);
+    req.upsample = (size_t)rs_opt_double(argc, argv, "--upsample", (double)req.upsample);
+    req.cell_m   = rs_opt_double(argc, argv, "--cell", req.cell_m);
+    req.grid_n   = (size_t)rs_opt_double(argc, argv, "--size", (double)req.grid_n);
+
+    rs_validate_finding_t f[RS_VALIDATE_N_CHECKS];
+    size_t nf = 0;
+    const rs_validate_level_t worst = rs_validate(&req, f, &nf);
+
+    printf("\nvalidating %s\n", path);
+    if (is_sicd) {
+        const int cell_given = (rs_opt(argc, argv, "--cell") != NULL);
+        printf("  focused product: %zu x %zu samples, cell %.4f m %s\n",
+               img.n_az, img.n_rg, req.cell_m,
+               cell_given ? "as given, overriding the product's own spacing"
+                          : "from the product's own azimuth spacing");
+        printf("  PRF stability is not checked -- a focused azimuth axis was "
+               "resampled uniformly, so it cannot be unstable\n");
+    }
+    if (req.target_freq_hz > 0.0) {
+        printf("  against a %.3f Hz target", req.target_freq_hz);
+        if (req.target_amp_m > 0.0) printf(" of %.2f mm", 1000.0 * req.target_amp_m);
+        printf(", alpha %.2f%%, overlap %.2f\n", 100.0 * req.alpha, req.overlap);
+    } else {
+        printf("  no --frequency given: geometry and timing checks only\n");
+    }
+    printf("\n");
+    for (size_t i = 0; i < nf; i++) {
+        printf("  %-7s %-22s %s\n", rs_validate_level_str(f[i].level),
+               f[i].name, f[i].detail);
+    }
+    printf("\n  VERDICT: %s\n", rs_validate_level_str(worst));
+    if (worst == RS_V_FAIL) {
+        printf("  At least one requirement is arithmetically unmet. Processing\n"
+               "  this configuration will still produce a complete-looking\n"
+               "  result; that is the failure mode this command exists for.\n");
+    }
+
+    if (is_sicd) rs_slc_free(&img); else rs_cphd_free(&c);
+    return (worst == RS_V_FAIL) ? 2 : 0;
+}
+
+/* Dispatch to a subcommand. */
+int main(int argc, char **argv)
+{
+    if (argc < 2) { rs_usage(); return 1; }
+
+    const char *cmd = argv[1];
+    if (strcmp(cmd, "info") == 0)        return rs_cmd_info(argc - 1, argv + 1);
+    if (strcmp(cmd, "validate") == 0)    return rs_cmd_validate(argc - 1, argv + 1);
+    if (strcmp(cmd, "focus") == 0)       return rs_cmd_focus(argc - 1, argv + 1);
+    if (strcmp(cmd, "mmotion") == 0)     return rs_cmd_mmotion(argc - 1, argv + 1);
+
+    if (strcmp(cmd, "-h") == 0 || strcmp(cmd, "--help") == 0) { rs_usage(); return 0; }
+
+    fprintf(stderr, "unknown command '%s'\n\n", cmd);
+    rs_usage();
+    return 1;
+}

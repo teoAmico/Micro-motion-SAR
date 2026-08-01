@@ -1,0 +1,10 @@
+build/
+build-*/
+data/*
+!data/README.md
+*.cphd
+*.cphd.truth
+*.f32
+*.png
+*.pgm
+*.csv

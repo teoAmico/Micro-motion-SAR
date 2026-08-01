@@ -1,4 +1,4 @@
-# micro-motion-SAR
+# Micro-motion-SAR
 
 **Measuring vibration of the ground and of structures from a single satellite pass.**
 

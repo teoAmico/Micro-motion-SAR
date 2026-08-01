@@ -1910,3 +1910,96 @@ shows no structure following the pyramid's edges. The coherence gate admitted 17
 of 225 windows on a relative threshold of 0.31. Whether amplitude stability is
 the right precondition proxy on real clutter is now an open question that the
 synthetic work could not have raised.
+
+---
+
+## 18. Screening a collect from its metadata block, and the Istanbul candidate
+
+`validate --xml FILE` runs the full arithmetic on a CPHD's metadata block alone.
+`rs_read_cphd_meta()` takes either a whole collect -- parsing the ASCII header for
+`XML_BLOCK_BYTE_OFFSET` and seeking -- or the extracted block, told apart by the
+`CPHD/` magic and never by the extension. **Screening the 36 GB Giza file takes
+0.3 seconds**, and over HTTPS it is two range requests totalling about 12 KB
+against a 17-61 GB download.
+
+**What it agrees with the full reader about, and what it does not.** Measured on
+Giza, and asserted in `test_cphd.c` against the synthetic fixture:
+
+```
+              screen        full read
+dwell         32.869 s      32.869 s     agree
+platform      7264 m/s      7263 m/s     agree
+carrier       9.3000 GHz    9.3000 GHz   agree -- both the band START
+pulses        335149        335141       DECLARED, not validity-screened
+slant range   754.2 km      762.8 km     ReferenceGeometry vs FIRST pulse
+incidence     38.58 deg     39.50 deg    likewise
+```
+
+The carrier agreement is the one that had to be got right and nearly was not.
+`rs_read_cphd()` takes `fc` from the first vector's `SC0` because that is where
+transforming the FX samples leaves the residual phase; on this product `SC0` is
+FxMin at 9.30 GHz where the band CENTRE is 9.60. Taking the centre -- the obvious
+reading of "carrier" -- would have shifted lambda by 3.2 percent and scaled every
+phase-derived displacement by the same amount, in a tool whose whole purpose is
+to predict what the run will do. The screen therefore reads FxMin, and
+`test_cphd.c` asserts the two match to a hertz.
+
+The other two differences are definitional and harmless for a download decision:
+the pulse count is `NumVectors` as declared where the full reader drops the eight
+vectors this file flags invalid, and range and incidence are stated at the
+reference time where the full reader measures them at the first pulse.
+
+`RS_VALIDATE_PRF_STABILITY` now reports **UNKNOWN** when no per-pulse times are
+supplied, rather than vanishing from the list. The instantaneous spread and the
+largest dropped-vector gap live in the PVP block, which a screen does not read; a
+check that disappears reads as a check that passed.
+
+### The Istanbul 25 s collect screens clean
+
+`CAPELLA_C09_SP_CPHD_HH_20230321101754_20230321101819`, 17.3 GB, 249424 vectors,
+dwell 24.999 s, incidence **19.53 deg**, 13:18 local. Screened for a 2 Hz target
+of 3 mm on the phase route at alpha 0.67 percent:
+
+```
+PASS     observable band   sampling ceiling 2.985 Hz; 2 Hz is inside
+PASS     ambiguity         lambda/4 fold caps 8.241 mm; 3 mm is 0.36x
+PASS     phase floor       0.507 mm per look, against a 3 mm target
+WARN     observation ratio eta 0.335
+WARN     aperture fraction 0.67% against a published 4.5-7.6%
+UNKNOWN  PRF stability     needs the PVP block
+UNKNOWN  sensitivity       not the phase route's question
+UNKNOWN  ground truth      always
+VERDICT: WARN
+```
+
+**No FAILs.** The two warnings are real and known: the aperture fraction is an
+order of magnitude below the published range, which is the regime item 4 and
+`validate` both flag as untested rather than impossible. Against Giza's
+three-orders-of-magnitude gap between plausible target amplitude and instrument
+window, this is the first collect where the two ranges touch.
+
+The incidence is why: 19.53 degrees gives cos 0.943 against Giza's 0.782, so
+vertical modes project 20 percent better onto the line of sight, and the lambda/4
+fold caps a *vertical* amplitude at 8.24 mm rather than 10.44.
+
+**What is in the footprint**, verified against OpenStreetMap rather than inferred
+from the scene centre: the M2 cable-stayed metro bridge over the Golden Horn,
+Galata Koprusu, Ataturk Koprusu, Marmaray rail segments -- and the Valens
+Aqueduct, a Roman masonry arch at the same range through the same processing.
+That aqueduct is an **in-scene static reference**, which no simulated null can
+be. 13:18 local matters as much: traffic is the principal excitation for these
+decks, and the 60 s Istanbul collect is 01:39 local with the metro not running.
+
+**Still no ground truth.** No accelerometer, no reflector. Published modal
+frequencies for these bridges would be weak external truth -- more than Khufu
+offers and less than validation. What changes is that a target class whose
+plausible amplitudes overlap the instrument's window is in front of this software
+for the first time.
+
+**Before downloading, the open question from item 17 applies.** At Giza no window
+met the phase estimator's precondition: amplitude dispersion `D_A` ran 0.381 at
+best against the persistent-scatterer criterion of 0.25, so 0 of 225 windows
+qualified and the run could not have succeeded whatever the pyramid was doing.
+A bridge pylon or a masonry arch should score far lower, but nothing in the tool
+reports `D_A` against that criterion yet, so a null over Istanbul would be as
+uninterpretable as the null over Giza. That check is the thing to land next.

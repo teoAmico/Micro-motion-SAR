@@ -158,4 +158,67 @@ resonarsat_status_t rs_read_sicd(const char *path, rs_slc_t *img);
  * Fails exactly where rs_read_sicd() fails, minus the pixel pass. */
 resonarsat_status_t rs_read_sicd_meta(const char *path, rs_slc_t *img);
 
+/* What a CPHD's metadata block says about its geometry, without the collect.
+ *
+ * The same argument as rs_read_sicd_meta() and a larger payoff, because a CPHD
+ * is bigger than a SICD by the ratio of phase history to imagery. A 17 GB
+ * spotlight collect begins with an ASCII header giving XML_BLOCK_BYTE_OFFSET and
+ * XML_BLOCK_SIZE, and the XML block behind it -- eleven kilobytes -- carries
+ * every input rs_validate() needs bar one. Two HTTP range requests over a public
+ * bucket therefore decide whether a collect is worth downloading at all:
+ *
+ *   curl -r 0-1200 URL          # the ASCII header
+ *   curl -r 1024-12341 URL      # the XML block it points at
+ *
+ * THE ONE INPUT THIS CANNOT SUPPLY is measured PRF stability. The nominal PRF
+ * follows from the vector count and the transmit-time span, but the spread of
+ * INSTANTANEOUS intervals and the largest dropped-vector gap are properties of
+ * the PVP block, which is tens of megabytes and sits behind the XML. So
+ * 'prf_min_hz', 'prf_max_hz' and 'worst_gap_s' are left zero and rs_validate()
+ * reports that check as RS_V_UNKNOWN rather than passing it -- a screening read
+ * must not look like a full one.
+ *
+ * 'path' may be either a CPHD file, in which case the ASCII header is parsed and
+ * the XML block sought, or a file holding the XML block alone, which is what the
+ * sar-data layout extracts beside every collect. The two are told apart by the
+ * "CPHD/" magic, never by the file extension.
+ *
+ * WHERE THIS DISAGREES WITH rs_read_cphd(), AND WHY. Measured on the Giza
+ * product, screen against full read:
+ *
+ *   dwell        32.869 s     32.869 s      agree
+ *   platform     7264 m/s     7263 m/s      agree
+ *   carrier      9.3000 GHz   9.3000 GHz    agree, both the band START
+ *   pulses       335149       335141        DECLARED, not validity-screened
+ *   slant range  754.2 km     762.8 km      ReferenceGeometry vs FIRST pulse
+ *   incidence    38.58 deg    39.50 deg     likewise
+ *
+ * The pulse count is NumVectors as declared; the full reader drops vectors the
+ * file flags invalid or whose geometry is non-finite, eight of them here. The
+ * range and incidence come from the document's ReferenceGeometry, which is
+ * stated at the reference time, where the full reader measures them at the first
+ * pulse -- about one percent apart over this aperture.
+ *
+ * None of that changes a download decision, which is what this read is for. It
+ * would change a reported measurement, which is what it is NOT for. */
+typedef struct {
+    size_t n_pulse;          /* NumVectors */
+    size_t n_rbin;           /* NumSamples */
+    double dwell_s;          /* TxTime2 - TxTime1 */
+    double prf_hz;           /* nominal, (n_pulse-1)/dwell */
+    double fc_hz;            /* centre of the FxBand */
+    double lambda_m;
+    double slant_range_m;    /* ReferenceGeometry */
+    double v_platform_ms;    /* |ARPVel| */
+    double incidence_rad;
+    char   collector[64];    /* CollectorName, for the vendor-quirk notes */
+} rs_cphd_meta_t;
+
+/* Read a CPHD's geometry from its metadata block alone.
+ *
+ * Returns RS_ERR_IO if the file cannot be read, RS_ERR_FORMAT if the header or
+ * XML is malformed, and RS_ERR_MISSING_META naming the first absent element if
+ * the document parses but does not carry what is needed. */
+resonarsat_status_t rs_read_cphd_meta(const char *path, rs_cphd_meta_t *out);
+
 #endif /* RESONARSAT_READERS_H */

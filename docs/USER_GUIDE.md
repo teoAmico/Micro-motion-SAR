@@ -261,6 +261,14 @@ Every check is arithmetic on the geometry and costs milliseconds; only the file
 read is slow, and it keeps 8 range bins. Run it before committing to a job that
 takes an hour.
 
+**Screen before you download.** `validate --xml FILE` runs the same checks on a
+CPHD's metadata block alone — either a whole collect, whose ASCII header says
+where the block is, or the extracted block. Two HTTP range requests of about
+12 KB decide whether a 17 GB download is worth making, and the 36 GB Giza file
+screens in 0.3 s. It cannot measure PRF stability, which lives in the PVP block,
+and reports that check as UNKNOWN rather than skipping it. `docs/DATASETS.md` has
+the recipe.
+
 **Pass the same `--estimator` you intend to run with.** Four checks answer
 differently for different observables, and the default is `correlation`:
 

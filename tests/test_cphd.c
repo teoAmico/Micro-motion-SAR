@@ -23,6 +23,11 @@
 #include <unistd.h>
 
 #define NV   64u    /* pulses */
+/* The fixture steps 100 m along track every 1 ms, so this is the platform speed
+ * its ReferenceGeometry must declare for the metadata screen to agree with what
+ * the full reader measures from the positions. Unphysical, like the rest of the
+ * fixture's geometry, and consistent, which is what the comparison needs. */
+#define VPLAT (100.0 / 0.001)
 #define NS   32u    /* range samples per pulse */
 #define PVPB 240u   /* bytes per vector, 30 words -- the layout Umbra emits */
 
@@ -95,7 +100,21 @@ static int write_cphd(const char *path, const char *damage)
         "<Data><SignalArrayFormat>%s</SignalArrayFormat><NumBytesPVP>%u</NumBytesPVP>"
         "<NumCPHDChannels>1</NumCPHDChannels><Channel>"
         "<NumVectors>%u</NumVectors><NumSamples>%u</NumSamples></Channel></Data>"
-        "<CollectionID><CollectType>MONOSTATIC</CollectType></CollectionID>"
+        "<CollectionID><CollectorName>rs-test</CollectorName>"
+        "<CollectType>MONOSTATIC</CollectType></CollectionID>"
+        /* ReferenceGeometry and the channel's transmit-time span. The full
+         * reader takes neither -- it measures timing from the PVP and geometry
+         * from the recorded positions -- but every real product carries them
+         * and rs_read_cphd_meta() screens a collect from them alone. A fixture
+         * without them would leave the screening path untested against the read
+         * it screens for, which is the one comparison that matters. */
+        "<Channel><Parameters><TxTime1>0</TxTime1>"
+        "<TxTime2>%.10g</TxTime2></Parameters></Channel>"
+        "<ReferenceGeometry><SRP><ECF><X>%.10g</X><Y>%.10g</Y><Z>%.10g</Z></ECF></SRP>"
+        "<Monostatic><ARPPos><X>0</X><Y>0</Y><Z>%.10g</Z></ARPPos>"
+        "<ARPVel><X>%.10g</X><Y>0</Y><Z>0</Z></ARPVel>"
+        "<SlantRange>%.10g</SlantRange><IncidenceAngle>%.10g</IncidenceAngle>"
+        "</Monostatic></ReferenceGeometry>"
         "<PVP><TxTime><Offset>%d</Offset><Size>1</Size><Format>F8</Format></TxTime>"
         "<TxPos><Offset>%d</Offset><Size>3</Size><Format>X=F8;Y=F8;Z=F8;</Format></TxPos>"
         "<RcvPos><Offset>%d</Offset><Size>3</Size><Format>X=F8;Y=F8;Z=F8;</Format></RcvPos>"
@@ -106,6 +125,10 @@ static int write_cphd(const char *path, const char *damage)
         FXMIN, FXMAX, SRP[0], SRP[1], SRP[2],
         (damage && !strcmp(damage, "format")) ? "CI2" : "CF8",
         PVPB, NV, (damage && !strcmp(damage, "nsamp")) ? 999999u : NS,
+        /* The fixture lays pulses 1 ms apart, so the span is (NV-1) ms and the
+         * screen must recover exactly the PRF the full reader measures. */
+        (double)(NV - 1) * 1.0e-3,
+        SRP[0], SRP[1], SRP[2], R0, VPLAT, R0, 0.0,
         O_TXTIME, O_TXPOS, O_RCVPOS, O_SRPPOS, O_SC0, O_SCSS);
     if (xn <= 0 || (size_t)xn >= sizeof xml) return -1;
 
@@ -229,6 +252,75 @@ int main(void)
         RS_CHECK(peak == NS / 2u + TARGET_BIN);
 
         rs_cphd_free(&c);
+    }
+
+    RS_CASE("the metadata-only screen agrees with the full read");
+    {
+        /* A screen exists to predict the run. If the two disagree about the
+         * geometry then screening a 17 GB collect to decide whether to download
+         * it is worse than useless, because the decision is made on numbers the
+         * run will not reproduce. rs_read_cphd_meta() is measured against
+         * rs_read_cphd() on the same bytes here, and the fields where they
+         * legitimately differ are asserted to differ in the documented way
+         * rather than being left to be discovered. */
+        RS_CHECK(write_cphd(path, NULL) == 0);
+        rs_cphd_t c;
+        RS_CHECK_OK(rs_read_cphd(path, NULL, &c));
+        rs_cphd_meta_t m;
+        RS_CHECK_OK(rs_read_cphd_meta(path, &m));
+
+        printf("    full read: %zu pulses, fc %.4f GHz, lambda %.6f m, "
+               "prf %.3f Hz, dwell %.4f s\n",
+               c.n_pulse, c.fc / 1e9, c.lambda, c.prf,
+               c.t[c.n_pulse - 1] - c.t[0]);
+        printf("    screen:    %zu pulses, fc %.4f GHz, lambda %.6f m, "
+               "prf %.3f Hz, dwell %.4f s\n",
+               m.n_pulse, m.fc_hz / 1e9, m.lambda_m, m.prf_hz, m.dwell_s);
+
+        /* The carrier must match exactly: it sets lambda, and lambda scales
+         * every phase-derived displacement the pipeline reports. Taking the
+         * band CENTRE instead would be 3.2% out on a real Capella product. */
+        RS_CHECK_NEAR(m.fc_hz, c.fc, 1.0);
+        RS_CHECK_NEAR(m.lambda_m, c.lambda, 1e-12);
+
+        /* Timing agrees to a part in 1e6: the fixture writes uniform pulses, so
+         * the declared span and the measured one are the same quantity. */
+        RS_CHECK_REL(m.dwell_s, c.t[c.n_pulse - 1] - c.t[0], 1e-6);
+        RS_CHECK_REL(m.prf_hz, c.prf, 1e-6);
+
+        /* This fixture flags no vector invalid, so the declared count and the
+         * screened count coincide here. On a real product they need not: the
+         * Giza collect declares 335149 and the full reader keeps 335141. */
+        RS_CHECK(m.n_pulse == c.n_pulse);
+        RS_CHECK(m.n_rbin == NS);
+
+        /* And it reads the same file the full reader does, by seeking the XML
+         * block the ASCII header points at -- not by any parallel convention. */
+        RS_CHECK(m.v_platform_ms > 0.0);
+        RS_CHECK(m.slant_range_m > 0.0);
+
+        rs_cphd_free(&c);
+    }
+
+    RS_CASE("the screen refuses what it cannot read, with a status");
+    {
+        rs_cphd_meta_t m;
+        RS_CHECK_ERR(rs_read_cphd_meta("/nonexistent/nowhere.cphd", &m), RS_ERR_IO);
+        RS_CHECK_ERR(rs_read_cphd_meta(NULL, &m), RS_ERR_ARG);
+        RS_CHECK_ERR(rs_read_cphd_meta(path, NULL), RS_ERR_ARG);
+
+        /* A file that is neither a CPHD nor a metadata block must produce a
+         * described status rather than a plausible-looking geometry. */
+        char junk[512];
+        snprintf(junk, sizeof junk, "%srs_test_junk_%d.xml",
+                 dir ? dir : "/tmp/", (int)getpid());
+        FILE *jf = fopen(junk, "wb");
+        RS_CHECK(jf != NULL);
+        fputs("<CPHD><nothing/></CPHD>", jf);
+        fclose(jf);
+        RS_CHECK_ERR(rs_read_cphd_meta(junk, &m), RS_ERR_MISSING_META);
+        printf("    refused, as it should: %s\n", rs_last_error());
+        remove(junk);
     }
 
     RS_CASE("a range window keeps the reference point centred");

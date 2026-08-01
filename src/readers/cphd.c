@@ -923,3 +923,150 @@ io:
     free(xml);
     return RS_ERR_IO;
 }
+
+/* Read a CPHD's geometry from its metadata block alone. See readers.h.
+ *
+ * Deliberately shares rs_xml_double() and friends with the full reader rather
+ * than re-scanning the document its own way: two parsers over one format drift,
+ * and the whole value of a screening read is that it agrees with the read it is
+ * screening for. */
+resonarsat_status_t rs_read_cphd_meta(const char *path, rs_cphd_meta_t *out)
+{
+    if (!path || !out) return RS_ERR_ARG;
+    memset(out, 0, sizeof *out);
+
+    FILE *fp = fopen(path, "rb");
+    if (!fp) {
+        rs_set_error("cphd-meta: cannot open %s", path);
+        return RS_ERR_IO;
+    }
+
+    char head[RS_CPHD_HDR_MAX];
+    const size_t got = fread(head, 1, sizeof head - 1, fp);
+    head[got] = '\0';
+
+    char *xml = NULL;
+    if (got >= 5 && strncmp(head, "CPHD/", 5) == 0) {
+        /* A whole collect: the ASCII header says where the XML block is. */
+        unsigned long off = 0, size = 0;
+        const char *p = strstr(head, "XML_BLOCK_BYTE_OFFSET");
+        const char *q = strstr(head, "XML_BLOCK_SIZE");
+        if (!p || !q ||
+            sscanf(p, "XML_BLOCK_BYTE_OFFSET %*[:=] %lu", &off) != 1 ||
+            sscanf(q, "XML_BLOCK_SIZE %*[:=] %lu", &size) != 1 ||
+            size == 0 || size > RS_CPHD_XML_MAX) {
+            fclose(fp);
+            rs_set_error("cphd-meta: %s begins with CPHD magic but its header "
+                         "does not give a usable XML block offset and size", path);
+            return RS_ERR_FORMAT;
+        }
+        xml = malloc(size + 1);
+        if (!xml) { fclose(fp); return RS_ERR_ALLOC; }
+        if (fseek(fp, (long)off, SEEK_SET) != 0 ||
+            fread(xml, 1, size, fp) != size) {
+            free(xml); fclose(fp);
+            rs_set_error("cphd-meta: %s declares an XML block of %lu bytes at "
+                         "offset %lu that the file does not contain -- a "
+                         "truncated download reads exactly like this", path, size, off);
+            return RS_ERR_FORMAT;
+        }
+        xml[size] = '\0';
+    } else {
+        /* The XML block on its own, which is what the data layout extracts. */
+        if (fseek(fp, 0, SEEK_END) != 0) { fclose(fp); return RS_ERR_IO; }
+        const long len = ftell(fp);
+        if (len <= 0 || (unsigned long)len > RS_CPHD_XML_MAX) {
+            fclose(fp);
+            rs_set_error("cphd-meta: %s is %ld bytes, which is not a CPHD file "
+                         "and not a plausible XML metadata block", path, len);
+            return RS_ERR_FORMAT;
+        }
+        xml = malloc((size_t)len + 1);
+        if (!xml) { fclose(fp); return RS_ERR_ALLOC; }
+        rewind(fp);
+        if (fread(xml, 1, (size_t)len, fp) != (size_t)len) {
+            free(xml); fclose(fp);
+            return RS_ERR_IO;
+        }
+        xml[len] = '\0';
+    }
+    fclose(fp);
+
+    /* Every element below is required: a document missing any of them cannot
+     * answer the questions this read exists to answer, and naming the first
+     * absent one is more use than a generic failure. */
+    unsigned long nv = 0, ns = 0;
+    double t1 = 0.0, t2 = 0.0, fx_lo = 0.0, fx_hi = 0.0;
+    double vx = 0.0, vy = 0.0, vz = 0.0;
+    const char *missing = NULL;
+    if      (!rs_xml_ulong (xml, "NumVectors",     NULL, &nv))    missing = "NumVectors";
+    else if (!rs_xml_ulong (xml, "NumSamples",     NULL, &ns))    missing = "NumSamples";
+    else if (!rs_xml_double(xml, "TxTime1",        NULL, &t1))    missing = "TxTime1";
+    else if (!rs_xml_double(xml, "TxTime2",        NULL, &t2))    missing = "TxTime2";
+    else if (!rs_xml_double(xml, "FxMin",          NULL, &fx_lo)) missing = "FxMin";
+    else if (!rs_xml_double(xml, "FxMax",          NULL, &fx_hi)) missing = "FxMax";
+    else if (!rs_xml_double(xml, "SlantRange",     NULL, &out->slant_range_m))
+        missing = "SlantRange";
+    else if (!rs_xml_double(xml, "IncidenceAngle", NULL, &out->incidence_rad))
+        missing = "IncidenceAngle";
+    if (missing) {
+        free(xml);
+        rs_set_error("cphd-meta: %s carries no <%s>", path, missing);
+        return RS_ERR_MISSING_META;
+    }
+
+    /* Platform speed from the reference ARP velocity. The three components sit
+     * inside <ARPVel>, so the search starts there -- <X> alone appears in every
+     * position element in the document. */
+    {
+        const char *b, *e;
+        if (!rs_xml_find(xml, "ARPVel", NULL, &b, &e) ||
+            !rs_xml_double(xml, "X", b - 8, &vx) ||
+            !rs_xml_double(xml, "Y", b - 8, &vy) ||
+            !rs_xml_double(xml, "Z", b - 8, &vz)) {
+            free(xml);
+            rs_set_error("cphd-meta: %s carries no usable <ARPVel>", path);
+            return RS_ERR_MISSING_META;
+        }
+    }
+
+    {
+        const char *b, *e;
+        if (rs_xml_find(xml, "CollectorName", NULL, &b, &e)) {
+            size_t n = (size_t)(e - b);
+            if (n >= sizeof out->collector) n = sizeof out->collector - 1;
+            memcpy(out->collector, b, n);
+            out->collector[n] = '\0';
+        }
+    }
+    free(xml);
+
+    out->n_pulse = (size_t)nv;
+    out->n_rbin  = (size_t)ns;
+    out->dwell_s = t2 - t1;
+    /* THE BAND START, NOT THE BAND CENTRE, and this is deliberate on both
+     * sides. rs_read_cphd() takes 'fc' from the first vector's SC0 because that
+     * is where transforming the FX samples leaves the residual phase and where
+     * the backprojector has to undo it -- see the round-trip case in
+     * test_cphd.c, which asserts it. For a uniform collect SC0 is FxMin, so this
+     * reads FxMin and the two agree.
+     *
+     * The difference is not small enough to take on trust: on the Giza product
+     * FxMin is 9.30 GHz where the band centre is 9.60, so choosing the centre
+     * would shift lambda by 3.2 percent and scale every phase-derived
+     * displacement by the same amount. A screen that disagreed with the run it
+     * screens for would be worse than no screen. */
+    out->fc_hz   = fx_lo;
+    out->v_platform_ms = sqrt(vx * vx + vy * vy + vz * vz);
+    out->incidence_rad *= M_PI / 180.0;
+
+    if (!(out->dwell_s > 0.0) || out->n_pulse < 2 || !(out->fc_hz > 0.0)) {
+        rs_set_error("cphd-meta: %s gives a dwell of %g s over %zu vectors at "
+                     "%g Hz, which is not a collect", path, out->dwell_s,
+                     out->n_pulse, out->fc_hz);
+        return RS_ERR_FORMAT;
+    }
+    out->lambda_m = RS_C / out->fc_hz;
+    out->prf_hz   = (double)(out->n_pulse - 1) / out->dwell_s;
+    return RS_OK;
+}

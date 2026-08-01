@@ -315,8 +315,22 @@ rs_validate_level_t rs_validate(const rs_validate_req_t *req,
                          "motion away."));
     }
 
-    /* ---- the timing the sub-aperture stage assumes is uniform ------------- */
-    if (req->prf_min_hz > 0.0 && req->prf_max_hz > 0.0) {
+    /* ---- the timing the sub-aperture stage assumes is uniform -------------
+     *
+     * The instantaneous spread and the largest gap are properties of the PVP
+     * block, so a metadata-only read cannot supply them -- see
+     * rs_read_cphd_meta(). Reported as UNKNOWN rather than omitted, because a
+     * check that vanishes from the list reads as a check that passed, and the
+     * whole point of screening a collect before downloading it is knowing which
+     * questions the screen did not answer. */
+    if (!(req->prf_min_hz > 0.0 && req->prf_max_hz > 0.0)) {
+        WORST(rs_v_add(out, &n, RS_VALIDATE_PRF_STABILITY, RS_V_UNKNOWN,
+              "PRF stability",
+              "no per-pulse transmit times were supplied, so the instantaneous "
+              "PRF spread and the largest dropped-vector gap are unmeasured. "
+              "They live in the PVP block; a metadata-only screen cannot see "
+              "them. Nominal PRF is %.2f Hz.", req->prf_hz));
+    } else {
         const double spread = 100.0 * (req->prf_max_hz - req->prf_min_hz)
                             / req->prf_hz;
         const double gap_intervals = (req->prf_hz > 0.0)

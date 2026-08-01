@@ -42,3 +42,57 @@ Before downloading a large scene, check its mode, dwell, incidence angle,
 polarization and complex product type. Run `micromotion validate` before the
 full processing chain: a file being open and readable does not mean its
 geometry can support the intended measurement.
+
+## Long-dwell candidates over built infrastructure
+
+`FOLLOW-UPS.md` items 4 and 18 refer to these. Dwell is taken from the two
+timestamps in the product ID; footprint contents are verified against
+OpenStreetMap rather than inferred from the scene centre.
+
+| dwell | incidence | site | product ID | size |
+|---:|---:|---|---|---:|
+| 25.0 s | **19.5°** | **Istanbul** (Golden Horn) | `CAPELLA_C09_SP_CPHD_HH_20230321101754_20230321101819` | 17.3 GB |
+| 60.0 s | 38.5° | Istanbul (night) | `CAPELLA_C11_SP_CPHD_HH_20230907223849_20230907223949` | 60.8 GB |
+| 60.0 s | 36.1° | Valencia | `CAPELLA_C09_SP_CPHD_HH_20240227111009_20240227111109` | 60.5 GB |
+| 40.0 s | 56.1° | Budapest (Danube) | `CAPELLA_C15_SP_CPHD_HH_20241115212743_20241115212823` | — |
+| 34.0 s | **37.5°** | Rome (Tiber) | `CAPELLA_C13_SP_CPHD_HH_20240816102624_20240816102658` | — |
+| 32.9 s | 38.6° | *Giza, for reference* | `CAPELLA_C13_SP_CPHD_HH_20241004001939_20241004002012` | 36 GB |
+
+**The Istanbul 25 s daytime collect is the primary candidate**, despite half the
+dwell of the 60 s one:
+
+- **13:18 local.** Traffic, metro and trams running. Traffic is the principal
+  excitation for these decks, and a 60 s dwell over an unexcited bridge measures
+  nothing — the 60 s collect is 01:39 local with the metro not operating.
+- **Incidence 19.5° against 38.5°**, so cos 0.943 against 0.782: about 20% better
+  projection of vertical modes onto the line of sight.
+- 17.3 GB against 60.8 GB.
+- The extra dwell buys only `df`, and 0.040 Hz is ample to place a mode in a
+  1–3 Hz band.
+
+In the footprint: the **M2 cable-stayed metro bridge** over the Golden Horn
+(41.0227 N, 28.9667 E), **Galata Köprüsü**, **Atatürk Köprüsü**, **Marmaray** rail
+segments — and the **Valens Aqueduct** (41.0162 N, 28.9552 E), a Roman masonry
+arch in the same scene at the same range through the same processing. That
+aqueduct is an *in-scene static reference*, which no simulated null can be.
+
+Screened with `validate --xml` it returns **WARN with no failures** for a 2 Hz
+target of 3 mm on the phase route; item 18 has the full finding and the caveats.
+
+### Screening before downloading
+
+A CPHD begins with an ASCII header giving `XML_BLOCK_BYTE_OFFSET` and
+`XML_BLOCK_SIZE`, and the XML block behind it carries the geometry. Two range
+requests decide whether a collect is worth fetching:
+
+```sh
+P=CAPELLA_C09_SP_CPHD_HH_20230321101754_20230321101819
+U=https://capella-open-data.s3.us-west-2.amazonaws.com/data/2023/3/21/$P/$P.cphd
+curl -s -r 0-1200 "$U" | tr -d '\000' | head       # the ASCII header
+curl -s -r 1024-12341 "$U" > meta.xml               # the XML block it points at
+./build/micromotion validate --xml meta.xml --frequency 2.0 --amplitude 3.0 \
+    --estimator phase --alpha 0.0067 --overlap 0.0
+```
+
+About 12 KB against a 17 GB download. `validate --xml` also accepts a whole CPHD
+file and seeks the block itself, which screens the 36 GB Giza collect in 0.3 s.

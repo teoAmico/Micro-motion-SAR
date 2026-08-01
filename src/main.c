@@ -2025,14 +2025,16 @@ static int rs_cmd_validate(int argc, char **argv)
 {
     const char *in       = rs_opt(argc, argv, "--cphd");
     const char *sicd_in  = rs_opt(argc, argv, "--sicd");
-    if (in && sicd_in) {
-        rs_set_error("validate: give --cphd or --sicd, not both");
+    const char *xml_arg  = rs_opt(argc, argv, "--xml");
+    if ((in && sicd_in) || (xml_arg && (in || sicd_in))) {
+        rs_set_error("validate: give exactly one of --cphd, --sicd or --xml");
         rs_report_error("validate", RS_ERR_ARG);
         return 1;
     }
-    if (!in && !sicd_in) {
+    if (!in && !sicd_in && !xml_arg) {
         printf("usage: resonarsat validate --cphd FILE [--frequency HZ]\n"
                "       resonarsat validate --sicd FILE [--frequency HZ]\n"
+               "       resonarsat validate --xml FILE  [--frequency HZ]\n"
                "                           [--amplitude MM] [--alpha F]\n"
                "                           [--overlap F] [--upsample N]\n"
                "                           [--cell M] [--size N]\n"
@@ -2051,6 +2053,13 @@ static int rs_cmd_validate(int argc, char **argv)
                "intend, before any of it is processed. Every check is arithmetic\n"
                "on the collect's geometry and costs milliseconds; the read of the\n"
                "file is the only slow part, and it retains one range bin.\n"
+               "\n"
+               "--xml screens a collect from its CPHD metadata block alone --\n"
+               "either the whole file, whose ASCII header says where the block\n"
+               "is, or the extracted block on its own. Eleven kilobytes decide\n"
+               "whether a 17 GB download is worth making. It cannot measure PRF\n"
+               "stability, which lives in the PVP block, and reports that check\n"
+               "as UNKNOWN rather than skipping it.\n"
                "\n"
                "--sicd reads a focused product's metadata only, leaving its\n"
                "pixels on disk, so screening a 12 GB image costs a header read.\n"
@@ -2072,7 +2081,7 @@ static int rs_cmd_validate(int argc, char **argv)
     }
 
     const int is_sicd = (sicd_in != NULL);
-    const char *path = is_sicd ? sicd_in : in;
+    const char *path = xml_arg ? xml_arg : (is_sicd ? sicd_in : in);
 
     rs_cphd_t c;
     rs_slc_t img;
@@ -2099,6 +2108,45 @@ static int rs_cmd_validate(int argc, char **argv)
             else fprintf(stderr, "warning: unknown --estimator '%s'; "
                                  "validating for correlation\n", est);
         }
+    }
+
+    /* ---- metadata-only screen, from a CPHD's XML block ------------------
+     *
+     * The cheapest thing this command can do, and the one worth doing first: a
+     * 17 GB collect's geometry is eleven kilobytes of XML behind a fixed-offset
+     * ASCII header, so two HTTP range requests over a public bucket decide
+     * whether it is worth downloading at all. See rs_read_cphd_meta() for what
+     * this cannot answer -- measured PRF stability, which needs the PVP block
+     * and is reported UNKNOWN rather than skipped. */
+    const char *xml_in = xml_arg;
+    if (xml_in) {
+        rs_cphd_meta_t meta;
+        st = rs_read_cphd_meta(xml_in, &meta);
+        if (st != RS_OK) { rs_report_error("validate", st); return 1; }
+
+        req.dwell_s       = meta.dwell_s;
+        req.prf_hz        = meta.prf_hz;
+        req.lambda_m      = meta.lambda_m;
+        req.n_pulse       = meta.n_pulse;
+        req.n_rbin        = (size_t)rs_opt_double(argc, argv, "--rbins",
+                                                  (double)meta.n_rbin);
+        req.slant_range_m = meta.slant_range_m;
+        req.v_platform_ms = meta.v_platform_ms;
+        req.incidence_rad = meta.incidence_rad;
+        /* prf_min/prf_max/worst_gap deliberately left zero; see above. */
+
+        printf("screening %s\n", xml_in);
+        printf("  %s, %zu vectors x %zu samples, dwell %.3f s, "
+               "nominal PRF %.2f Hz\n",
+               meta.collector[0] ? meta.collector : "(no collector name)",
+               meta.n_pulse, meta.n_rbin, meta.dwell_s, meta.prf_hz);
+        printf("  carrier %.4f GHz, slant range %.1f km, platform %.0f m/s, "
+               "incidence %.2f deg\n",
+               meta.fc_hz / 1e9, meta.slant_range_m / 1000.0,
+               meta.v_platform_ms, meta.incidence_rad * 180.0 / M_PI);
+        printf("  METADATA ONLY: no signal or PVP data was read, so this "
+               "screens a collect rather than validating a run.\n");
+        goto have_geometry;
     }
 
     if (is_sicd) {
@@ -2200,6 +2248,7 @@ static int rs_cmd_validate(int argc, char **argv)
         }
     }
 
+have_geometry:
     req.target_freq_hz = rs_opt_double(argc, argv, "--frequency", 0.0);
     req.target_amp_m   = rs_opt_double(argc, argv, "--amplitude", 0.0) / 1000.0;
     req.alpha    = rs_opt_double(argc, argv, "--alpha", req.alpha);

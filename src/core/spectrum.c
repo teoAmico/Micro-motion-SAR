@@ -436,12 +436,42 @@ resonarsat_status_t rs_spectrum_consensus(const rs_spectrum_t *spec,
 
 /* Multiple of the noise-alone SNR a window must reach to enter the cull.
  *
- * The null itself is derived (rs_coreg_snr_null); this factor is not, and it is
- * the only chosen number in rs_spectrum_ampcor_window(). Two is the weakest
- * claim worth making -- a surface whose peak does not stand at twice what an
- * empty surface produces has not distinguished itself from one -- and the gate
- * that was actually applied is reported in rs_spectrum_cull_t.snr_gate so that a
- * result never depends on a reader knowing this constant. */
+ * The null itself is derived (rs_coreg_snr_null); this factor is not. It was
+ * originally chosen on the argument that a surface failing to stand at twice
+ * what an empty surface produces has not distinguished itself from one, which
+ * was a plausible sentence and not evidence. It has since been SWEPT, over one
+ * set of spectra so that the threshold is the only thing varying --
+ * tests/test_cullsweep.c, and FOLLOW-UPS.md item 12d:
+ *
+ *   factor  gate   clutter: answers/correct/distinct   static answers
+ *    0.00    0.0            8 / 7 / 4                   1   DISQUALIFIED
+ *    1.00    7.5            7 / 6 / 4                   1   DISQUALIFIED
+ *    1.25    9.4            6 / 5 / 3                   0
+ *    1.50   11.3            6 / 5 / 3                   0
+ *    1.75   13.1            5 / 5 / 2                   0
+ *    2.00   15.0            5 / 5 / 2                   0
+ *    2.50   18.8            5 / 5 / 2                   0
+ *    3.00   22.5            5 / 5 / 2                   0
+ *
+ * TWO THINGS THE SWEEP ESTABLISHED, neither of which was known before it.
+ *
+ * The gate is LOAD-BEARING. Disabled, and set exactly at the null, the cull
+ * answers on a scene where nothing moves. That false positive is the failure the
+ * whole policy exists to avoid, and it appears the moment the factor reaches the
+ * null and not before. So the boundary is measured, and it falls where the
+ * derivation said it should.
+ *
+ * And 2.0 sits on a PLATEAU rather than at an edge. Every factor from 1.75 to
+ * 3.0 gives identical counts, so the choice among them costs nothing and buys
+ * nothing -- which is the only honest reason to leave a tuned constant where it
+ * is. Below 1.75 recall improves by one answer and one distinct injection at the
+ * price of a WRONG one, taking the rms from 0.0035 Hz to 0.85; that is a real
+ * trade and it is available to anyone who wants it through
+ * rs_spectrum_ampcor_window_opts(), which exists so this constant can be
+ * measured against rather than argued about.
+ *
+ * The gate actually applied is reported in rs_spectrum_cull_t.snr_gate, so no
+ * result depends on a reader knowing this number. */
 #define RS_CULL_SNR_FACTOR 2.0
 
 /* How many times the scene's median offset uncertainty a window may carry.
@@ -482,9 +512,20 @@ resonarsat_status_t rs_spectrum_consensus(const rs_spectrum_t *spec,
  * stride. See rs_spectrum_ampcor_window() in microm.h. */
 #define RS_CULL_MIN_NEIGHBOURS 2
 
-/* Select by culling on what the correlator knew. See microm.h. */
+/* Select by culling on what the correlator knew, at the default factors.
+ * See microm.h. */
 resonarsat_status_t rs_spectrum_ampcor_window(const rs_spectrum_t *spec,
                                               rs_spectrum_cull_t *out)
+{
+    return rs_spectrum_ampcor_window_opts(spec, RS_CULL_SNR_FACTOR,
+                                          RS_CULL_SIGMA_FACTOR, out);
+}
+
+/* Select by culling, with both tuned factors supplied. See microm.h. */
+resonarsat_status_t rs_spectrum_ampcor_window_opts(const rs_spectrum_t *spec,
+                                                   double snr_factor,
+                                                   double sigma_factor,
+                                                   rs_spectrum_cull_t *out)
 {
     if (!out) return RS_ERR_ARG;
     memset(out, 0, sizeof *out);
@@ -506,7 +547,8 @@ resonarsat_status_t rs_spectrum_ampcor_window(const rs_spectrum_t *spec,
 
     const int have_surface = (spec->snr_null > 0.0 && spec->snr && spec->sigma_px);
     out->gates_applied = have_surface;
-    out->snr_gate = have_surface ? RS_CULL_SNR_FACTOR * spec->snr_null : 0.0;
+    out->snr_gate = (have_surface && snr_factor > 0.0)
+                  ? snr_factor * spec->snr_null : 0.0;
 
     const double tol = (spec->df > 0.0) ? 0.5 * spec->df : 1e-9;
 
@@ -550,7 +592,8 @@ resonarsat_status_t rs_spectrum_ampcor_window(const rs_spectrum_t *spec,
             while (j > 0 && sig[j - 1] > v) { sig[j] = sig[j - 1]; j--; }
             sig[j] = v;
         }
-        out->sigma_gate = RS_CULL_SIGMA_FACTOR * sig[n_sig / 2];
+        out->sigma_gate = (sigma_factor > 0.0)
+                        ? sigma_factor * sig[n_sig / 2] : 0.0;
     }
     free(sig);
 
@@ -562,7 +605,10 @@ resonarsat_status_t rs_spectrum_ampcor_window(const rs_spectrum_t *spec,
         state[w] = 1;                       /* entered; may still vote below */
 
         if (have_surface) {
-            if (spec->snr[w] < out->snr_gate) { out->n_snr_cull++; continue; }
+            if (out->snr_gate > 0.0 && spec->snr[w] < out->snr_gate) {
+                out->n_snr_cull++;
+                continue;
+            }
             /* Offset determination against the scene's own typical window. A
              * gate of zero means every entrant reported a zero sigma, which the
              * estimator only does at a coherence of one; nothing is culled

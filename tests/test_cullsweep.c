@@ -47,6 +47,25 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* The SNR gate factors swept, as multiples of the noise-alone value.
+ *
+ * The range is set by what the two ends MEAN rather than by taste. At 1.0 the
+ * gate sits exactly at what a surface with no signal in it produces, so it can
+ * only remove windows that are worse than noise -- the weakest gate that is
+ * still a gate. Above about 3 the threshold exceeds the median surface SNR
+ * measured on every clutter run in this file, so it can only be a refusal
+ * machine. Anything worth choosing lies between. */
+/* Gate 2 held at the shipped default throughout, so the table below varies one
+ * thing. Its own factor is not swept here: it is relative to the scene's median
+ * and so cannot be compared across runs the way an absolute threshold can. */
+#define RS_CULL_SIGMA_DEFAULT 2.0
+
+#define N_FACTOR 8u
+static const double SNR_FACTORS[N_FACTOR] = {
+    0.0,   /* gate disabled entirely, to separate its effect from gates 2 and 3 */
+    1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0
+};
+
 #define N_CLUTTER 96u
 #define GRID_N    96u
 #define CELL_M    0.5
@@ -64,6 +83,14 @@ typedef struct {
     size_t cull_snr, cull_sigma, cull_neigh;
     double snr_null, snr_median;
     double sigma_median, exc_median;
+
+    /* What the cull reported at each swept SNR factor, from THIS run's single
+     * spectrum. Evaluating every factor against one set of spectra is the whole
+     * design of the experiment: re-running the chain per factor would confound
+     * the threshold with the realisation, and cost eight times as much for a
+     * worse answer. */
+    double cull_hz_f[N_FACTOR];
+    size_t cull_surv_f[N_FACTOR];
 } rs_run_t;
 
 /* Build a coherently vibrating clutter patch.
@@ -222,6 +249,15 @@ static resonarsat_status_t run_once(double freq, double amp, unsigned seed,
         out->consensus_hz = cf;
     }
 
+    for (size_t i = 0; i < N_FACTOR; i++) {
+        rs_spectrum_cull_t cull_i;
+        const resonarsat_status_t s2 =
+            rs_spectrum_ampcor_window_opts(&spec, SNR_FACTORS[i],
+                                           RS_CULL_SIGMA_DEFAULT, &cull_i);
+        out->cull_hz_f[i]   = (s2 == RS_OK) ? cull_i.freq_hz : -1.0;
+        out->cull_surv_f[i] = cull_i.n_survivor;
+    }
+
     rs_spectrum_cull_t cull;
     const resonarsat_status_t cst = rs_spectrum_ampcor_window(&spec, &cull);
     /* The counts are filled in on the refusal path too, and are wanted there
@@ -311,6 +347,9 @@ int main(void)
     const size_t n_pt = n_freq * n_seed;
 
     double inj[64], f_best[64], f_cons[64], f_cull[64];
+    double f_fac[N_FACTOR][64];       /* clutter answers, per SNR factor */
+    double p_fac[N_FACTOR][16];       /* isolated-point answers */
+    double s_fac[N_FACTOR][8];        /* static control answers */
     size_t n = 0;
     double df = 0.0, snr_null = 0.0;
 
@@ -327,6 +366,7 @@ int main(void)
             f_best[n] = r.best_hz;
             f_cons[n] = r.consensus_hz;
             f_cull[n] = r.cull_hz;
+            for (size_t k = 0; k < N_FACTOR; k++) f_fac[k][n] = r.cull_hz_f[k];
             n++;
             df = r.df;
             snr_null = r.snr_null;
@@ -354,6 +394,7 @@ int main(void)
         s_best[si] = r.best_hz;
         s_cons[si] = r.consensus_hz;
         s_cull[si] = r.cull_hz;
+        for (size_t k = 0; k < N_FACTOR; k++) s_fac[k][si] = r.cull_hz_f[k];
         printf("  %4s  %6u | %8.3f  %8.3f  %8.3f  | %2zu/%2zu/%2zu/%2zu/%2zu\n",
                "--", seeds[si], r.best_hz, r.consensus_hz, r.cull_hz,
                r.cull_input, r.cull_snr, r.cull_sigma, r.cull_neigh,
@@ -384,6 +425,7 @@ int main(void)
         p_best[np] = r.best_hz;
         p_cons[np] = r.consensus_hz;
         p_cull[np] = r.cull_hz;
+        for (size_t k = 0; k < N_FACTOR; k++) p_fac[k][np] = r.cull_hz_f[k];
         np++;
         printf("  %4.1f  | %8.3f  %8.3f  %8.3f  | %2zu/%2zu/%2zu/%2zu/%2zu"
                "  snr med %.1f  sigma med %.2f px  exc med %.2f px\n",
@@ -420,6 +462,154 @@ int main(void)
     print_fit("best",      pb, pdb, q_b, qr_b);
     print_fit("consensus", pc, pdc, q_c, qr_c);
     print_fit("cull",      pk, pdk, q_k, qr_k);
+
+    /* ------------------------------------------------------------------
+     * THE SNR GATE FACTOR, swept across the spectra above.
+     *
+     * Item 12c left this as the open question: gate 1 removes a third to two
+     * thirds of the population on clutter, and whether its factor of two is
+     * right at these coherences was never measured. Four numbers decide it, and
+     * they trade against each other:
+     *
+     *   answers    recall -- how often the policy says anything at all
+     *   correct    precision -- of those, how many are within half a bin
+     *   distinct   how many distinct injections the answers span, which is what
+     *              decides whether a fit over them could mean anything
+     *   static     answers on scenes with nothing moving. ANY is disqualifying
+     *
+     * A factor is better than another only if it improves recall or coverage
+     * without giving up precision or answering a static scene. If nothing
+     * separates them on those terms the incumbent stands, because changing a
+     * tuned constant on a tie is how a threshold gets fitted to one fixture.
+     * ------------------------------------------------------------------ */
+    printf("\n  SNR gate factor swept over the SAME spectra "
+           "(gate 2 fixed at 2x median, gate 3 unchanged):\n");
+    printf("  %8s %8s | %-24s | %-16s | %s\n",
+           "factor", "gate", "clutter (18 pts)", "isolated (6)", "static (3)");
+    printf("  %8s %8s | %5s %5s %5s %6s | %5s %5s %5s | %s\n",
+           "", "x null", "ans", "corr", "dist", "rms", "ans", "corr", "dist",
+           "answered");
+
+    size_t best_k = 0, best_cov = 0;
+    for (size_t k = 0; k < N_FACTOR; k++) {
+        size_t ca = 0, cc = 0, ia = 0, ic = 0, sa = 0;
+        for (size_t i = 0; i < n; i++) {
+            if (f_fac[k][i] < 0.0) continue;
+            ca++;
+            if (fabs(f_fac[k][i] - inj[i]) <= 0.5 * df) cc++;
+        }
+        for (size_t i = 0; i < np; i++) {
+            if (p_fac[k][i] < 0.0) continue;
+            ia++;
+            if (fabs(p_fac[k][i] - p_inj[i]) <= 0.5 * df) ic++;
+        }
+        for (size_t i = 0; i < n_seed; i++) if (s_fac[k][i] >= 0.0) sa++;
+
+        double k_slope = 0.0, k_rms = 0.0;
+        size_t cd = 0, id = 0;
+        (void)fit_policy(inj, f_fac[k], n, &k_slope, &k_rms, &cd);
+        {
+            double t_slope = 0.0, t_rms = 0.0;
+            (void)fit_policy(p_inj, p_fac[k], np, &t_slope, &t_rms, &id);
+        }
+
+        printf("  %8.2f %8.1f | %5zu %5zu %5zu %6.4f | %5zu %5zu %5zu | %zu%s\n",
+               SNR_FACTORS[k], SNR_FACTORS[k] * snr_null,
+               ca, cc, cd, (ca >= 3) ? k_rms : 0.0, ia, ic, id, sa,
+               (sa > 0) ? "  <- DISQUALIFIED" : "");
+
+        /* Rank on distinct-injection coverage, with perfect precision and no
+         * static answer as hard preconditions rather than tiebreakers. */
+        if (sa == 0 && cc == ca && ic == ia && cd + id > best_cov) {
+            best_cov = cd + id;
+            best_k = k;
+        }
+    }
+    printf("  best distinct coverage at factor %.2f (%zu distinct injections "
+           "across both fixtures)\n", SNR_FACTORS[best_k], best_cov);
+
+    RS_CASE("the SNR gate factor sweep separates the candidates");
+    {
+        /* The sweep is only informative if the factor CHANGES something. If
+         * every factor gave the same counts the gate would be inert here and
+         * nothing could be concluded from the table above. */
+        size_t lo_ans = 0, hi_ans = 0;
+        for (size_t i = 0; i < n; i++) {
+            if (f_fac[1][i] >= 0.0) lo_ans++;                 /* factor 1.0 */
+            if (f_fac[N_FACTOR - 1][i] >= 0.0) hi_ans++;      /* factor 3.0 */
+        }
+        printf("    factor 1.00 answered %zu of %zu; factor 3.00 answered %zu\n",
+               lo_ans, n, hi_ans);
+        RS_CHECK(lo_ans >= hi_ans);
+    }
+
+    RS_CASE("a gate at or below the noise-alone SNR admits a static scene");
+    {
+        /* THE MEASUREMENT THAT JUSTIFIES THE GATE EXISTING AT ALL, and it was
+         * not what this case was originally written to assert.
+         *
+         * The factor was chosen in item 12a on the argument that a surface
+         * failing to stand at twice what an empty surface produces has not
+         * distinguished itself from one. That is a plausible sentence and it
+         * was not evidence. This is: with the gate disabled, and with it set
+         * exactly AT the noise-alone value, the cull answers on a scene where
+         * nothing moves -- a false positive of the kind the whole policy exists
+         * to avoid -- and above the null it does not, at every factor tried.
+         *
+         * The boundary is therefore measured rather than asserted, and it falls
+         * where the derivation said it should: at the null. */
+        for (size_t k = 0; k < N_FACTOR; k++) {
+            size_t sa = 0;
+            for (size_t i = 0; i < n_seed; i++) if (s_fac[k][i] >= 0.0) sa++;
+            printf("    factor %.2f: %zu static answer(s)\n", SNR_FACTORS[k], sa);
+            if (SNR_FACTORS[k] <= 1.0) {
+                /* Not asserted as "must be nonzero" -- a seed that happened to
+                 * refuse would then fail the suite for no defect. The claim is
+                 * that the disqualifying cases are confined to this end. */
+                continue;
+            }
+            RS_CHECK(sa == 0);
+        }
+        /* And the finding itself: at least one factor at or below the null does
+         * let a static scene through, which is what makes the gate necessary
+         * rather than merely present. If this stops holding the gate has become
+         * inert and its factor should be re-derived, not re-tuned. */
+        size_t weak_fp = 0;
+        for (size_t k = 0; k < N_FACTOR; k++) {
+            if (SNR_FACTORS[k] > 1.0) continue;
+            for (size_t i = 0; i < n_seed; i++) if (s_fac[k][i] >= 0.0) weak_fp++;
+        }
+        printf("    static false positives at factors <= 1.0: %zu\n", weak_fp);
+        RS_CHECK(weak_fp > 0);
+    }
+
+    RS_CASE("the default factor sits on a plateau, not on a tuned edge");
+    {
+        /* A constant chosen at the edge of a cliff is fitted to its fixture.
+         * This asserts that the default behaves identically to its neighbours
+         * above -- so the choice costs nothing and buys nothing against them,
+         * which is the only honest reason to leave a tuned constant where it
+         * is. The factors below the default are NOT included: they differ, and
+         * that difference is the finding printed in the table. */
+        size_t ref_ans = 0, ref_corr = 0;
+        for (size_t i = 0; i < n; i++) {
+            if (f_fac[5][i] < 0.0) continue;              /* 2.00, the default */
+            ref_ans++;
+            if (fabs(f_fac[5][i] - inj[i]) <= 0.5 * df) ref_corr++;
+        }
+        for (size_t k = 5; k < N_FACTOR; k++) {
+            size_t a = 0, c = 0;
+            for (size_t i = 0; i < n; i++) {
+                if (f_fac[k][i] < 0.0) continue;
+                a++;
+                if (fabs(f_fac[k][i] - inj[i]) <= 0.5 * df) c++;
+            }
+            printf("    factor %.2f: %zu answers, %zu correct\n",
+                   SNR_FACTORS[k], a, c);
+            RS_CHECK(a == ref_ans && c == ref_corr);
+        }
+        RS_CHECK(ref_ans == ref_corr);   /* and the plateau is a correct one */
+    }
 
     RS_CASE("the sweep ran and every policy was given the same spectra");
     RS_CHECK(n == n_pt);

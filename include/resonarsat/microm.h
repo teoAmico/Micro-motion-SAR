@@ -996,6 +996,26 @@ typedef struct {
 resonarsat_status_t rs_spectrum_ampcor_window(const rs_spectrum_t *spec,
                                               rs_spectrum_cull_t *out);
 
+/* As rs_spectrum_ampcor_window(), with both tuned factors explicit.
+ *
+ * 'snr_factor' multiplies the noise-alone SNR to give gate 1's threshold, and
+ * 'sigma_factor' multiplies the entrants' median uncertainty to give gate 2's.
+ * The call above passes the defaults; a non-positive value here disables that
+ * gate rather than closing it, so a caller can measure one gate's effect with
+ * the other out of the way.
+ *
+ * EXPOSED SO THE CONSTANTS CAN BE SWEPT RATHER THAN ARGUED ABOUT. Both are
+ * tuned -- there is no absolute scale for either quantity -- and a tuned
+ * constant compiled into a selection policy is a claim nobody can check without
+ * editing the source and rebuilding. tests/test_cullsweep.c sweeps 'snr_factor'
+ * across one set of spectra, which is the only way to see what the choice costs
+ * in recall and buys in precision. Gate 3 has no factor here because its
+ * threshold is geometric rather than tuned; see above. */
+resonarsat_status_t rs_spectrum_ampcor_window_opts(const rs_spectrum_t *spec,
+                                                   double snr_factor,
+                                                   double sigma_factor,
+                                                   rs_spectrum_cull_t *out);
+
 /* Return the observation ratio implied by a sub-aperture duration and a measured
  * frequency: t_sap divided by that frequency's period, i.e. how many cycles of
  * the motion each sub-look integrates over.

@@ -348,12 +348,14 @@ applied to offset fields, and it drops a window unless all three hold:
 
 | gate | test | where the threshold comes from |
 |---|---|---|
-| surface SNR | peak power ÷ mean off-peak power ≥ 2× the noise-alone value | the noise-alone value is the harmonic number of the window's bin count — about 7.5 for a 32×32 window — so the gate is stated as a multiple of what an *empty* surface produces |
+| surface SNR | peak power ÷ mean off-peak power ≥ 2× the noise-alone value | the noise-alone value is the harmonic number of the window's bin count — about 7.5 for a 32×32 window — so the gate is a multiple of what an *empty* surface produces. The ×2 is swept in `FOLLOW-UPS.md` item 12d: at or below ×1 the cull answers on a **static** scene, and 1.75–3.0 are indistinguishable, so 2 sits on a plateau rather than an edge |
 | offset uncertainty | σ ≤ 2× the median σ of the windows entering the cull | relative, because σ is a *ranking* statistic with no absolute scale — an absolute form was tried and removed every window at every operating point (`FOLLOW-UPS.md` item 12c). This is ampcor's median-based rejection applied to the covariance |
 | neighbourhood | ≥ 2 of the 4 lattice neighbours report the same bin, counting any window that entered the cull | each cell of a 2×2 block has exactly two in-block neighbours, so this is "belongs to a block or better". Neighbours vote whether or not they passed the first two gates — the bound describes a target's footprint, not the neighbours' reliability |
 
 Two tuned factors of two, both written into `PREFIX_windows.csv` so a result never
-depends on knowing them; the rest is derived.
+depends on knowing them; the rest is derived. Both are reachable without editing
+the source through `rs_spectrum_ampcor_window_opts()`, which is how the SNR one
+was swept.
 
 **Its measured profile is high precision and low recall.** On a swept fixture
 (`tests/test_cullsweep.c`, 6 frequencies × 3 clutter seeds plus an isolated-point

@@ -1212,3 +1212,67 @@ thing to sweep, and it is a different experiment from this one.
 **Item 11 is untouched by all of this.** The static control here is scene-driven.
 A common-mode artefact still passes every gate the cull applies, and only
 `--null-static` catches it.
+
+### 12d. The SNR gate factor swept: it is load-bearing, and 2.0 sits on a plateau
+
+Item 12c closed with recall as the open question and named gate 1 as the
+suspect: it removes a third to two thirds of the population on clutter, and its
+factor of two had never been measured. Swept in `tests/test_cullsweep.c`, over
+the SAME spectra at every factor so that the threshold is the only thing varying
+-- re-running the chain per factor would confound the threshold with the
+realisation and cost eight times as much for a worse answer.
+
+`rs_spectrum_ampcor_window_opts()` was added to make this possible at all. A
+tuned constant compiled into a selection policy is a claim nobody can check
+without editing the source, which is most of why this one went unexamined
+through two commits.
+
+```
+factor  gate    clutter (18 pts)          isolated (6)     static (3)
+        x null  ans corr dist    rms      ans corr dist    answered
+ 0.00    0.0     8    7    4   0.7338      2    2    2      1  DISQUALIFIED
+ 1.00    7.5     7    6    4   0.7844      2    2    2      1  DISQUALIFIED
+ 1.25    9.4     6    5    3   0.8473      2    2    2      0
+ 1.50   11.3     6    5    3   0.8473      2    2    2      0
+ 1.75   13.1     5    5    2   0.0035      2    2    2      0
+ 2.00   15.0     5    5    2   0.0035      2    2    2      0
+ 2.50   18.8     5    5    2   0.0035      2    2    2      0
+ 3.00   22.5     5    5    2   0.0035      2    2    2      0
+```
+
+**THE GATE IS LOAD-BEARING, WHICH WAS NOT KNOWN.** Disabled, and set exactly AT
+the noise-alone value, the cull answers on a scene where nothing moves. That is
+the false positive the entire policy exists to avoid, and it is the first direct
+evidence that gate 1 does anything a null control would care about. It appears
+the moment the factor drops to the null and not before, so the boundary is
+measured and it falls where the derivation put it. `test_cullsweep.c` asserts
+both halves: every factor above the null refuses all three static scenes, and at
+least one factor at or below it does not.
+
+**AND 2.0 IS ON A PLATEAU, NOT AN EDGE.** Every factor from 1.75 to 3.0 gives
+identical counts on both fixtures. So the incumbent costs nothing and buys
+nothing against its neighbours above, which is the only honest reason to leave a
+tuned constant alone. A constant that had to sit exactly where it sits would be
+fitted to this fixture; this one does not. Asserted, so that a future change
+which moves the plateau fails rather than passing quietly.
+
+**The trade below 1.75 is real and is not taken.** Factors of 1.25 and 1.5 buy
+one more answer and one more distinct injection -- three rather than two, which
+matters, since two abscissae cannot support a slope -- at the price of one WRONG
+answer, taking the rms from 0.0035 Hz to 0.85. Precision is the only thing this
+policy currently has that the other two do not, and trading it for a third point
+of coverage would leave it with neither. Anyone who wants the trade can have it
+through `rs_spectrum_ampcor_window_opts()`.
+
+**WHAT THIS DOES NOT SETTLE, and it is the same thing item 12c left open.**
+Recall is still 5 of 18 on clutter over two distinct injections, and the sweep
+shows gate 1 is not what is holding it there: from 1.75 upwards the factor makes
+no difference at all, so the windows being lost are being lost elsewhere.
+Attention should move to gate 3 and to the shared coherence gate, not to this
+constant. Note also that the isolated-point column is 2/2/2 at EVERY factor
+including zero -- surfaces there score an SNR near 80, so gate 1 is irrelevant on
+that fixture and its recall of 2 of 6 is entirely someone else's doing.
+
+**One measurement to be careful with.** Three seeds and one fixture family. The
+static false positive at factors <= 1.0 is a single occurrence out of three
+seeds, so its existence is established and its rate is not.

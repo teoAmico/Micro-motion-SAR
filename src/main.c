@@ -1897,53 +1897,119 @@ static int rs_cmd_mmotion(int argc, char **argv)
     const resonarsat_status_t cull_st =
         rs_spectrum_ampcor_window(&spec, cull_state, &cull);
 
-    /* THE GATE. Refuse to report a frequency when the windows do not agree.
+    /* THE NULL CONTROL, RUN BEFORE THE VERDICT BECAUSE IT IS THE VERDICT.
      *
-     * AN EARLIER VERSION GATED ON CONTIGUITY INSTEAD, and it was wrong. The
-     * argument was that a largest 4-connected block under four cannot be a
-     * spatially resolved mode, since overlapping windows put a resolvable
-     * target in a 2x2 block at minimum -- a bound from the window layout rather
-     * than a constant anyone chose. That provenance is real and it does not
-     * survive contact with the data: at the documented working operating point
-     * the consensus returned 0.302, 0.504 and 0.706 Hz against injections of
-     * 0.3, 0.5 and 0.7 Hz, with 75%, 80% and 67% of windows agreeing, and a
-     * largest block of 3 refused all three. Windows drop out of the vote for
-     * other reasons -- the coherence gate, the quantisation floor -- so three
-     * contiguous agreeing windows is exactly what a 2x2 block looks like when
-     * one corner is excluded.
-     *
-     * Agreement separates the measured cases and contiguity does not. Correct
-     * recoveries run 47-80%; motionless scenes and wrong answers run 11-16%,
-     * with no overlap across the eight cases measured. So the gate is the
-     * statistic that discriminates, not the one with the better-sounding
-     * derivation, and the contiguity figure is reported beside it.
-     *
-     * THE THRESHOLD IS TUNED and its evidence is thin -- eight cases, one
-     * fixture family, two seeds. It is one third because that is where the two
-     * populations separate with room on either side, not because anything
-     * derives it.
-     *
-     * Refusing rather than reporting-with-a-caveat follows the precedent
-     * rs_spectrum_best_window() set one stage down, where falling back to
-     * window zero was replaced by an error: an absent measurement and a wrong
-     * one are not the same answer. Everything needed to second-guess this is in
-     * PREFIX_windows.csv. */
-    const int gated = (cons_vote > 0 &&
-                       (double)cons_agree < (1.0 / 3.0) * (double)cons_vote);
+     * It used to run after the headline had already been printed, so the only
+     * statistic that can distinguish a common-mode artefact from a measurement
+     * (item 11) was computed too late to decide anything. 'nge' is how many
+     * motionless realisations reached the measurement; zero of them is the
+     * evidence, and it is calibrated by this collect's own geometry rather than
+     * by a constant. Costs a refocus per trial, which is why 'null_ran' has to
+     * be a case the gate handles rather than something it can assume. */
+    size_t nge = 0;
+    int null_ran = 0;
+    const size_t s_trials = (size_t)rs_opt_double(argc, argv, "--null-static", 0.0);
+    if (s_trials > 0) {
+        double nm = 0.0, nsd = 0.0, nmax = 0.0;
+        const double extent = 0.5 * (double)grid.n_x * grid.dx;
+        printf("\nSTATIC-SCENE NULL FLOOR from %zu simulated motionless collects\n"
+               "with this collect's own geometry, through the identical chain:\n",
+               s_trials);
+        if (rs_null_static(&c, &grid, &sp, rs_opt(argc, argv, "--subap"), &mp,
+                           s_trials, prom, f_min, 1024, extent,
+                           &nm, &nsd, &nmax, &nge) == RS_OK) {
+            null_ran = 1;
+            printf("  mean %.1f, sd %.1f, worst %.1f\n", nm, nsd, nmax);
+            printf("  detection %.1f is %.2fx the mean and %.2fx the worst\n",
+                   prom, nm > 0.0 ? prom / nm : 0.0, nmax > 0.0 ? prom / nmax : 0.0);
+            printf("  %zu of %zu reached it -- empirical p = %.4f\n",
+                   nge, s_trials, (double)(nge + 1) / (double)(s_trials + 1));
+            if (nge > 0) {
+                printf("  A MOTIONLESS SCENE REACHED THIS MEASUREMENT through the\n"
+                       "  same processing. Whatever the peak is, it is not\n"
+                       "  evidence of motion.\n");
+            } else {
+                printf("  No motionless realisation reached it.\n");
+            }
+        } else {
+            rs_report_error("mmotion", RS_ERR_SINGULAR);
+        }
+    }
 
-    if (gated) {
-        printf("NO FREQUENCY REPORTED: only %zu of %zu windows agree (%.0f%%), "
-               "which is what a\n"
-               "  MOTIONLESS scene produces. Diagnostics only, NOT a "
-               "measurement -- strongest\n"
-               "  window %zu: %.3f Hz, prominence %.1f, quality %.3f, "
-               "peak-to-peak velocity %.1f mm/s\n",
-               cons_agree, cons_vote, 100.0 * (double)cons_agree / (double)cons_vote,
-               best, spec.dominant_freq[best], prom, spec.quality[best], pp * 1e3);
+
+    /* THE GATE.
+     *
+     * IT WAS A SCENE-WIDE AGREEMENT FRACTION AND THAT IS STRUCTURALLY WRONG FOR
+     * A LOCALISED TARGET. The old rule refused whenever fewer than a third of
+     * gated windows shared the consensus frequency. Its evidence was eight cases
+     * on a fixture family where correct recoveries ran 47-80% and motionless
+     * scenes 11-16% -- but those fixtures use `sim_cphd --clutter-vib`, which
+     * makes the WHOLE SCENE vibrate coherently. A fraction near one half is what
+     * a GLOBAL signal produces, and no localised target can ever reach it.
+     *
+     * Measured, on real data with a known truth: across the five injected Giza
+     * runs of FOLLOW-UPS.md item 30 the agreement ran 19-24% for TRUE POSITIVES,
+     * because the signal occupies a 9-12 window block and 136 windows of desert
+     * dilute it. The gate refused all five, printing "which is what a MOTIONLESS
+     * scene produces" over a scene that demonstrably was not. Item 31 shows
+     * rs_spectrum_best_window() had named the injected frequency in five of five.
+     *
+     * SO THE FRACTION IS DEMOTED TO A DIAGNOSTIC AND THE NULL CONTROL DECIDES.
+     * That is item 11's conclusion applied rather than merely recorded: only a
+     * scene known to be motionless, put through identical processing, separates
+     * a common-mode artefact from a measurement. It needs no tuned constant, and
+     * it scales correctly with how much of the scene is background because it
+     * compares like with like.
+     *
+     * WITHOUT A NULL THE TOOL NOW REPORTS AND SAYS IT IS UNADJUDICATED, where it
+     * previously refused and gave a reason that was false. That is deliberate
+     * and it makes the tool answer more often, which is a real cost. It is the
+     * right trade because the old refusal was not a safety property -- it
+     * rejected every true positive this project has ever produced on real data
+     * while still passing the artefact of item 11 at 100% agreement. An honest
+     * "nothing has adjudicated this" is worth more than a confident wrong
+     * refusal, and the credibility check is named on the same line.
+     *
+     * Contiguity is NOT used as a gate here. Ranking candidate frequencies by
+     * block size gets 0 of 5 on the same data: the desert produces a 12-window
+     * block at 0.065 Hz in every run including the control. It is reported
+     * because it is informative, not because it discriminates. */
+    const int refused = (null_ran && nge > 0);
+
+    /* The localised counterpart of the agreement fraction: how many windows
+     * back the frequency actually being reported, and whether they touch. */
+    size_t rep_agree = 0, rep_block = 0;
+    (void)rs_spectrum_block_at(&spec, spec.dominant_freq[best], &rep_agree, &rep_block);
+
+    if (refused) {
+        printf("NO FREQUENCY REPORTED: %zu of %zu motionless realisations reached "
+               "prominence %.1f\n"
+               "  through the identical chain, so the peak is not evidence of "
+               "motion. Diagnostics\n"
+               "  only: window %zu, %.3f Hz, quality %.3f, peak-to-peak velocity "
+               "%.1f mm/s\n",
+               nge, s_trials, prom, best, spec.dominant_freq[best],
+               spec.quality[best], pp * 1e3);
     } else {
         printf("strongest peak in window %zu: %.3f Hz, prominence %.1f, "
                "quality %.3f, peak-to-peak velocity %.1f mm/s\n",
                best, spec.dominant_freq[best], prom, spec.quality[best], pp * 1e3);
+        printf("  backed by %zu windows, largest touching block %zu\n",
+               rep_agree, rep_block);
+        if (null_ran) {
+            printf("  ADJUDICATED: no motionless realisation of %zu reached it.\n",
+                   s_trials);
+        } else {
+            printf("  NOT ADJUDICATED -- nothing here distinguishes this from an "
+                   "artefact of the\n"
+                   "  processing. Cross-window agreement cannot: it is blind to "
+                   "anything common to\n"
+                   "  every window (item 11), and it is diluted by background to "
+                   "19-24%% even for a\n"
+                   "  known true positive (item 31). Run --null-static N, or "
+                   "--inject-vib to check\n"
+                   "  the chain can see a known signal here at all.\n");
+        }
     }
 
     /* Is the winner even inside the band the sub-apertures can carry?
@@ -2110,48 +2176,21 @@ static int rs_cmd_mmotion(int argc, char **argv)
                "           frequency may be higher and aliased. Raise --n.\n",
                stack.f_max);
     }
-    /* The static-scene floor, which an overlapping decomposition cannot walk
-     * over the way it can walk over a shuffle. Costs a refocus per trial. */
-    const size_t s_trials = (size_t)rs_opt_double(argc, argv, "--null-static", 0.0);
-    if (s_trials > 0) {
-        double nm = 0.0, nsd = 0.0, nmax = 0.0;
-        size_t nge = 0;
-        const double extent = 0.5 * (double)grid.n_x * grid.dx;
-        printf("\nSTATIC-SCENE NULL FLOOR from %zu simulated motionless collects\n"
-               "with this collect's own geometry, through the identical chain:\n",
-               s_trials);
-        if (rs_null_static(&c, &grid, &sp, rs_opt(argc, argv, "--subap"), &mp,
-                           s_trials, prom, f_min, 1024, extent,
-                           &nm, &nsd, &nmax, &nge) == RS_OK) {
-            printf("  mean %.1f, sd %.1f, worst %.1f\n", nm, nsd, nmax);
-            printf("  detection %.1f is %.2fx the mean and %.2fx the worst\n",
-                   prom, nm > 0.0 ? prom / nm : 0.0, nmax > 0.0 ? prom / nmax : 0.0);
-            printf("  %zu of %zu reached it -- empirical p = %.4f\n",
-                   nge, s_trials, (double)(nge + 1) / (double)(s_trials + 1));
-            if (nge > 0) {
-                printf("  A MOTIONLESS SCENE REACHED THIS MEASUREMENT through the\n"
-                       "  same processing. Whatever the peak is, it is not\n"
-                       "  evidence of motion.\n");
-            } else {
-                printf("  No motionless realisation reached it.\n");
-            }
-        } else {
-            rs_report_error("mmotion", RS_ERR_SINGULAR);
-        }
-    }
-
     const size_t trials = (size_t)rs_opt_double(argc, argv, "--null-trials", 0.0);
     if (trials > 0) {
         double nm = 0.0, nsd = 0.0, nmax = 0.0;
-        size_t nge = 0;
+        /* Named apart from the static null's 'nge', which now gates the verdict
+         * above. The shuffle floor does not gate: it walks the sub-look time
+         * order, which an overlapping decomposition can step over. */
+        size_t shuf_ge = 0;
         if (rs_null_floor(&stack, &mp, trials, prom, f_min,
-                          &nm, &nsd, &nmax, &nge) == RS_OK) {
+                          &nm, &nsd, &nmax, &shuf_ge) == RS_OK) {
             printf("\nNULL FLOOR from %zu shuffles of the sub-look time order:\n", trials);
             printf("  mean %.1f, sd %.1f, worst %.1f\n", nm, nsd, nmax);
             printf("  detection %.1f is %.2fx the mean and %.2fx the worst null\n",
                    prom, nm > 0.0 ? prom / nm : 0.0, nmax > 0.0 ? prom / nmax : 0.0);
             printf("  %zu of %zu nulls reached it -- empirical p = %.4f\n",
-                   nge, trials, (double)(nge + 1) / (double)(trials + 1));
+                   shuf_ge, trials, (double)(shuf_ge + 1) / (double)(trials + 1));
             if (nge > 0 || prom < nmax) {
                 printf("  A null matched or beat the measurement. At this operating point\n"
                        "  the detection is not distinguishable from shuffled noise.\n");

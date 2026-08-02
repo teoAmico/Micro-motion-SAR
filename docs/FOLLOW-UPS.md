@@ -3389,3 +3389,32 @@ vindicated in general by one collect with a bright injected target in it.
 scene-wide agreement gate with one that survives a localised target, and to
 calibrate its threshold against `--null-static` at these settings rather than
 against the five points above.
+
+### Item 31, implemented: the null control decides and the fraction is a diagnostic
+
+`mmotion`'s gate is no longer a scene-wide fraction. `--null-static` now runs
+BEFORE the verdict rather than after it -- it had been computing the only
+statistic that separates a common-mode artefact from a measurement, item 11's
+conclusion, too late to decide anything -- and the verdict is whether any
+motionless realisation reached the measurement. No tuned constant, calibrated by
+the collect's own geometry, and it scales correctly with how much of the scene is
+background because it compares like with like.
+
+Beside the reported frequency the tool now prints how many windows back **that**
+frequency and their largest touching block, via `rs_spectrum_block_at()`. The
+scene-wide consensus is still printed and no longer gates: on this data it
+describes the desert's 0.065 Hz artefact rather than the signal.
+
+**Without a null the tool now REPORTS, marked `NOT ADJUDICATED`.** It answers more
+often than before, which is a real cost, taken deliberately: the old refusal was
+not a safety property. It rejected all five true positives above while still
+passing item 11's artefact at 100 percent agreement, and it justified itself with
+a sentence -- "which is what a MOTIONLESS scene produces" -- that item 31 shows
+was false on every one of them.
+
+Contiguity is reported and still does not gate, for the reason measured above:
+ranking on it gets 0 of 5.
+
+All three paths were exercised before this was committed -- adjudicated pass,
+adjudicated refusal (2 of 30 motionless realisations reaching the measurement),
+and the unadjudicated report.

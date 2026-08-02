@@ -439,6 +439,72 @@ resonarsat_status_t rs_spectrum_consensus(const rs_spectrum_t *spec,
 }
 
 
+/* Windows agreeing with one nominated frequency, and their largest block.
+ *
+ * See microm.h. Shares rs_spectrum_consensus()'s gates and flood fill; what
+ * differs is that the frequency is given rather than won by plurality. */
+resonarsat_status_t rs_spectrum_block_at(const rs_spectrum_t *spec, double freq_hz,
+                                         size_t *out_n_agree, size_t *out_n_block)
+{
+    if (out_n_agree) *out_n_agree = 0;
+    if (out_n_block) *out_n_block = 0;
+    if (!spec || !spec->dominant_freq || !spec->quality || spec->n_win == 0)
+        return RS_ERR_ARG;
+
+    double q_max = 0.0;
+    for (size_t w = 0; w < spec->n_win; w++)
+        if (spec->quality[w] > q_max) q_max = spec->quality[w];
+    const double q_min = 0.5 * q_max;
+    const double floor_px = (spec->quant_px > 0.0) ? 2.449 * spec->quant_px : 0.0;
+    const double tol = (spec->df > 0.0) ? 0.5 * spec->df : 1e-9;
+
+    unsigned char *mark = calloc(spec->n_win, 1);
+    if (!mark) {
+        rs_set_error("spectrum: cannot allocate a %zu-window agreement mask",
+                     spec->n_win);
+        return RS_ERR_ALLOC;
+    }
+    size_t n_agree = 0;
+    for (size_t w = 0; w < spec->n_win; w++) {
+        if (spec->quality[w] < q_min) continue;
+        if (floor_px > 0.0 && spec->excursion_px &&
+            spec->excursion_px[w] < floor_px) continue;
+        if (fabs(spec->dominant_freq[w] - freq_hz) <= tol) { mark[w] = 1; n_agree++; }
+    }
+    if (out_n_agree) *out_n_agree = n_agree;
+
+    if (out_n_block && spec->n_win_az > 0 && spec->n_win_rg > 0 &&
+        spec->n_win_az * spec->n_win_rg == spec->n_win) {
+        size_t *stk = malloc(spec->n_win * sizeof *stk);
+        if (stk) {
+            size_t largest = 0;
+            for (size_t seed = 0; seed < spec->n_win; seed++) {
+                if (mark[seed] != 1) continue;
+                size_t top = 0, size = 0;
+                stk[top++] = seed; mark[seed] = 2;
+                while (top > 0) {
+                    const size_t c = stk[--top];
+                    size++;
+                    const size_t ia = c / spec->n_win_rg, ir = c % spec->n_win_rg;
+                    const long da[4] = { -1, 1, 0, 0 }, dr[4] = { 0, 0, -1, 1 };
+                    for (int k = 0; k < 4; k++) {
+                        const long na = (long)ia + da[k], nr = (long)ir + dr[k];
+                        if (na < 0 || nr < 0 || (size_t)na >= spec->n_win_az ||
+                            (size_t)nr >= spec->n_win_rg) continue;
+                        const size_t nb = (size_t)na * spec->n_win_rg + (size_t)nr;
+                        if (mark[nb] == 1) { mark[nb] = 2; stk[top++] = nb; }
+                    }
+                }
+                if (size > largest) largest = size;
+            }
+            *out_n_block = largest;
+            free(stk);
+        }
+    }
+    free(mark);
+    return RS_OK;
+}
+
 /* Multiple of the noise-alone SNR a window must reach to enter the cull.
  *
  * The null itself is derived (rs_coreg_snr_null); this factor is not. It was

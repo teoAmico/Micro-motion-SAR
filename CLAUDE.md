@@ -139,6 +139,14 @@ message — never a crash, a partial write into a caller's buffer, or a silently
 zero-filled result. The error buffer is thread-local, so this is safe inside OpenMP
 regions.
 
+**The verdict comes from the null control, not from cross-window agreement.**
+`mmotion` refuses only when `--null-static` shows a motionless realisation reached
+the measurement; without one it reports and says `NOT ADJUDICATED`. The old
+scene-wide agreement gate rejected all five true positives on real data
+(`FOLLOW-UPS.md` items 30-31) because a localised target cannot reach a fraction
+calibrated on fixtures where the whole scene vibrates. Agreement and contiguity
+are printed and gate nothing.
+
 **Warn rather than silently degrade.** A wrong setting here does not fail loudly: ask
 for a measurement a collect cannot support and you get a complete, well-formed spectrum
 with a confident peak produced by the processing rather than the ground, and a

@@ -1225,6 +1225,28 @@ resonarsat_status_t rs_spectrum_ampcor_window_opts(const rs_spectrum_t *spec,
  * project asks a reader to consult before believing a summary line, so it has to
  * carry the selector's own verdict rather than an approximation of it. */
 
+/* How many gated windows agree with ONE NOMINATED frequency, and the largest
+ * 4-connected block among them.
+ *
+ * rs_spectrum_consensus() answers the same two questions about the frequency the
+ * plurality picked. This answers them about a frequency the caller names --
+ * normally the one being reported -- which is a different question whenever the
+ * scene's plurality is not the scene's signal.
+ *
+ * WHY THAT DISTINCTION IS NOT ACADEMIC. On the Giza injection sweep the plurality
+ * lands on a 12-window block at 0.065 Hz that is present in the UNINJECTED control
+ * too, so the consensus statistic describes a common-mode artefact while the
+ * injected frequency occupies its own 9-12 window block elsewhere on the grid.
+ * Asking about the reported frequency finds the second; asking about the
+ * plurality finds the first. See FOLLOW-UPS.md item 31.
+ *
+ * Both counts are taken over the population every selection policy gates on, so
+ * they are comparable with rs_spectrum_consensus()'s. 'out_n_block' is left at
+ * zero when the window lattice is not rectangular, since neighbours are then
+ * undefined. Either output may be NULL. */
+resonarsat_status_t rs_spectrum_block_at(const rs_spectrum_t *spec, double freq_hz,
+                                         size_t *out_n_agree, size_t *out_n_block);
+
 /* What selecting on amplitude dispersion found. See rs_spectrum_ps_window(). */
 typedef struct {
     size_t window;        /* lowest-dispersion window at the reported frequency */

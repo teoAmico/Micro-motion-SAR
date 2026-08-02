@@ -518,12 +518,35 @@ Nothing moved by more than the sub-pixel step could resolve. Raise `--upsample`,
 or check with `--shifts` whether the series moves at all.
 
 ```
-NO FREQUENCY REPORTED: only 4 of 49 windows agree (8%), which is what a
-MOTIONLESS scene produces. Diagnostics only, NOT a measurement
+NO FREQUENCY REPORTED: 2 of 30 motionless realisations reached prominence 6.3
+  through the identical chain, so the peak is not evidence of motion.
 ```
 
-Something was found, and the windows do not agree it is real. The number printed
-after this is a diagnostic. Do not quote it.
+A scene known to hold nothing produced the same measurement. Only `--null-static`
+can say this, and it is the only refusal in the tool that means "not motion"
+rather than "not resolvable".
+
+**This gate used to be a scene-wide agreement fraction and no longer is.** It
+refused whenever fewer than a third of windows shared the consensus frequency,
+which is what a *global* signal produces — the fixtures it was calibrated on make
+the whole scene vibrate. A localised target cannot reach it: across the five
+injected Giza runs, agreement ran 19–24% for **true positives** and all five were
+refused with the words *"which is what a MOTIONLESS scene produces"* over a scene
+that was not. `FOLLOW-UPS.md` items 30 and 31.
+
+Without a null you now get the frequency and an explicit `NOT ADJUDICATED`:
+
+```
+strongest peak in window 112: 0.163 Hz, prominence 31.4, quality 0.444, ...
+  backed by 32 windows, largest touching block 9
+  NOT ADJUDICATED -- nothing here distinguishes this from an artefact of the
+  processing. Run --null-static N, or --inject-vib to check the chain can see
+  a known signal here at all.
+```
+
+That reports more often than the old gate did, deliberately. The old refusal was
+not a safety property: it rejected every true positive this project has produced
+on real data while still passing item 11's artefact at 100% agreement.
 
 ---
 

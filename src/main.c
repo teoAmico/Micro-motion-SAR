@@ -769,6 +769,40 @@ static int rs_cmd_focus(int argc, char **argv)
         rs_cphd_free(&c); return 1;
     }
 
+    /* The positive control's own control. mmotion --inject-vib can report a null
+     * for two reasons that look identical in its output -- the chain missed the
+     * motion, or the injected target never focused -- and only an image
+     * separates them. See simulate.h. */
+    const char *f_inject = rs_opt(argc, argv, "--inject-vib");
+    if (f_inject) {
+        double f_inj = 0.0, amp_mm = 2.0, rel = 20.0;
+        if (sscanf(f_inject, "%lf,%lf,%lf", &f_inj, &amp_mm, &rel) < 1) {
+            fprintf(stderr, "focus: --inject-vib wants FREQ_HZ[,AMP_MM[,REL]], "
+                            "got '%s'\n", f_inject);
+            rs_cphd_free(&c); return 1;
+        }
+        const double origin[2] = { grid.origin[0], grid.origin[1] };
+        rs_inject_report_t rep;
+        st = rs_simulate_inject_vibrator(&c, origin, f_inj, amp_mm * 1e-3, rel,
+                                         &rep);
+        if (st != RS_OK) {
+            rs_report_error("focus", st); rs_cphd_free(&c); return 1;
+        }
+        printf("injected a %.4f Hz scatterer at the grid origin, %.3f mm, %.1fx "
+               "the median\n  non-zero sample magnitude (%.4g); deposited into "
+               "%zu of %zu pulses,\n  range bins %.1f to %.1f of %zu.\n"
+               "  IT MUST APPEAR AS A POINT AT THE IMAGE CENTRE. If it does not, "
+               "an\n  mmotion null with the same injection says nothing about "
+               "the scene.\n",
+               f_inj, amp_mm, rel, rep.scale_ref, rep.n_deposited, rep.n_pulse,
+               rep.fbin_min, rep.fbin_max, c.n_rbin);
+        if (rep.n_deposited < rep.n_pulse) {
+            printf("  WARNING: %.1f%% of pulses missed the range window; the "
+                   "target is\n           built from a shortened aperture.\n",
+                   100.0 * (1.0 - (double)rep.n_deposited / (double)rep.n_pulse));
+        }
+    }
+
     const size_t p_start = (size_t)rs_opt_double(argc, argv, "--pulse-start", 0);
     const size_t p_count = (size_t)rs_opt_double(argc, argv, "--pulse-count",
                                                  (double)c.n_pulse);
@@ -1194,16 +1228,33 @@ static int rs_cmd_mmotion(int argc, char **argv)
             rs_cphd_free(&c); return 1;
         }
         const double origin[2] = { grid.origin[0], grid.origin[1] };
-        st = rs_simulate_inject_vibrator(&c, origin, f_inj, amp_mm * 1e-3, rel);
+        rs_inject_report_t rep;
+        st = rs_simulate_inject_vibrator(&c, origin, f_inj, amp_mm * 1e-3, rel,
+                                         &rep);
         if (st != RS_OK) {
             rs_report_error("mmotion", st); rs_cphd_free(&c); return 1;
         }
         printf("POSITIVE CONTROL: injected a %.4f Hz scatterer at the grid origin,\n"
                "  %.3f mm vertical displacement, %.1fx the scene's median non-zero\n"
-               "  sample magnitude. THIS RUN IS ABOUT THE PIPELINE, NOT THE SCENE:\n"
-               "  if %.4f Hz does not come back, a null anywhere in this collect is\n"
-               "  not evidence that the ground is still.\n",
-               f_inj, amp_mm, rel, f_inj);
+               "  sample magnitude (%.4g).\n"
+               "  deposited into %zu of %zu pulses, range bins %.1f to %.1f of %zu\n",
+               f_inj, amp_mm, rel, rep.scale_ref,
+               rep.n_deposited, rep.n_pulse, rep.fbin_min, rep.fbin_max,
+               c.n_rbin);
+        /* A partial deposit is the failure mode that makes this control lie:
+         * the aperture is cut short, the target smears, and the null that
+         * follows says nothing about either the scene or the chain. */
+        if (rep.n_deposited < rep.n_pulse) {
+            const double frac = (double)rep.n_deposited / (double)rep.n_pulse;
+            printf("  WARNING: %.1f%% of pulses missed the range window, so the\n"
+                   "           injected target is built from a SHORTENED aperture\n"
+                   "           and may not focus. Widen --rbins or move the grid\n"
+                   "           origin before reading anything into this run.\n",
+                   100.0 * (1.0 - frac));
+        }
+        printf("  THIS RUN IS ABOUT THE PIPELINE, NOT THE SCENE: if %.4f Hz does\n"
+               "  not come back, a null anywhere in this collect is not evidence\n"
+               "  that the ground is still.\n", f_inj);
     }
 
     /* Resolved before the sub-apertures are built, because that is the stage it

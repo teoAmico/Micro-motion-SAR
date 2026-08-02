@@ -319,8 +319,17 @@ int main(void)
             rs_cphd_free(&ref);
 
             if (arm == 1) {
+                rs_inject_report_t rep;
                 RS_CHECK_OK(rs_simulate_inject_vibrator(&c, centre, f_inj,
-                                                        amp_z, 20.0));
+                                                        amp_z, 20.0, &rep));
+                /* The control's own control: an injection that lands nowhere
+                 * produces a null indistinguishable from a chain that cannot see
+                 * the motion, which is the failure this whole case exists to
+                 * rule out. Every pulse must deposit on a scene built around
+                 * this target. */
+                printf("      injected into %zu of %zu pulses, bins %.1f-%.1f\n",
+                       rep.n_deposited, rep.n_pulse, rep.fbin_min, rep.fbin_max);
+                RS_CHECK(rep.n_deposited == rep.n_pulse);
             }
 
             rs_grid_t g = { .origin = {0,0,0}, .n_x = 64, .n_y = 64,

@@ -223,8 +223,14 @@ static double rs_signal_median_mag(const rs_cphd_t *cphd, size_t want)
 resonarsat_status_t rs_simulate_inject_vibrator(rs_cphd_t *cphd,
                                                 const double centre[2],
                                                 double freq_hz, double amp_m,
-                                                double rel_amp)
+                                                double rel_amp,
+                                                rs_inject_report_t *report)
 {
+    if (report) {
+        report->n_pulse = 0; report->n_deposited = 0;
+        report->fbin_min = NAN; report->fbin_max = NAN;
+        report->scale_ref = 0.0; report->amp = 0.0;
+    }
     if (!cphd || !centre) return RS_ERR_ARG;
     if (cphd->n_pulse == 0 || !cphd->t || !cphd->pos || !cphd->r_ref ||
         !cphd->signal) {
@@ -261,13 +267,24 @@ resonarsat_status_t rs_simulate_inject_vibrator(rs_cphd_t *cphd,
     }
     const double amp = rel_amp * scale_ref;
 
+    if (report) {
+        report->n_pulse = cphd->n_pulse;
+        report->scale_ref = scale_ref;
+        report->amp = amp;
+    }
+
     const size_t n_rbin = cphd->n_rbin;
     const double k_phase = 4.0 * M_PI / lambda;
     const double sigma = 2.0 * cphd->dr / 2.355;   /* FWHM of about two bins */
     const double inv_2s2 = 1.0 / (2.0 * sigma * sigma);
 
+    /* Accounted rather than assumed: see rs_inject_report_t. */
+    size_t deposited = 0;
+    double fb_lo = INFINITY, fb_hi = -INFINITY;
+
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static)
+#pragma omp parallel for schedule(static) \
+        reduction(+:deposited) reduction(min:fb_lo) reduction(max:fb_hi)
 #endif
     for (size_t i = 0; i < cphd->n_pulse; i++) {
         const double px = cphd->pos[3 * i + 0];
@@ -285,6 +302,9 @@ resonarsat_status_t rs_simulate_inject_vibrator(rs_cphd_t *cphd,
 
         const double fbin = (R - cphd->r_ref[i]) / cphd->dr + 0.5 * (double)n_rbin;
         if (!isfinite(fbin) || fbin < 0.0 || fbin >= (double)n_rbin) continue;
+        deposited++;
+        if (fbin < fb_lo) fb_lo = fbin;
+        if (fbin > fb_hi) fb_hi = fbin;
 
         /* Whichever reference the data were recorded on -- see item 27. */
         const double phase =
@@ -297,6 +317,18 @@ resonarsat_status_t rs_simulate_inject_vibrator(rs_cphd_t *cphd,
             const double d = (double)b - fbin;
             row[b] += (float complex)(a * exp(-d * d * inv_2s2));
         }
+    }
+
+    if (report) {
+        report->n_deposited = deposited;
+        if (deposited > 0) { report->fbin_min = fb_lo; report->fbin_max = fb_hi; }
+    }
+    if (deposited == 0) {
+        rs_set_error("inject: the target at (%.1f, %.1f) falls outside all %zu "
+                     "pulses' %zu-bin range windows, so nothing was injected; "
+                     "widen --rbins or move the grid origin",
+                     centre[0], centre[1], cphd->n_pulse, n_rbin);
+        return RS_ERR_RANGE;
     }
     return RS_OK;
 }

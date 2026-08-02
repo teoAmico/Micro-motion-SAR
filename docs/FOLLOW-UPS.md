@@ -2772,3 +2772,84 @@ file rests on a `--null-static` number -- the real-collect runs (items 17, 19)
 returned nulls on window agreement and amplitude dispersion, neither of which
 touches this path -- so nothing here is withdrawn. The claim being retired is
 that the control was known to work.
+
+---
+
+## 28. The Giza positive control is INVALID: the injected target does not focus off-centre
+
+Item 27's fix made `--null-static` a real control. This is the same lesson
+arriving a second time, on the control built to replace it.
+
+`mmotion --inject-vib 1.0,2.0,20` was run on the Giza collect at the settings of
+`runs/giza/2026-08-01-phase-highoverlap`, 30 min. The injected 1.0 Hz did not come
+back: `D_A` best 0.427 against 0.381 uninjected, 0 of 225 windows meeting the
+criterion, no frequency reported. Read naively that says the chain cannot see a
+2 mm 1 Hz motion at Giza. **It does not say that, because the injected target
+never focused.**
+
+### What was checked, in order
+
+`focus --inject-vib` was added so this costs seconds rather than half an hour,
+and the injector was given deposit accounting. Ruled out:
+
+- **Range cropping.** 335141 of 335141 pulses deposited, range bins 3316.6 to
+  3507.4 of 4096. Nothing was skipped. The silent-skip failure mode the
+  accounting was added to catch is not what happened.
+- **Pulse decimation in the check.** The first look used `--max-pulses 16696`;
+  re-run at full sampling the smear persists, and the uninjected control at the
+  same patch is clean speckle.
+- **Conjugate phase.** Flipping the sign to `+k*(R - r_ref)` makes the target
+  vanish entirely rather than focus, so the sign in use is the correct one.
+- **The `z` convention.** `rs_focus_backproject()` places a cell at
+  `origin[2] + height`, which is 0 here, and `rs_resolve_at()` never sets
+  `origin[2]`. The injector's implicit z of 0 agrees.
+- **Eyeballing.** The injected target is ~80 dB above clutter after integration,
+  so its sidelobe skirt saturates an 8-bit autoscaled PNG whether or not the peak
+  beneath is clean. Measured instead.
+
+### Where it breaks
+
+```
+grid origin        control peak/median   injected peak/median   energy in brightest cell
+  (0, 0)                 16.4                   714.3                  22.75%
+  (-152, -552)            3.5                     3.5                   0.20%
+```
+
+At the scene reference point the injected target focuses to a point holding
+nearly a quarter of the patch's energy. At Giza's offset it is indistinguishable
+from speckle. The difference between the two is RANGE MIGRATION: at the SRP the
+target sits in bin 2048.0 for every pulse, and 552 m away it walks from 3316.6 to
+3507.4, 191 bins across the dwell.
+
+Real scatterers at that same offset focus -- the quicklook in
+`runs/giza/2026-08-01-phase-highoverlap` shows the pyramid's edges -- so this is a
+defect in how `rs_simulate_inject_vibrator()` writes a migrating target, not in
+backprojection. NOT YET IDENTIFIED. A residual 1.75 m azimuth offset of the peak
+even at the SRP (cell 35 against the expected 31.5) says something small is
+already wrong there and grows with offset.
+
+### What this retracts and what it does not
+
+**Retracted: nothing about Giza.** The 30-minute run is void. It is not evidence
+that the chain cannot see motion there, and the earlier null (item 17) remains
+exactly as untested as item 19 left it.
+
+**Not retracted: the control's design, or its synthetic result.**
+`tests/test_nullmotion.c` recovers 0.706 Hz from a 0.7 Hz injection at `D_A`
+0.050 with the uninjected arm returning nothing, and that fixture puts the target
+at the grid origin of a scene built around it -- zero migration. The synthetic
+test could never have caught this, which is the same structural gap item 27
+recorded: the fixture satisfies the precondition by construction.
+
+**The general lesson, twice in one day.** Both controls this project relies on
+were written, documented at length, and never checked to produce what they
+claimed. The check that caught both is the same one: form an image and look at
+whether the thing that should be there is there.
+
+### Next
+
+Find why a migrating injected target defocuses. Until then `--inject-vib` is
+sound only where range migration over the dwell is small, and `focus --inject-vib`
+should be run before believing any `mmotion --inject-vib` result -- the peak must
+be a point at the image centre. A guard belongs in the tool: measure the injected
+target's focused peak-to-median and refuse to report a null when it is low.

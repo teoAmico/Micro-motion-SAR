@@ -115,12 +115,37 @@ resonarsat_status_t rs_simulate_static_like(const rs_cphd_t *ref, unsigned seed,
  * injected scatterer focuses by the same arithmetic as everything already in the
  * data (see item 27 for what happens when those disagree).
  *
+ * WHAT 'report' IS FOR, AND WHY IT IS NOT OPTIONAL IN PRACTICE. A pulse whose
+ * target range falls outside the loaded range window deposits nothing, and
+ * silently: a caller that crops with --rbins can inject into a collect and have
+ * NOTHING happen. That failure is invisible in the result -- a null with no
+ * injection in it looks exactly like a null with an injection the chain could
+ * not see -- which would make this control worthless in precisely the case it
+ * exists for. Measured at Giza on 2026-08-02: an injection that changed the
+ * output produced no dominant window, and there was no way to tell a chain that
+ * missed the motion from a target that never landed.
+ *
+ * 'report' may be NULL, but a caller reporting a null to anyone should pass it
+ * and check 'n_deposited' against 'n_pulse'.
+ *
  * Modifies 'cphd' in place, adding to the existing samples rather than
  * replacing them. Returns RS_ERR_ARG on a NULL argument, a collect carrying no
- * pulse geometry, or a non-finite or non-positive frequency. */
+ * pulse geometry, or a non-finite or non-positive frequency, and RS_ERR_RANGE
+ * if NO pulse deposited -- an injection that lands nowhere is an error, not a
+ * quiet no-op. */
+typedef struct {
+    size_t n_pulse;       /* pulses in the collect */
+    size_t n_deposited;   /* of those, pulses whose target fell in the window */
+    double fbin_min;      /* range bin the target reached, min over pulses */
+    double fbin_max;      /* and max; both NAN when nothing deposited */
+    double scale_ref;     /* the median non-zero sample magnitude scaled against */
+    double amp;           /* rel_amp * scale_ref, the amplitude actually written */
+} rs_inject_report_t;
+
 resonarsat_status_t rs_simulate_inject_vibrator(rs_cphd_t *cphd,
                                                 const double centre[2],
                                                 double freq_hz, double amp_m,
-                                                double rel_amp);
+                                                double rel_amp,
+                                                rs_inject_report_t *report);
 
 #endif /* RESONARSAT_SIMULATE_H */

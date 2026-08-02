@@ -43,20 +43,40 @@ exists and passes its tests:
 - null-test machinery, `rs_track_fit()`, a cross-window consensus statistic, an
   ampcor-style cull on what the correlation surfaces themselves say, and a
   per-window evidence file written beside every result
+- an in-data positive control, `mmotion --inject-vib` — a scatterer of known frequency
+  and amplitude added to the real phase history *before* sub-aperture formation, so the
+  whole chain runs over it. A null on a real collect cannot on its own be told apart from
+  a chain that cannot see motion in that data; this is what tells them apart
 - a cross-check of the CPHD reader against SARPy (`tools/sarpy_crosscheck.py`),
   which is the only thing here that tests the parse of a real vendor product
 
 21 tests pass. **The phase estimator recovers injected frequencies on synthetic fixtures**
 — slope 1.008 and rms 0.0070 Hz against a half-bin bound of 0.0252, swept and pooled over
 three clutter seeds, each with a static control that lands outside the swept band. That is
-the first thing here to meet the bar below, and `docs/FOLLOW-UPS.md` item 14 states plainly
-what it is not: the simulator gives every scatterer analytically exact phase, so the
+the first thing here to meet the bar below.
+
+**It is also now bounded, by measurement rather than by caveat.** `docs/FOLLOW-UPS.md`
+item 14 noted that the simulator gives every scatterer analytically exact phase, so the
 sub-look decorrelation that most threatens a phase observable is absent by construction.
+Item 24 added that mechanism — facets bright over only part of the aperture — and item 25
+ran item 14's own sweep against it. The recovery does not survive: slope goes negative at
+three of four settings, rms rises to 0.59–1.78 Hz against the 0.0252 bound, and two of
+twelve *motionless* controls come back with a confident in-band frequency. So the estimator
+does what it claims on the scene it was measured on, and there is no basis for expecting
+that to transfer to a real collect. Selecting on amplitude dispersion is the only policy
+that survives the change: it refuses where it cannot tell, and where it answers it returns
+item 14's figures to four decimals.
 
 On the real Giza collect the same estimator at 90% overlap returns a **null**, refused at
 16% window agreement, with no trace of the fixed-frequency artefact the old
 implementation produced at 100% agreement — the first evidence outside simulation that
 the fix holds. Nothing in that scene is known to move, so the null bounds nothing.
+
+Whether that null says anything about Giza at all is a separate question, and it is now
+testable rather than arguable. Item 19 showed the phase route's precondition was unmet
+across the whole scene — 0 of 225 windows met the amplitude-dispersion criterion — so the
+run could not have succeeded whatever the pyramid was doing. `--inject-vib` puts a known
+vibration into that same collect and asks whether the chain returns it.
 
 **Nothing here has been shown to detect real motion, and the correlation estimator has
 not been shown to recover a frequency anywhere.** No collect available to this project

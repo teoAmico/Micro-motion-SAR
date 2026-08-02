@@ -1775,5 +1775,98 @@ int main(void)
         rs_cphd_free(&c);
     }
 
+    RS_CASE("aspect-dependent scattering raises D_A where isotropy cannot");
+    {
+        /* THE MECHANISM THE FIXTURES LACKED. Two measurements said the
+         * propagation model, not the target list, is what separates these
+         * fixtures from real collects: item 12f, that sub-look coherence here is
+         * invariant to scene content, and item 23, that amplitude dispersion on
+         * real data climbs steeply with window size while here it does not move.
+         * rs_sim_scene_aspect() adds the missing mechanism -- a facet bright
+         * over only part of the aperture. Item 24 measured what it produces.
+         *
+         * This pins the two properties that make it worth having, both against
+         * an ISOTROPIC CONTROL through identical processing, because the whole
+         * point is the difference from the isotropic model:
+         *
+         *   1. it raises D_A out of the band the isotropic fixtures occupy and
+         *      into the one real collects do;
+         *   2. it is OFF by default -- rs_sim_scene() must remain exactly the
+         *      isotropic scene every earlier measurement was made on.
+         *
+         * Property 2 is the load-bearing one. Every recovery result in
+         * FOLLOW-UPS.md was measured on the isotropic scene, and if this made
+         * that scene even slightly different those results would silently stop
+         * describing what the code does. */
+        const double freq = 0.7, amp = 0.002442;
+        rs_sim_tgt_t tg[400];
+        unsigned sd = 7u * 2654435761u + 1u;
+        for (size_t i = 0; i < 400; i++) {
+            const double u1 = rs_sim_u01(&sd), u2 = rs_sim_u01(&sd),
+                         u3 = rs_sim_u01(&sd);
+            tg[i].x = (u1 - 0.5) * 32.0;
+            tg[i].y = (u2 - 0.5) * 32.0;
+            tg[i].z = 0.0;
+            tg[i].rcs = 0.3 * (-log(u3));
+            tg[i].vib_freq = freq;
+            tg[i].vib_amp = amp;
+            tg[i].vib_phase = 0.0;
+        }
+
+        /* Same targets, same seed, same everything downstream: only the
+         * propagation model differs between the two arms. */
+        const rs_sim_aspect_t asp = { .lobe_frac = 0.25, .frac = 0.5,
+                                      .peak_gain = 16.0, .seed = 7u };
+        double med[2] = { 0.0, 0.0 };
+        int ok = 1;
+        for (int arm = 0; arm < 2 && ok; arm++) {
+            rs_cphd_t c;
+            RS_CHECK_OK(rs_sim_scene_aspect(&c, tg, 400, 12.0, 400.0, 256, 0.5,
+                                            arm ? &asp : NULL));
+            rs_grid_t g = { .origin = {0,0,0}, .n_x = 64, .n_y = 64,
+                            .dx = 0.5, .dy = 0.5, .height = 0.0 };
+            rs_subap_params_t sp;
+            rs_subap_params_default(&sp);
+            sp.n_looks = 64;
+            sp.overlap = 0.0;
+            rs_subap_stack_t st;
+            RS_CHECK_OK(rs_subaperture_from_cphd(&c, &g, &sp, &st));
+
+            rs_microm_params_t mp;
+            rs_microm_params_default(&mp);
+            mp.estimator = RS_MICROM_EST_PHASE;
+            mp.win_az = mp.win_rg = 16;
+            mp.stride_az = mp.stride_rg = 8;
+            mp.coherence_min = 0.0;
+            rs_microm_t m;
+            RS_CHECK_OK(rs_microm_track(&st, &mp, &m));
+
+            double *v = malloc(m.n_win * sizeof *v);
+            if (!v) { ok = 0; }
+            else {
+                for (size_t w = 0; w < m.n_win; w++) v[w] = m.d_a[w];
+                for (size_t i = 1; i < m.n_win; i++) {
+                    const double k = v[i];
+                    size_t j = i;
+                    while (j > 0 && v[j - 1] > k) { v[j] = v[j - 1]; j--; }
+                    v[j] = k;
+                }
+                med[arm] = v[m.n_win / 2];
+                free(v);
+            }
+            rs_microm_free(&m);
+            rs_subap_stack_free(&st);
+            rs_cphd_free(&c);
+        }
+
+        printf("      isotropic median D_A %.3f, aspect-dependent %.3f\n",
+               med[0], med[1]);
+        /* The isotropic arm stays where every earlier fixture sat; the aspect
+         * arm has to clear it by a margin no seed-to-seed scatter reaches.
+         * Item 24 measured 0.40 against 0.89-1.06 at these settings. */
+        RS_CHECK(med[0] < 0.55);
+        RS_CHECK(med[1] > med[0] + 0.25);
+    }
+
     RS_TEST_END();
 }

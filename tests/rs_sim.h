@@ -13,23 +13,110 @@
 #include <math.h>
 #include <stdlib.h>
 
-/* A simulated point target. */
+/* A simulated point target.
+ *
+ * Aspect dependence is deliberately NOT a field here. Callers build target
+ * lists in uninitialised stack arrays and assign field by field, so a new
+ * member would be read as garbage by every existing fixture. It lives in
+ * rs_sim_aspect_t instead, passed alongside. */
 typedef struct {
     double x, y, z, rcs, vib_freq, vib_amp, vib_phase;
 } rs_sim_tgt_t;
 
-/* Generate range-compressed phase history for a target list.
+/* Uniform draw in (0,1] from a stateful LCG, so a scene is reproducible from its
+ * seed alone and two seeds are independent realisations of one experiment. */
+static inline double rs_sim_u01(unsigned *state)
+{
+    *state = *state * 1103515245u + 12345u;
+    const double u = (double)(*state >> 8) / 16777216.0;
+    return (u > 1e-9) ? u : 1e-9;
+}
+
+/* ASPECT-DEPENDENT SCATTERING: how a target's brightness varies with the
+ * along-track viewing angle over the dwell.
+ *
+ * WHY THIS EXISTS. Every scatterer in rs_sim_scene() is isotropic -- its
+ * amplitude is a constant and only its phase moves -- so a simulated dominant
+ * is dominant in EVERY sub-look by construction. Real scenes do not behave that
+ * way, and two independent measurements say so. FOLLOW-UPS.md item 12f: sub-look
+ * coherence on these fixtures is set by look separation alone and is invariant
+ * to scene content, so the --coherence gate cannot be tested by any target list.
+ * Item 23: amplitude dispersion on real data rises steeply with window size
+ * (median 0.915, 1.865, 2.590 across win 16/32/64) and on these fixtures it does
+ * not move at all (0.452 to 0.477), which reads as the brightest real return
+ * also being the most angle-selective one. Both point at the propagation model
+ * rather than at the target list. This is the model change they ask for.
+ *
+ * THE MODEL is a uniformly illuminated flat facet, whose two-way backscatter
+ * pattern is a sinc in the along-track direction cosine u:
+ *
+ *     A(u) = sinc( 2 L (u - u0) / lambda ),   sinc(x) = sin(pi x) / (pi x)
+ *
+ * for a facet of along-track extent L pointed at u0. Its first null sits at
+ * |u - u0| = lambda / (2L), so the null-to-null lobe width is lambda / L.
+ * Parameterising by that width as a fraction of the aperture the collect
+ * actually spans, du_ap = v * t_dwell / r, the facet length drops out:
+ *
+ *     A(u) = sinc( 2 (u - u0) / (lobe_frac * du_ap) )
+ *
+ * and lobe_frac is directly the quantity the experiment cares about -- what
+ * fraction of the aperture, hence of the sub-looks, a scatterer is bright over.
+ * The equivalent facet is L = lambda / (lobe_frac * du_ap), which at the default
+ * geometry and a 25-look dwell is a few metres: a building face, not a mountain.
+ *
+ * A SINC RATHER THAN A GAUSSIAN, deliberately. It is the textbook result rather
+ * than a chosen curve, and its nulls and sign changes are the point: a facet does
+ * not fade out of the aperture, it switches off and comes back in antiphase.
+ * That is what "bright in some sub-looks and gone in others" means physically,
+ * and a smooth bump would not reproduce it.
+ *
+ * Amplitude is signed. A sidelobe is a pi phase flip, which is real.
+ *
+ * WHAT THIS IS NOT. It is not calibrated against any measured scene -- no
+ * collect available to this project has per-scatterer ground truth to calibrate
+ * against. It adds a mechanism the model lacked; whether it reproduces the real
+ * numbers is the experiment, not the premise. */
+typedef struct {
+    double lobe_frac;  /* null-to-null lobe width as a fraction of the full
+                          aperture. <= 0 leaves every target isotropic, which is
+                          what rs_sim_scene() passes. */
+    double frac;       /* fraction of targets that are aspect-selective; the
+                          rest stay isotropic, since a real scene mixes
+                          specular facets with diffuse surfaces. */
+    double peak_gain;  /* amplitude multiplier at a selective target's lobe
+                          PEAK, over the rcs it was given. <= 0 reads as 1.
+                          A facet is not merely a modulated diffuse scatterer:
+                          a flat face or dihedral returns far more at its
+                          specular angle than clutter does at any angle, and
+                          with a gain of 1 the lobe only ever makes a target
+                          DIMMER, so the brightest-pixel statistics preferentially
+                          avoid exactly the targets this models. Bounded and
+                          explicit, unlike the unbounded gain FOLLOW-UPS.md item
+                          21 had to retract a conclusion over. */
+    unsigned seed;     /* selects which targets are selective and where each
+                          lobe points, so a scene is reproducible from it. */
+} rs_sim_aspect_t;
+
+/* Generate range-compressed phase history for a target list, with optional
+ * aspect-dependent scattering.
  *
  * Geometry: platform along +x at 'v_platform', offset cross-track by
  * 'range_offset' and at height 'height', staring at the origin. The compressed
  * pulse is a Gaussian of width 'range_res' carrying the exact propagation
  * phase, which is all any stage downstream reads.
  *
- * Returns RS_OK, or an allocation failure from rs_cphd_alloc(). */
-static resonarsat_status_t rs_sim_scene(rs_cphd_t *cphd,
-                                        const rs_sim_tgt_t *tg, size_t n_tgt,
-                                        double t_dwell, double prf,
-                                        size_t n_rbin, double dr)
+ * 'asp' NULL, or with lobe_frac <= 0, reproduces rs_sim_scene() exactly --
+ * every target isotropic, every existing fixture bit-for-bit unchanged.
+ * Otherwise see rs_sim_aspect_t for the model.
+ *
+ * Returns RS_OK, an allocation failure from rs_cphd_alloc(), or RS_ERR_ALLOC if
+ * the per-target lobe table cannot be sized. */
+static resonarsat_status_t rs_sim_scene_aspect(rs_cphd_t *cphd,
+                                               const rs_sim_tgt_t *tg,
+                                               size_t n_tgt,
+                                               double t_dwell, double prf,
+                                               size_t n_rbin, double dr,
+                                               const rs_sim_aspect_t *asp)
 {
     const double fc = 9.6e9;
     const double v_platform = 7500.0;
@@ -51,6 +138,43 @@ static resonarsat_status_t rs_sim_scene(rs_cphd_t *cphd,
 
     const double k_phase = 4.0 * M_PI / cphd->lambda;
     const double sigma = range_res / 2.355;
+
+    /* Per-target lobe centres, in along-track direction cosine. NAN marks an
+     * isotropic target, which is every target when 'asp' is off. Drawn here
+     * rather than per pulse so a target's lobe is a property of the scene. */
+    const int use_aspect = (asp != NULL && asp->lobe_frac > 0.0 && n_tgt > 0);
+    double *u0 = NULL;
+    double lobe_u = 0.0;
+    double peak_gain = 1.0;
+    if (use_aspect) {
+        if (asp->peak_gain > 0.0) peak_gain = asp->peak_gain;
+        u0 = (double *)malloc(n_tgt * sizeof *u0);
+        if (!u0) {
+            rs_cphd_free(cphd);
+            return RS_ERR_ALLOC;
+        }
+        /* The aperture's angular span, as a direction-cosine width. */
+        const double du_ap = v_platform * t_dwell / r_centre;
+        lobe_u = asp->lobe_frac * du_ap;
+
+        unsigned st_a = asp->seed * 2654435761u + 101u;
+        for (size_t g = 0; g < n_tgt; g++) {
+            if (rs_sim_u01(&st_a) > asp->frac) {
+                u0[g] = NAN;                       /* stays isotropic */
+                continue;
+            }
+            /* Point the lobe at the aspect this target is seen from at one
+             * pulse drawn uniformly over the dwell, computed from the same
+             * geometry the main loop uses so the two cannot drift apart. */
+            const double tq = rs_sim_u01(&st_a) * t_dwell;
+            const double xp = v_platform * (tq - 0.5 * t_dwell);
+            const double ax = xp - tg[g].x;
+            const double ay = range_offset - tg[g].y;
+            const double az = height - tg[g].z;
+            const double ar = sqrt(ax * ax + ay * ay + az * az);
+            u0[g] = ax / ar;
+        }
+    }
 
     for (size_t i = 0; i < n_pulse; i++) {
         const double t = (double)i / prf;
@@ -81,6 +205,17 @@ static resonarsat_status_t rs_sim_scene(rs_cphd_t *cphd,
             const double fbin = (R - cphd->r_ref[i]) / dr + 0.5 * (double)n_rbin;
             if (fbin < 0.0 || fbin >= (double)n_rbin) continue;
 
+            /* Aspect: the facet's sinc pattern in along-track direction cosine,
+             * evaluated at this pulse's view of this target. Signed, so a
+             * sidelobe enters in antiphase. */
+            double rcs = tg[g].rcs;
+            if (u0 && !isnan(u0[g])) {
+                const double xarg = 2.0 * (dx / R - u0[g]) / lobe_u;
+                rcs *= peak_gain * ((fabs(xarg) < 1e-12)
+                           ? 1.0
+                           : sin(M_PI * xarg) / (M_PI * xarg));
+            }
+
             const long lo = (long)floor(fbin - 4.0 * sigma / dr);
             const long hi = (long)ceil(fbin + 4.0 * sigma / dr);
             const double ph = -k_phase * R;
@@ -89,21 +224,24 @@ static resonarsat_status_t rs_sim_scene(rs_cphd_t *cphd,
             for (long b = lo; b <= hi; b++) {
                 if (b < 0 || b >= (long)n_rbin) continue;
                 const double d = ((double)b - fbin) * dr;
-                const double env = tg[g].rcs * exp(-0.5 * (d * d) / (sigma * sigma));
+                const double env = rcs * exp(-0.5 * (d * d) / (sigma * sigma));
                 row[b] += (float)(env * cr) + (float)(env * ci) * I;
             }
         }
     }
+    free(u0);
     return RS_OK;
 }
 
-/* Uniform draw in (0,1] from a stateful LCG, so a scene is reproducible from its
- * seed alone and two seeds are independent realisations of one experiment. */
-static inline double rs_sim_u01(unsigned *state)
+/* The isotropic scene every fixture predating aspect dependence was measured
+ * on. Kept as its own entry point so those measurements stay reproducible by
+ * the call they were made with. */
+static resonarsat_status_t rs_sim_scene(rs_cphd_t *cphd,
+                                        const rs_sim_tgt_t *tg, size_t n_tgt,
+                                        double t_dwell, double prf,
+                                        size_t n_rbin, double dr)
 {
-    *state = *state * 1103515245u + 12345u;
-    const double u = (double)(*state >> 8) / 16777216.0;
-    return (u > 1e-9) ? u : 1e-9;
+    return rs_sim_scene_aspect(cphd, tg, n_tgt, t_dwell, prf, n_rbin, dr, NULL);
 }
 
 /* THE SECOND FIXTURE FAMILY: persistent dominant scatterers on a diffuse

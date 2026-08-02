@@ -2463,3 +2463,100 @@ RULED OUT SO FAR, for the record: 16-bit sample quantisation (item 21, no
 effect), per-vector AmpSF (item 21, measured, no effect), scatterer density
 (23a), and the brightest-pixel selection bias (23b).
 
+
+---
+
+## 24. Aspect-dependent scattering: the mechanism the fixtures lacked
+
+Item 23d predicted that what separates real collects from these fixtures is that
+`rs_sim_scene()` makes every scatterer isotropic, so a simulated dominant is
+dominant in every sub-look by construction. `rs_sim_scene_aspect()` adds the
+missing mechanism -- a flat facet with a sinc lobe in the along-track direction
+cosine, bright over only part of the aperture. See `rs_sim_aspect_t` for the
+derivation; parameterising the lobe by its width as a fraction of the aperture
+makes the facet length drop out, leaving `lobe_frac` as directly the quantity
+that matters: what fraction of the sub-looks a scatterer is bright over.
+
+**It is opt-in and `rs_sim_scene()` is unchanged.** Every result in this file was
+measured on the isotropic scene and stays reproducible by the call it was made
+with. Aspect is deliberately not a field on `rs_sim_tgt_t`: callers build target
+lists in uninitialised stack arrays and assign field by field, so a new member
+would be read as garbage by every existing fixture.
+
+### 24a. A facet must be BRIGHTER than clutter, not merely modulated
+
+The first version gave facets the same peak amplitude as diffuse scatterers and
+it moved D_A the WRONG WAY -- median 0.36 isotropic against 0.29 at the narrowest
+lobe. The reason is that a unity-gain lobe only ever makes a target DIMMER, so
+the brightest-pixel statistic preferentially avoided exactly the targets being
+modelled, and what was left was a cleaner scene: the hit rate went UP, 52% to
+80%. That is physically wrong -- a flat face or dihedral returns far more at its
+specular angle than clutter does at any angle -- and `peak_gain` fixes it. It is
+bounded and explicit, unlike the unbounded gain item 21 had to retract a
+conclusion over.
+
+Median D_A at win 32 over three seeds, uniform clutter, sweeping both:
+
+```
+lobe_frac    gain 1              gain 4              gain 16
+  1.00       0.285 0.454 0.386   0.679 0.633 0.666   0.684 0.632 0.677
+  0.50       0.248 0.392 0.366   0.528 0.666 0.615   0.793 0.793 0.871
+  0.25       0.207 0.401 0.340   0.485 0.528 0.698   0.917 1.058 1.050
+  0.12       0.207 0.334 0.339   0.445 0.493 0.619   1.132 1.150 1.184
+isotropic control                                    0.314 0.405 0.372
+```
+
+**The level real collects occupy is reproduced.** Real medians are 0.58-0.89;
+`lobe_frac` 0.50 at gain 16 gives 0.79-0.87.
+
+### 24b. The window-size response appears, at about a third of the real slope
+
+Item 23c's signature -- D_A rising with window size on real data and flat on the
+fixtures -- run again with aspect on. Filled grid at held-constant scatterer
+density, giving 225/49/9 windows at win 16/32/64, the same counts as the real
+run so the medians are comparable draw for draw:
+
+```
+   lobe  seed |  med16   med32   med64 | d(16->64) | hit16
+  -1.00     7 |  0.399   0.352   0.349 |    -0.050 |  45.3%    isotropic
+  -1.00    23 |  0.421   0.402   0.308 |    -0.113 |  45.3%    control
+  -1.00   101 |  0.401   0.317   0.424 |    +0.023 |  48.9%
+   0.50     7 |  0.831   0.967   1.042 |    +0.211 |   4.0%
+   0.50    23 |  0.778   0.925   0.968 |    +0.189 |   7.1%
+   0.50   101 |  0.781   0.867   0.888 |    +0.107 |   8.4%
+   0.25     7 |  1.056   1.232   1.232 |    +0.176 |   2.7%
+   0.12     7 |  1.156   1.371   1.653 |    +0.497 |   7.6%
+   0.12    23 |  1.101   1.170   1.213 |    +0.112 |   8.4%
+   0.12   101 |  1.033   1.208   1.538 |    +0.504 |  10.2%
+real (Istanbul) 0.915   1.865   2.590 |    +1.675 |
+```
+
+The isotropic control is flat or negative in every seed; every aspect-dependent
+row rises. **The sign, the monotonicity and the level are reproduced.** The SLOPE
+is not: real data rises +1.675 across the same span and the steepest lobe tested
+reaches +0.50, about a third. So aspect dependence is a mechanism that produces
+the effect, and it is not by itself the whole of what real scenes are doing.
+
+**Not calibrated, and the numbers are not a fit.** `lobe_frac` and `peak_gain`
+were chosen to SPAN a range, not fitted to Istanbul, and no collect available to
+this project has per-scatterer ground truth to fit against. That the sweep passes
+through the real band says the mechanism can produce those numbers, not that real
+facets have these parameters.
+
+### 24c. The side effect worth more than the D_A result
+
+The hit rate collapses: 45-49% isotropic against 2.7-10.2% with aspect on, at
+every lobe width. **This is the first time a fixture in this project has behaved
+like a real collect in REFUSING TO YIELD A FREQUENCY.** Every synthetic recovery
+recorded here was measured on scenes where the dominant scatterer is dominant in
+every look, and item 15's precondition -- one dominant per sub-look resolution
+cell -- is far easier to satisfy when dominance cannot vary with aspect. That
+makes aspect dependence a candidate explanation for the standing gap between
+"recovers on synthetic" and "returns a null on every real collect", which is a
+larger question than D_A was.
+
+Untested, and the obvious next measurement: whether `--estimator phase` still
+passes `rs_track_fit()`'s slope-and-rms bar on an aspect-dependent sweep, and if
+not, at what lobe width it breaks. That would say how much of item 14's recovery
+survives contact with the mechanism, and it is the first fixture this project has
+that could take the question seriously.

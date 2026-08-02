@@ -235,7 +235,14 @@ asymmetry is the lead: real scenes respond ~40× more strongly to window size th
 fixtures do, which points at ASPECT-DEPENDENT SCATTERING, the same modelling gap item 12f
 found from the coherence side. `rs_sim_scene()` gives every scatterer an isotropic,
 analytically exact response, so a simulated dominant is dominant in every look by
-construction. Untested; the test is to give the simulator an angle-dependent response.
+construction. **`rs_sim_scene_aspect()` now provides that response** (item 24): a facet with a
+sinc lobe over part of the aperture, opt-in, with `rs_sim_scene()` unchanged so every earlier
+measurement stands. It reproduces the level real collects occupy (median `D_A` 0.79-0.87
+against a real 0.58-0.89) and the sign and monotonicity of the window-size response, at about
+a third of the real slope. The larger finding is a side effect: the window-level hit rate
+collapses from 45-49% to 3-10%, the first time a fixture here has behaved like a real collect
+in refusing to yield a frequency. Whether `--estimator phase` still passes `rs_track_fit()`
+against it is the open question.
 
 `tests/rs_sim.h` now carries two fixture families: `make_clutter`-style uniform speckle
 and `rs_sim_dominant_patch()`, dominants on a lattice over a diffuse background. The

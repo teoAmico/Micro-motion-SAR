@@ -820,6 +820,16 @@ resonarsat_status_t rs_read_cphd(const char *path, const rs_cphd_read_opts_t *op
          * which the inverse undoes. */
         /* THE FX-TO-DELAY TRANSFORM DIRECTION, AND A VENDOR THAT MISLABELS IT.
          *
+         * THE CHOICE IS THE APPLICATION'S, WHICH IS BETTER GROUND FOR THE
+         * OVERRIDE THAN "we deviate from the standard". NGA's six-library stores
+         * Global/SGN in cphd::Global and prints it, and its reading path never
+         * acts on it: the reference implementation declines to choose a
+         * transform direction and leaves it to whoever consumes the data. So
+         * choosing here is not a deviation from a reference that chose
+         * otherwise -- it is making a choice the reference leaves open, and
+         * making it per-vendor is a judgement about data rather than about the
+         * format.
+         *
          * The standard is unambiguous. SARPy, NGA's own reference
          * implementation, documents Global/SGN as
          *
@@ -881,12 +891,26 @@ resonarsat_status_t rs_read_cphd(const char *path, const rs_cphd_read_opts_t *op
          *
          * MEASURED, ON THE ISTANBUL COLLECT: AmpSF has a dispersion of 0.711
          * across its 249424 vectors, a 50x span between its extremes, and 0.086
-         * between sub-look means. Injecting a gain of that dispersion into the
-         * synthetic fixture takes its amplitude dispersion from 0.083 to 0.337
-         * and its median from 0.314 to 0.553 -- which is where every real scene
-         * this project has measured sits. 16-bit sample quantisation, the other
-         * difference between the simulator and a Capella product, moves neither
-         * figure at all. See FOLLOW-UPS.md item 21. */
+         * between sub-look means. APPLYING IT DOES NOT MOVE THE REAL-DATA
+         * AMPLITUDE DISPERSION -- Istanbul went from 0.391 to 0.409 and Giza
+         * from 0.381 to 0.427, both within noise -- so this is a correctness fix
+         * required by the standard and not the explanation of anything. A
+         * synthetic experiment that appeared to show otherwise was an artefact
+         * of an unbounded injected gain; see FOLLOW-UPS.md item 21 for the
+         * retraction.
+         *
+         * NGA'S REFERENCE IMPLEMENTATION AGREES ABOUT THE SHAPE OF THIS. In
+         * six-library, cphd::PVPBlock exposes hasAmpSF() and getAmpSF(), keyed
+         * on whether the field's PVP offset is defined -- the same optional-field
+         * detection used here -- and cphd::Wideband::read() takes per-vector
+         * scale factors as a parameter the CALLER supplies from the PVP. So
+         * applying it is the reading application's job, which is why its absence
+         * here was invisible for so long: nothing in the format forces it.
+         *
+         * Worth taking from that implementation and not taken yet:
+         * Wideband::allOnes() skips the scaling pass entirely when every factor
+         * is 1.0, which a conformant product with unity AmpSF otherwise pays for
+         * once per sample. */
         double amp_sf = 1.0;
         if (have_ampsf) {
             const double a = rs_be_f8(v + (size_t)o_ampsf * 8, swap);

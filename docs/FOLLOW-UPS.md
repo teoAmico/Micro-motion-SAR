@@ -2283,3 +2283,57 @@ already point that way -- at the same bridge position `D_A` was 0.516 at 4.41 m
 sub-look resolution and 0.391 at 0.78 m -- but the controlled version, holding
 grid, cell and window fixed while varying only `t_sap`, was started and abandoned
 when `AmpSF` looked like the answer. It is the obvious next measurement.
+
+---
+
+## 22. Notes from NGA's six-library, and what is worth taking
+
+`ngageoint/six-library` is NGA's reference C++ implementation of SICD, SIDD and
+CPHD. Read for ideas rather than adoption -- it is a large C++ dependency and
+this project builds with none -- and three things came out of it.
+
+**It validates the optional-field shape of the AmpSF fix.** `cphd::PVPBlock`
+exposes `hasAmpSF()` and `getAmpSF(channel, set)`, with `mAmpSFEnabled` keyed on
+whether the field's PVP offset is defined. That is the same detection this
+reader now uses, arrived at independently from the standard.
+
+**It shows why the omission survived so long.**
+`cphd::Wideband::read(channel, firstVector, lastVector, firstSample, lastSample,
+vectorScaleFactors, ...)` takes the per-vector scale factors as a parameter the
+CALLER supplies. The reference does not apply AmpSF either -- it hands the
+machinery to the application. Nothing in the format or in the reference forces
+the correction, so a reader that never does it looks fine until something
+compares amplitudes between sub-looks.
+
+**It settles the standing of the SGN override.** `cphd::Global` stores and prints
+`SGN` and the reading path never acts on it. The reference implementation
+declines to choose a transform direction. So item 3's Capella override is not a
+deviation from a reference that chose otherwise -- it is making a choice the
+reference leaves open, and making it per-vendor is a judgement about data rather
+than about the format. That is better ground than the note previously stood on,
+and both headers now say so.
+
+**One optimisation not taken yet.** `Wideband::allOnes()` skips the scaling pass
+entirely when every scale factor is 1.0. A conformant product with unity AmpSF
+currently pays a multiply per sample here for nothing.
+
+**And a structural point it shares with GDAL.** The reference's fundamental read
+is WINDOWED -- a range of vectors and a range of samples -- and GDAL's raster
+model is block-based with a cache. Both take streaming as the primitive. This
+reader loads `n_pulse * n_rbin` complex floats up front, which is 12.3 GB for the
+Istanbul collect at `--rbins 6144` and 39.7 GB at full range extent, and that
+ceiling has shaped several decisions in this project: reconnaissance focusing has
+to use `--max-pulses`, and the M2 bridge sat near the edge of the affordable range
+window. Backprojection accumulates over pulses and is inherently streamable, as
+is the sub-aperture stage -- read each pulse once and accumulate it into whichever
+sub-looks contain it. Peak memory would fall from 12-16 GB to under 100 MB and
+`--rbins` would stop being a constraint. Not implemented; the largest single
+structural improvement available to the readers.
+
+**Nothing worth taking on safety.** GDAL's NITF truncation guard fires only above
+a million blocks and is self-described as "really a very safe bound"; this
+reader checks every declared block lies wholly inside the file, in subtraction
+form so a hostile offset cannot wrap an addition. GDAL's CPHD driver is a
+RAWDataset container reader with no CPHD semantics at all -- no range
+compression, no PVP geometry, no AmpSF, no SGN -- so there is nothing in it to
+learn from for this format.

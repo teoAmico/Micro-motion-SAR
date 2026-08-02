@@ -738,11 +738,28 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
                      * line-of-sight displacement, which is far finer than the
                      * tracked shift but ambiguous modulo lambda/2. Tracking
                      * above resolves the ambiguity; this supplies precision
-                     * within it. */
+                     * within it.
+                     *
+                     * THE REFERENCE HERE MUST BE THE ONE THE SHIFT WAS TAKEN
+                     * AGAINST. It was stack->look[0] for every mode except PAIR,
+                     * which is right for FIRST, defensible for ADJACENT -- whose
+                     * shift accumulates to an absolute displacement, so an
+                     * absolute phase matches it -- and WRONG FOR LAG. Lag exists
+                     * precisely to be a differencing observable with no
+                     * accumulation: it compares look k against look k-lag
+                     * because that is the only pair that stays coherent. Reading
+                     * its phase against look 0 gave a --shifts dump whose
+                     * disp_az column differenced over one interval and whose
+                     * phase column differenced over another, so the two
+                     * described different measurements and only the header said
+                     * which. Found by giving the mode its first test; see
+                     * docs/CODE-REVIEW.md. */
+                    const size_t ref_k =
+                        (params->reference == RS_MICROM_REF_LAG) ? (k - lag) : 0;
                     double acc_re = 0.0, acc_im = 0.0;
                     const float complex *a =
                         (params->reference == RS_MICROM_REF_PAIR)
-                            ? stack->look[k].data : stack->look[0].data;
+                            ? stack->look[k].data : stack->look[ref_k].data;
                     const float complex *b =
                         (params->reference == RS_MICROM_REF_PAIR)
                             ? stack->slave[k].data : stack->look[k].data;

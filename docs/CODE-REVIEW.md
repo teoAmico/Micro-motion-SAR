@@ -15,6 +15,7 @@ because several of these are patterns rather than incidents.
 
 | date | commit | scope | outcome |
 |---|---|---|---|
+| 2026-08-02 | `2e0e1fc` | Closing the check's own open items: tests for the two uncovered branches, and the phase-reference fix they made safe | Both branches now covered. The lag test failed before the fix and passes after; the split-band test found a second defect, an unclamped coherence. Details below. |
 | 2026-08-02 | `893d9d2` | Follow-up: the two items the sweep left open, checked | Both were wrong as written. The orbit/Doppler fields are superseded rather than unfinished; two of the four "exposed but non-recovering" modes have no test at all, and `--lag` was unvalidated with platform-dependent undefined behaviour. Details below. |
 | 2026-08-02 | `6d42f29` | Full sweep: `docs/FOLLOW-UPS.md` against the source; every `.c` and `.h` under `src/`, `include/`, `tools/`, `tests/`; CLI flags against `USER_GUIDE.md`; committed run artefacts under `runs/` | 21/21 tests pass. Two pre-existing compiler warnings found (see the correction below). Eleven findings, all fixed in the same change; two new test cases pin the substantive one. |
 
@@ -429,19 +430,55 @@ is known. Refused rather than clamped, because a clamp would hide the mistake.
 --lag 2.5  -> --lag must be a positive whole number of looks (got 2.5)
 ```
 
-### Still open after the check
+### Still open after the check — now closed
 
-- **`RS_MICROM_REF_LAG` and the `SPLITBAND` estimator branch have no test.**
-  Naming them here is not a fix. Both are reachable from the CLI and both were
-  used to produce recorded measurements.
+Written when the check ran, and discharged in the following commit. Kept because
+what the tests found is the point.
+
+**`RS_MICROM_REF_LAG` and the `SPLITBAND` branch now have tests**, in
+`tests/test_tracking.c`. Both run against a stack whose looks differ only by a
+per-look constant phase, which makes the two quantities under test exact rather
+than approximate: a constant phase factors out of the cross-spectrum, so every
+correlation shift is zero, and the window-averaged interferometric phase between
+looks `a` and `b` is exactly `theta[b] - theta[a]`. That is what lets a test
+assert **which pair the tracker differenced**, which is the thing the lag branch
+had no coverage of.
+
+**The phase-reference defect is fixed, and the test failed before it.** The
+refinement block differenced against `look[0]` for every mode but `PAIR`. Against
+the fixture, pre-fix:
+
+```
+k=3  phase +1.050000   vs lag +0.800000   vs look0 +1.050000   FAIL
+k=4  phase +0.800000   vs lag +0.200000   vs look0 +0.800000   FAIL
+k=5  phase +0.300000   vs lag -0.750000   vs look0 +0.300000   FAIL
+```
+
+Exactly `theta[k] - theta[0]` on every look. After the fix every row matches the
+lag difference and differs from the look-0 value. `FIRST` is unaffected and
+`ADJACENT` keeps `look[0]` deliberately -- its shift accumulates to an absolute
+displacement, so an absolute phase matches it; `LAG` accumulates nothing, which
+is the whole reason it exists.
+
+**The split-band test found a second defect.** `rs_splitband_shift()` returned a
+coherence of **1.0000000105885025** on a stack that is coherent by construction.
+Cauchy-Schwarz bounds it by one; float accumulation does not, and this was the
+only one of the three branches that did not clamp -- the correlator clamps its
+peak in `coreg.c`, the phase branch clamps its amplitude stability, this did not.
+So a perfectly coherent window reported a quality no threshold expressed in
+`rs_microm_t.quality`'s documented `[0,1]` could reach. Clamped in
+`rs_splitband_shift()`, where the quantity is computed and documented.
+
+**And the first version of that test silently asserted nothing.** It set the gate
+to `achieved + 0.5` clamped to 1.0, which against an achieved 1.0 asked for 1.0
+and never fired. `coherence_min` is a threshold, not a coherence, and nothing
+requires it to be reachable; the case now sets `achieved + 1e-6` unclamped. Both
+new cases were checked by disabling the code they cover and confirming they fail.
+
+### Still open
+
 - **`rs_slc_t.doppler` and `.orbit` are removable** and are not removed, because
   deleting a field from that struct is wider than the review that found it.
-- **On a `--reference lag` run the `phase` column is taken against look 0** while
-  `disp_az` is taken against look `k - lag` (`src/core/microm.c`, the phase
-  refinement block, whose comment says "between this look and the reference").
-  `lag` is deliberately a differencing observable with no accumulation, so its
-  phase should difference too. It does not affect a reported frequency on the
-  correlation route, which reads `vel_los` from `disp_az` -- it affects `--shifts`
-  dumps and anything reading `disp_los`, on the mode item 7 spent the most effort
-  dumping. Not fixed: the path has no test, and changing a diagnostic output
-  blind is how the two controls in items 27 and 28 came to be wrong.
+- **Neither `lag` nor `splitband` passes `rs_track_fit()`**, and the new tests do
+  not claim otherwise -- they cover each branch's contract, not its accuracy.
+  What each recovers is `FOLLOW-UPS.md` item 7's business and is unchanged.

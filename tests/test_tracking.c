@@ -216,6 +216,55 @@ static double run_pair_case(double vib_freq, double vib_amp, size_t n_looks,
     return f;
 }
 
+/* Build a stack whose looks differ ONLY by a per-look constant phase.
+ *
+ * Every look is the same real-valued blob multiplied by exp(i*theta[k]), which
+ * makes both quantities under test exact rather than approximate:
+ *
+ *   the correlation shift is zero for every pair, because a constant phase
+ *   factors straight out of the cross-spectrum and leaves |F|^2;
+ *
+ *   the window-averaged interferometric phase between looks a and b is exactly
+ *   theta[b] - theta[a], with no speckle to bias it.
+ *
+ * So a test can assert WHICH PAIR the tracker differenced, which is the thing
+ * the lag branch had no coverage of. The blob is smooth rather than a delta so
+ * the correlator has a well-conditioned peak to find.
+ *
+ * The caller owns the result and must rs_subap_stack_free() it. */
+static int build_phase_stack(rs_subap_stack_t *st, size_t n_looks, size_t n,
+                             const double *theta)
+{
+    memset(st, 0, sizeof *st);
+    st->look = calloc(n_looks, sizeof *st->look);
+    st->centre_time = calloc(n_looks, sizeof *st->centre_time);
+    if (!st->look || !st->centre_time) return -1;
+    st->n_looks = n_looks;
+    st->dt = 0.1;
+    st->f_max = 0.5 / st->dt;
+    st->t_sap = 0.1;
+
+    for (size_t k = 0; k < n_looks; k++) {
+        if (rs_slc_alloc(&st->look[k], n, n) != RS_OK) return -1;
+        st->centre_time[k] = (double)k * st->dt;
+        st->look[k].lambda = 0.031;
+        st->look[k].az_spacing_m = st->look[k].rg_spacing_m = 1.0;
+        st->look[k].v_platform = 7000.0;
+        st->look[k].r_scene_m = 700000.0;
+        const double c = cos(theta[k]), sn = sin(theta[k]);
+        for (size_t a = 0; a < n; a++) {
+            for (size_t r = 0; r < n; r++) {
+                const double da = (double)a - 0.5 * (double)n;
+                const double dr = (double)r - 0.5 * (double)n;
+                const double amp = exp(-(da * da + dr * dr) / (2.0 * 9.0));
+                st->look[k].data[a * n + r] =
+                    (float)(amp * c) + (float)(amp * sn) * I;
+            }
+        }
+    }
+    return 0;
+}
+
 /* Run every case in this file. */
 int main(void)
 {
@@ -1872,6 +1921,164 @@ int main(void)
          * Item 24 measured 0.40 against 0.89-1.06 at these settings. */
         RS_CHECK(med[0] < 0.55);
         RS_CHECK(med[1] > med[0] + 0.25);
+    }
+
+
+    /* THE LAG REFERENCE HAD NO TEST AT ALL, AND THE PHASE IT REPORTED WAS
+     * TAKEN AGAINST THE WRONG LOOK.
+     *
+     * RS_MICROM_REF_LAG appeared in no test in the suite, so its lag clamp, its
+     * `k < lag` skip and its moving-reference extraction had never been executed
+     * by ctest -- every measurement in FOLLOW-UPS.md item 7 was made through the
+     * CLI, and item 8 kept the mode on the grounds it was "documented, tested
+     * and harmless". Two of those three were true.
+     *
+     * What the gap hid: the phase-refinement block differenced against look 0
+     * for every reference mode, so a lag run reported shifts against look k-lag
+     * and a phase against look 0. LAG is deliberately a DIFFERENCING observable
+     * with no accumulation -- that is the whole reason it exists -- so its phase
+     * has to difference over the same interval its shift does, or the two
+     * columns of the same --shifts dump describe different measurements.
+     *
+     * The stack differs only by a per-look constant phase, so both quantities
+     * are exact: every shift is zero, and phase[k] must be theta[k]-theta[k-lag]
+     * to the last digit. */
+    RS_CASE("the lag reference differences its phase over the same lag as its shift");
+    {
+        const size_t nlk = 8, npx = 32, lag = 2;
+        /* Deliberately NOT linear: a linear ramp makes theta[k]-theta[k-lag] and
+         * theta[k]-theta[0] differ only by a constant, which a sloppy assertion
+         * could still pass. */
+        const double theta[8] = { 0.0, 0.25, 0.60, 1.05, 0.80, 0.30, -0.20, -0.55 };
+
+        rs_subap_stack_t st;
+        RS_CHECK(build_phase_stack(&st, nlk, npx, theta) == 0);
+
+        rs_microm_params_t mp;
+        rs_microm_params_default(&mp);
+        mp.reference = RS_MICROM_REF_LAG;
+        mp.ref_lag = lag;
+        mp.win_az = mp.win_rg = 16;
+        mp.stride_az = mp.stride_rg = 16;
+        mp.coherence_min = 0.0;
+
+        rs_microm_t m;
+        RS_CHECK_OK(rs_microm_track(&st, &mp, &m));
+        RS_CHECK(m.n_looks == nlk && m.n_win > 0);
+
+        /* The centre window holds the blob; it is the one that correlates. */
+        size_t w = 0;
+        for (size_t i = 0; i < m.n_win; i++) if (m.quality[i] > m.quality[w]) w = i;
+        printf("    window %zu of %zu, quality %.4f\n", w, m.n_win, m.quality[w]);
+        RS_CHECK(m.quality[w] > 0.99);
+
+        for (size_t k = 0; k < nlk; k++) {
+            const double got = m.phase[w * nlk + k];
+            if (k < lag) {
+                /* No sample until the lag is available. */
+                printf("    k=%zu  (below the lag, no sample)   phase %+0.6f\n", k, got);
+                RS_CHECK(got == 0.0);
+                RS_CHECK(m.disp_az[w * nlk + k] == 0.0);
+                continue;
+            }
+            const double want_lag  = theta[k] - theta[k - lag];
+            const double want_zero = theta[k] - theta[0];
+            printf("    k=%zu  phase %+0.6f   vs lag %+0.6f   vs look0 %+0.6f\n",
+                   k, got, want_lag, want_zero);
+            RS_CHECK_NEAR(got, want_lag, 1e-5);
+            /* And it must NOT be the look-0 difference, wherever the two
+             * differ. At k == lag they coincide by construction, which is why
+             * the loop runs past it. */
+            if (fabs(want_lag - want_zero) > 1e-3) {
+                RS_CHECK(fabs(got - want_zero) > 1e-3);
+            }
+        }
+        rs_microm_free(&m);
+        rs_subap_stack_free(&st);
+    }
+
+    /* THE SPLIT-BAND ESTIMATOR BRANCH HAD NO TEST EITHER.
+     *
+     * tests/test_phaselink.c covers the primitive rs_splitband_shift() well.
+     * Nothing covered the branch of rs_microm_track() that gathers the per-look
+     * patches, calls it, and applies the coherence gate -- so the gather, the
+     * range-shift convention and the gate were unexercised on a path reachable
+     * from --estimator splitband and used to produce recorded measurements.
+     *
+     * This asserts the branch's CONTRACT rather than its numerics: what it
+     * fills, what it leaves zero, and that the gate does what it says. The
+     * estimator's accuracy is FOLLOW-UPS item 7's business and is not settled
+     * here -- it returns a fixed frequency at every configuration swept. */
+    RS_CASE("the split-band branch fills its contract and its coherence gate bites");
+    {
+        const size_t nlk = 6, npx = 32;
+        const double theta[6] = { 0.0, 0.2, 0.5, 0.9, 0.6, 0.1 };
+
+        rs_subap_stack_t st;
+        RS_CHECK(build_phase_stack(&st, nlk, npx, theta) == 0);
+
+        rs_microm_params_t mp;
+        rs_microm_params_default(&mp);
+        mp.estimator = RS_MICROM_EST_SPLITBAND;
+        mp.win_az = mp.win_rg = 16;
+        mp.stride_az = mp.stride_rg = 16;
+        mp.coherence_min = 0.0;
+
+        rs_microm_t m;
+        RS_CHECK_OK(rs_microm_track(&st, &mp, &m));
+
+        size_t w = 0;
+        for (size_t i = 0; i < m.n_win; i++) if (m.quality[i] > m.quality[w]) w = i;
+        printf("    coherence reported as quality: %.17g\n", m.quality[w]);
+        /* Cauchy-Schwarz bounds this by one; float accumulation does not, and
+         * this branch did not clamp where the other two do. It returned
+         * 1.0000000105885025 before rs_splitband_shift() was fixed. */
+        RS_CHECK(m.quality[w] >= 0.0 && m.quality[w] <= 1.0);
+
+        int any_az = 0;
+        for (size_t k = 0; k < nlk; k++) {
+            /* Range is not estimated by this route and must stay identically
+             * zero rather than holding a stale value. */
+            RS_CHECK(m.disp_rg[w * nlk + k] == 0.0);
+            if (m.disp_az[w * nlk + k] != 0.0) any_az = 1;
+            /* Velocity is derived from the azimuth shift and the geometry the
+             * stack carries, so the two must stay consistent. */
+            const double want_v = m.disp_az[w * nlk + k]
+                                * st.look[0].az_spacing_m * st.look[0].v_platform
+                                / st.look[0].r_scene_m;
+            RS_CHECK_NEAR(m.vel_los[w * nlk + k], want_v, 1e-12);
+        }
+        printf("    azimuth shifts %s\n", any_az ? "populated" : "all zero");
+
+        /* No estimator forms a correlation surface here, so the surface
+         * statistics must read as ABSENT rather than as a window that scored
+         * zero -- rs_spectrum_ampcor_window() keys on exactly this. */
+        RS_CHECK(m.snr_null == 0.0);
+        RS_CHECK(m.quant_px == 0.0 || mp.upsample_az != 0);
+
+        const double achieved = m.quality[w];
+        rs_microm_free(&m);
+
+        /* Now demand more coherence than the fixture reaches: the gate must
+         * zero the series it just produced, and leave quality saying why.
+         *
+         * NOT clamped to 1.0. This fixture is coherent by construction, so a
+         * threshold inside [0,1] cannot exceed what it achieves -- and the first
+         * version of this case clamped, asked for 1.0 against an achieved 1.0,
+         * and silently tested nothing. coherence_min is a threshold, not a
+         * coherence, and nothing requires it to be reachable. */
+        mp.coherence_min = achieved + 1e-6;
+        RS_CHECK_OK(rs_microm_track(&st, &mp, &m));
+        printf("    gate at %.3f against an achieved %.3f\n",
+               mp.coherence_min, achieved);
+        for (size_t k = 0; k < nlk; k++) {
+            RS_CHECK(m.disp_az[w * nlk + k] == 0.0);
+            RS_CHECK(m.vel_los[w * nlk + k] == 0.0);
+            RS_CHECK(m.disp_los[w * nlk + k] == 0.0);
+        }
+        RS_CHECK_NEAR(m.quality[w], achieved, 1e-12);
+        rs_microm_free(&m);
+        rs_subap_stack_free(&st);
     }
 
     RS_TEST_END();

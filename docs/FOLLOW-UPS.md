@@ -1014,7 +1014,11 @@ tested. `RS_MICROM_REF_LAG` appears in no test in the suite, so the lag branch o
 extraction -- has never been executed by `ctest`. The measurements in this item
 were made through the CLI. `RS_MICROM_EST_SPLITBAND` is in the same position: the
 primitive `rs_splitband_shift()` is covered by `test_phaselink.c`, but the
-estimator branch that calls it is not. See `docs/CODE-REVIEW.md`.)*
+estimator branch that calls it is not. See `docs/CODE-REVIEW.md`.*
+*Both branches were given tests immediately afterwards, which found two further
+defects: the lag mode reported its phase against look 0 rather than against look
+k-lag, so its `--shifts` dump differenced over two different intervals in two
+columns, and `rs_splitband_shift()` returned a coherence above 1. Both fixed.)*
 
 ---
 

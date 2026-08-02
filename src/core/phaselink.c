@@ -284,7 +284,22 @@ resonarsat_status_t rs_splitband_shift(const float complex *patch,
                     ea += ma * ma; eb += mb * mb;
                 }
                 const double nrm = sqrt(ea * eb);
-                if (nrm > 0.0) { acc += cabs(c) / nrm; n_pair++; }
+                if (nrm > 0.0) {
+                    /* Clamped, because Cauchy-Schwarz bounds this by one in
+                     * exact arithmetic and float accumulation does not. Measured
+                     * on a stack of identical looks differing only by a constant
+                     * phase -- coherence one by construction -- this returned
+                     * 1.0000000105885025, and rs_microm_t.quality is documented
+                     * as [0,1] with the correlation and phase branches both
+                     * clamping. This branch was the one that did not, so a
+                     * perfectly coherent window reported a quality no threshold
+                     * expressed in that range could reach. Found by giving the
+                     * split-band estimator branch its first test. */
+                    double g = cabs(c) / nrm;
+                    if (g > 1.0) g = 1.0;
+                    acc += g;
+                    n_pair++;
+                }
             }
         }
         *coherence_out = n_pair ? acc / (double)n_pair : 0.0;

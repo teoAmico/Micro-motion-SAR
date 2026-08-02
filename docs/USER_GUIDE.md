@@ -492,8 +492,59 @@ after this is a diagnostic. Do not quote it.
 
 ## 7. Making a result credible
 
-Four things, in increasing cost. A result without at least the first two is not
+Five things, in increasing cost. A result without at least the first two is not
 worth reporting.
+
+**0. A positive control, if the answer is a null.** `--inject-vib
+FREQ_HZ[,AMP_MM[,REL]]` adds a scatterer of known frequency and amplitude to the
+real phase history *before* sub-aperture formation, so the identical chain runs
+over it with the real clutter, coherence, orbit and look geometry.
+
+```sh
+./build/micromotion mmotion --cphd scene.cphd ... --inject-vib 1.0,2.0,20
+```
+
+**This is the check that decides whether a null means anything.** A null cannot
+distinguish "nothing in this scene moved" from "this chain cannot see motion in
+this data" — they produce identical output, and every real collect this project
+has processed returns it. If the injected frequency comes back, a null elsewhere
+in that scene is evidence about the ground. If it does not, the null was only ever
+evidence about the pipeline.
+
+Defaults are 2 mm of vertical displacement at 20× the scene's median non-zero
+sample magnitude. Keep the *projected* amplitude below about λ/8 for
+`--estimator phase`: the observable wraps beyond λ/4 and an injection that wraps
+tests nothing. `REL` is deliberately bounded and relative — `FOLLOW-UPS.md` item
+21 records a conclusion that had to be retracted because an unbounded injected
+gain let outliers rather than the mechanism carry the result.
+
+Run it as a **separate** run from the measurement. The injected scatterer is in
+the data, so the reported answer is the injection — on the quick-start fixture,
+which itself vibrates at 0.5 Hz, injecting 1.2 Hz gives:
+
+```
+POSITIVE CONTROL: injected a 1.2000 Hz scatterer at the grid origin,
+  2.000 mm vertical displacement, 20.0x the scene's median non-zero
+  sample magnitude. THIS RUN IS ABOUT THE PIPELINE, NOT THE SCENE:
+  if 1.2000 Hz does not come back, a null anywhere in this collect is
+  not evidence that the ground is still.
+sub-apertures: 128 looks, dt 0.1550 s
+  observable band  f_max 3.23 Hz   AT sub-look resolution 8.26 m
+sub-pixel refinement: 1/200 px (default 1/10 azimuth, 1/20 range)
+tracked 49 windows (7 x 7); 49 pass the 0.00 coherence mask
+spectrum taken of line-of-sight DISPLACEMENT, which is what the phase estimator measures directly
+spectra: 65 bins, 0.0504 Hz resolution
+  amplitude dispersion: best 0.070, median 0.502; 9 of 49 windows meet D_A <= 0.25
+  persistent scatterers: 1.210 Hz from 9 of 9 candidates (D_A <= 0.25), best window 30 at D_A 0.070
+strongest peak in window 30: 1.210 Hz, prominence 38.2, quality 0.930, peak-to-peak velocity 25.6 mm/s
+  consensus: 1.210 Hz, agreed by 11 of 30 voting windows (37%), 11 distinct answers, largest contiguous block 9
+  cull: 1.210 Hz from 9 of 30 windows surviving (SNR 0, sigma 0, neighbours 16 removed), surface gates N/A
+```
+
+All four selection policies return 1.210 Hz against a 1.2 Hz injection, inside
+the 0.0252 Hz half-bin — and the scene's own 0.5 Hz is nowhere in the output,
+because a scatterer at 20x the median swamps it. That is the control working, and
+it is also why the run tells you nothing about the scene.
 
 **1. A null control.** `--null-static N` runs the identical processing over a
 scene known to be motionless. This is the only check that catches common-mode
@@ -511,6 +562,13 @@ takes **23 minutes**. Measured, not estimated — see
 `runs/synthetic/2026-08-01-e2e-check/`. Plan the trial count accordingly rather
 than discovering this mid-run, and do not let the cost become a reason to skip
 the check; it is the only thing that catches a common-mode artefact.
+
+**`--null-static` numbers produced before 2026-08-02 should be recomputed.**
+`rs_simulate_static_like()` wrote each scatterer's phase against one reference
+while telling the focuser to undo another, so the simulated scene never focused —
+peak-to-mean 3.6 where the same scatterers reach 93.7. The null was a field of
+noise rather than a motionless scene. Fixed and now tested; the direction of the
+old error is not assumed, and `FOLLOW-UPS.md` item 27 has the detail.
 
 `--shuffle-looks SEED` is a cheaper cousin that shuffles sub-look time order,
 answering "is there temporal structure here at all". It is **not** a bound for
@@ -722,13 +780,28 @@ data**; nothing works on real data. The honest summary is below.
   is unvalidated on real data, where the sub-look decorrelation the simulator
   cannot produce is the obvious threat.
 
+  **That threat has now been measured, and the recovery does not survive it**
+  (`FOLLOW-UPS.md` items 24-25). Given scatterers bright over only part of the
+  aperture — the mechanism the simulator lacked — item 14's own sweep loses the
+  relationship: slope goes negative at three of four settings, rms rises to
+  0.59-1.78 Hz against the 0.0252 bound, and two of twelve *motionless* controls
+  return a confident in-band frequency. Selecting on amplitude dispersion is the
+  only policy that survives, refusing where it cannot tell and returning item
+  14's figures where it answers. So `phase` does what it claims on the scene it
+  was measured on, and expecting that to transfer to a real collect has no
+  measured basis.
+
   **Use it with high `--overlap`**, unlike `correlation`. Recovery holds to 95%
   overlap, and high overlap is what buys sub-look coherence on a real collect —
   0.85 at 95% against 0.07 at zero. The response ceiling that makes overlap
   useless for `correlation` does not bind here: at 90% overlap a 1.3 Hz tone sits
   at a response of 0.055 and is still recovered.
 - `correlation` (default) — cross-correlation peak, sub-pixel refined. Has not
-  been shown to recover a frequency on any fixture. Still the right choice for
+  been shown to recover a frequency on a distributed-clutter fixture; it does
+  recover on a single-dominant-target fixture (slope 1.006, rms 0.0035), which is
+  what `FOLLOW-UPS.md` item 26 uses as its control. Against aspect dependence it
+  degrades differently from `phase`: it keeps a slope near 1 and misses on
+  scatter, rms 0.13-0.25 Hz, where `phase` loses the relationship outright. Still the right choice for
   motion too large for phase, since it has no ambiguity at all.
 - `splitband` — split-band phase linking over all N² interferograms. Returned one
   fixed frequency at every configuration swept.
@@ -762,6 +835,14 @@ peak, and runs serially. Backprojection is bitwise identical either way.
 
 ## 10. Gotchas
 
+- **A null on real data means nothing without `--inject-vib`.** Every real
+  collect this project has processed returns a null, and a null looks identical
+  whether the scene is still or the chain cannot see motion in that data. Section
+  7 item 0. This is the single most common way to over-read an output here.
+- **`--null-static` figures from before 2026-08-02 are against a defocused
+  null.** The simulated motionless scene never focused — peak-to-mean 3.6 against
+  93.7 — so the control was a field of noise rather than a scene. Fixed and
+  tested; recompute anything quoted from before then. `FOLLOW-UPS.md` item 27.
 - **`validate` cannot read `sim_cphd` output.** `info`, `focus` and `mmotion`
   sniff the file magic and accept both real CPHD and the simulator's internal
   format; `validate` accepts real CPHD only and fails with *"does not begin with

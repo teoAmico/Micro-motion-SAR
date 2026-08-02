@@ -622,7 +622,7 @@ With `--out PREFIX`:
 | `PREFIX_quality.png` | tracking quality per window, colour bar 0–1 |
 | `PREFIX_scene.png` | **the scene the measurement was taken from**, with the tracking grid on it and the selected window boxed |
 | `PREFIX_spectrum.png` | **the spectrum the reported frequency was read from**, with a marker at the selected bin |
-| `PREFIX_spectrum_mm.png` | the same spectrum as an **amplitude in mm or mm/s**, for placing a result against the literature's 0.10–10.43 mm envelope. Calibrated: reads 0.90–0.94× a known synthetic injection and scales linearly, the shortfall being Hann scalloping. Still labelled qualitative — the independent assessment of this method reports 40–76% time-domain error while getting every dominant frequency right |
+| `PREFIX_spectrum_mm.png` | the same spectrum as a **velocity in mm/s**, always, whatever the estimator measured — the phase route's observable is displacement, so it is converted with `v = 2*pi*f*A` rather than relabelled. For placing a result against the literature's envelope. Calibrated: reads 0.90–0.94× a known synthetic injection and scales linearly, the shortfall being Hann scalloping. Still labelled qualitative — the independent assessment of this method reports 40–76% time-domain error while getting every dominant frequency right |
 | `PREFIX_windows.csv` | **per-window evidence behind the selection** — every window's frequency, prominence, quality, excursion, correlation SNR and offset uncertainty, whether it passed the gates, whether it agrees with the consensus, and whether it survived the cull |
 
 The two maps are figures, not raw rasters: the window grid is enlarged by an
@@ -730,10 +730,18 @@ reported peak sat on a target, on clutter, or on the edge of the patch.
   window's **full patch**, so it is twice the lattice cell and overlaps its
   neighbours — that is not a drawing error, it is what the tracker did. The
   caption gives both numbers.
+- *The axes are metres from the grid centre*, azimuth across and range down, so
+  zero is the point `--at` or `--offset` selected rather than a corner of the
+  array. They appear only when the caller passes the cell size; a scene whose
+  spacing is unknown gets no metre scale, because a guessed one reads as
+  authoritative.
 - *Greyscale is amplitude* on a 40 dB log stretch clipped at the 99th
-  percentile, the same stretch `focus` writes. It is for looking, not measuring:
-  bright scatterers saturate, so a point-spread function measured off it comes
-  out broader than it is. Use `focus --raw` for that.
+  percentile, the same stretch `focus` writes, and the bar on the right keys it.
+  **That bar is relative**: 0 dB is this image's own brightest cell, not a
+  calibrated sigma-nought, so it compares cells within one figure and says
+  nothing across two. It is for looking, not measuring — bright scatterers
+  saturate, so a point-spread function measured off it comes out broader than it
+  is. Use `focus --raw` for that.
 - **It shows the patch against the sub-look's resolution, which is not the
   resolution the aliasing warning is about.** That warning compares `--cell` to
   the *full-aperture* resolution. A sub-look is coarser than the full aperture

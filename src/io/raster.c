@@ -382,6 +382,7 @@ resonarsat_status_t rs_raster_write_scene_figure(const rs_slc_t *img,
                                                  const rs_win_grid_t *grid,
                                                  const char *path,
                                                  const char *title,
+                                                 double d_az_m, double d_rg_m,
                                                  size_t min_px)
 {
     if (!img || !img->data || !path) return RS_ERR_ARG;
@@ -422,10 +423,41 @@ resonarsat_status_t rs_raster_write_scene_figure(const rs_slc_t *img,
              "%.0f DB LOG STRETCH -- FOR LOOKING, NOT FOR MEASURING",
              (dyn_range_db > 0.0) ? dyn_range_db : 40.0);
 
+    /* Axes only when the caller supplied a scale. See raster.h: a guessed metre
+     * axis is worse than none, because it reads as authoritative. */
+    const int axes = (d_az_m > 0.0 && d_rg_m > 0.0);
+    const double half_az = 0.5 * (double)img->n_az * d_az_m;
+    const double half_rg = 0.5 * (double)img->n_rg * d_rg_m;
+    const double dyn = (dyn_range_db > 0.0) ? dyn_range_db : 40.0;
+
+    /* Widest y tick label decides the left margin, so no tick is clipped. */
+    size_t ytick_w = 0;
+    if (axes) {
+        for (int k = 0; k <= 4; k++) {
+            char b[32];
+            rs_fig_fmt(b, sizeof b, -half_rg + (double)k * (2.0 * half_rg / 4.0));
+            const size_t w = rs_fig_text_width(b, ts);
+            if (w > ytick_w) ytick_w = w;
+        }
+    }
+
+    size_t bar_lab_w = 0;
+    const size_t bar_w = 16, bar_gap = 12;
+    if (axes) {
+        char b[32];
+        snprintf(b, sizeof b, "-%.0f DB", dyn);
+        bar_lab_w = rs_fig_text_width(b, ts);
+        const size_t w0 = rs_fig_text_width("0 DB", ts);
+        if (w0 > bar_lab_w) bar_lab_w = w0;
+    }
+
     const size_t pad = 12;
-    const size_t top = pad + (title ? ch + 10 : 0);
-    const size_t left = pad;
-    const size_t bottom = pad + 2 * ch + 12;
+    const size_t top = pad + (title ? ch + 10 : 0) + (axes ? ch + 6 : 0);
+    const size_t left = pad + (axes ? ytick_w + 8 : 0);
+    const size_t right_extra = axes ? (bar_gap + bar_w + 6 + bar_lab_w) : 0;
+    /* Ticks and the axis label sit between the image and the captions. */
+    const size_t axis_h = axes ? (2 * ch + 12) : 0;
+    const size_t bottom = pad + 2 * ch + 12 + axis_h;
 
     size_t text_w = rs_fig_text_width(cap_grid, ts);
     if (rs_fig_text_width(cap_stretch, ts) > text_w) {
@@ -443,7 +475,8 @@ resonarsat_status_t rs_raster_write_scene_figure(const rs_slc_t *img,
     static const unsigned char line[3]  = { 90, 160, 255 };
     static const unsigned char red[3]   = { 230, 60, 45 };
 
-    st = rs_fig_create(&f, left + body_w + pad, top + img_h + bottom, white);
+    st = rs_fig_create(&f, left + body_w + right_extra + pad,
+                       top + img_h + bottom, white);
     if (st != RS_OK) { free(amp); return st; }
 
     for (size_t r = 0; r < img_h; r++) {
@@ -490,10 +523,60 @@ resonarsat_status_t rs_raster_write_scene_figure(const rs_slc_t *img,
         }
     }
 
+    /* Metre axes, measured from the CENTRE of the grid: the grid is centred on
+     * whatever --at or --offset selected, so zero is the point the caller aimed
+     * at rather than a corner of the array. */
+    if (axes) {
+        char b[32];
+        for (int k = 0; k <= 4; k++) {
+            const double fr = (double)k / 4.0;
+
+            const long y = (long)(top + (size_t)(fr * (double)(img_h - 1)));
+            rs_fig_fmt(b, sizeof b, -half_rg + fr * 2.0 * half_rg);
+            rs_fig_text(&f, (long)left - 8 - (long)rs_fig_text_width(b, ts),
+                        y - (long)ch / 2, b, ts, black);
+            rs_fig_line(&f, (long)left - 5, y, (long)left - 1, y, black);
+
+            const long x = (long)(left + (size_t)(fr * (double)(img_w - 1)));
+            rs_fig_fmt(b, sizeof b, -half_az + fr * 2.0 * half_az);
+            rs_fig_text(&f, x - (long)(rs_fig_text_width(b, ts) / 2),
+                        (long)(top + img_h) + 6, b, ts, black);
+            rs_fig_line(&f, x, (long)(top + img_h), x,
+                        (long)(top + img_h) + 4, black);
+        }
+        rs_fig_text(&f, (long)left, (long)pad + (title ? (long)ch + 10 : 0),
+                    "RANGE, M", ts, black);
+        rs_fig_text(&f,
+                    (long)(left + img_w / 2) -
+                        (long)(rs_fig_text_width("AZIMUTH, M", ts) / 2),
+                    (long)(top + img_h) + 6 + (long)ch + 6, "AZIMUTH, M", ts,
+                    black);
+
+        /* Reflectivity ramp, white at the peak and black at the stretch floor,
+         * matching rs_amp_gray()'s mapping so the bar reads this image. The
+         * scale is RELATIVE: 0 dB is this scene's own brightest cell, not a
+         * calibrated sigma-nought, and the caption below says the same. */
+        const size_t bx = left + img_w + bar_gap;
+        for (size_t r = 0; r < img_h; r++) {
+            const double t = 1.0 - (double)r / (double)(img_h - 1);
+            const unsigned char g = (unsigned char)(t * 255.0 + 0.5);
+            const unsigned char rgb[3] = { g, g, g };
+            for (size_t c = 0; c < bar_w; c++) {
+                rs_fig_pixel(&f, (long)(bx + c), (long)(top + r), rgb);
+            }
+        }
+        rs_fig_text(&f, (long)(bx + bar_w + 6), (long)top, "0 DB", ts, black);
+        snprintf(b, sizeof b, "-%.0f DB", dyn);
+        rs_fig_text(&f, (long)(bx + bar_w + 6),
+                    (long)(top + img_h) - (long)ch, b, ts, black);
+    }
+
     if (title) rs_fig_text(&f, (long)left, (long)pad, title, ts, black);
 
-    rs_fig_text(&f, (long)left, (long)(top + img_h) + 8, cap_grid, ts, grey);
-    rs_fig_text(&f, (long)left, (long)(top + img_h) + 8 + (long)ch + 4,
+    rs_fig_text(&f, (long)left, (long)(top + img_h) + 8 + (long)axis_h,
+                cap_grid, ts, grey);
+    rs_fig_text(&f, (long)left,
+                (long)(top + img_h) + 8 + (long)axis_h + (long)ch + 4,
                 cap_stretch, ts, grey);
 
     st = rs_png_write(path, f.px, f.w, f.h, 3);

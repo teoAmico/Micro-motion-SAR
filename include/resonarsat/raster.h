@@ -190,12 +190,25 @@ typedef struct {
  * broader than it is; 'focus --raw' is the route for that. The caption says so.
  *
  * 'grid' may be NULL for a bare enlarged scene. Always writes PNG. Returns
- * RS_ERR_ARG on a NULL image or path. */
+ * RS_ERR_ARG on a NULL image or path.
+ *
+ * 'd_az_m' and 'd_rg_m' are the ground spacing of one image pixel in azimuth
+ * and range, in metres. Pass them and the figure gains metre axes -- ticks
+ * measured from the grid centre, an AZIMUTH, M label under the x axis and a
+ * RANGE, M label over the y -- plus a reflectivity bar keyed in dB below the
+ * scene peak, which is the only thing that makes the grey levels readable as
+ * anything. Pass 0 for either and the axes are omitted rather than guessed:
+ * a scene whose spacing the caller does not know must not be given a metre
+ * scale that looks authoritative.
+ *
+ * The dB bar is labelled RELATIVE, because that is what a log stretch leaves:
+ * 0 dB is this image's own brightest cell, not a calibrated sigma-nought. */
 resonarsat_status_t rs_raster_write_scene_figure(const rs_slc_t *img,
                                                  double dyn_range_db,
                                                  const rs_win_grid_t *grid,
                                                  const char *path,
                                                  const char *title,
+                                                 double d_az_m, double d_rg_m,
                                                  size_t min_px);
 
 /* Write an XY line plot with axes, tick labels and an optional marker.

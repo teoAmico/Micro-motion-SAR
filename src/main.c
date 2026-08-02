@@ -1993,7 +1993,8 @@ static int rs_cmd_mmotion(int argc, char **argv)
             snprintf(path, sizeof path, "%s_scene.png", prefix);
             rs_raster_write_scene_figure(&scene_ref, 40.0, &wg, path,
                                          "REFERENCE SUB-LOOK, TRACKING GRID,"
-                                         " SELECTED WINDOW", 420);
+                                         " SELECTED WINDOW",
+                                         grid.dx, grid.dy, 420);
         }
 
         /* The spectrum the reported frequency was read from.
@@ -2058,14 +2059,25 @@ static int rs_cmd_mmotion(int argc, char **argv)
                 const double *psd_w = spec.psd + best * spec.n_freq;
                 for (size_t k = 0; k < spec.n_freq; k++) {
                     const double a = 3.0 * psd_w[k] * spec.df;
-                    amp_mm[k] = 1000.0 * ((a > 0.0) ? sqrt(a) : 0.0);
+                    double v = 1000.0 * ((a > 0.0) ? sqrt(a) : 0.0);
+                    /* ALWAYS A VELOCITY AXIS, whatever the estimator measured.
+                     * The phase route's observable is DISPLACEMENT, so its
+                     * amplitude is millimetres and labelling it mm/s would be a
+                     * lie; but this figure exists to be read in mm/s beside the
+                     * power one, so the displacement is converted rather than
+                     * relabelled. For a sinusoid at f, peak velocity is
+                     * 2*pi*f*A, which is exact for a tone and is what the bin
+                     * holds. The correlation route already measures velocity
+                     * and passes through untouched. */
+                    if (src == RS_SPEC_DISPLACEMENT) {
+                        v *= 2.0 * M_PI * spec.freq[k];
+                    }
+                    amp_mm[k] = v;
                 }
                 snprintf(path, sizeof path, "%s_spectrum_mm.png", prefix);
                 rs_raster_write_plot(spec.freq, amp_mm, spec.n_freq, path,
                                      plot_title, "FREQUENCY, HZ",
-                                     (src == RS_SPEC_DISPLACEMENT)
-                                       ? "AMPLITUDE, MM (QUALITATIVE)"
-                                       : "AMPLITUDE, MM/S (QUALITATIVE)",
+                                     "VELOCITY, MM/S (QUALITATIVE)",
                                      spec.dominant_freq[best]);
                 free(amp_mm);
             }

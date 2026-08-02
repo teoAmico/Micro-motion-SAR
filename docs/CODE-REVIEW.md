@@ -145,6 +145,21 @@ a stripmap swath. That helper was static in a tool and so unreachable from the
 suite, which is how it survived; it is now `rs_slc_crop()` in the library with
 three cases chosen so the old and new formulas cannot agree on all of them.
 
+**A second field in the same struct moves the opposite way, and the first
+version of the crop fix got it wrong.** `plane` was carried across untouched
+under a comment asserting the image plane is referenced to the scene reference
+point. It is not: `rs_geo_plane_point()` works from image coordinate (0,0), and
+`info` calls it with (0,0) under the label "first az, first rg", so
+`plane.origin` is the ECF position of the FIRST SAMPLE and must advance by the
+crop offset. Unmoved, it put every sample of the fixture crop 43.4 m from where
+it belongs -- `info` printing the uncropped scene's corners, `--at` resolving to
+the wrong ground position, both with complete output. `r_scene_m` moves by the
+change in centre bin and `plane.origin` by the origin offset: one struct, two
+reference points, and a crop that treats them alike is wrong about one of them.
+Pinned through `rs_geo_plane_point()` so the test states the property -- a
+surviving sample keeps its ground position -- rather than restating the
+arithmetic, and confirmed to fail against the old behaviour.
+
 ### 4. The same reader parsed a terrain height into a variable named `inc`
 
 `readers/uavsar.c` filled a local named `inc` from `Global Average Terrain

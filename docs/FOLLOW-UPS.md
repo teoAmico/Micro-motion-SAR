@@ -378,9 +378,33 @@ where the old formula moved it not at all.
 That defect survived because a static helper in a tool is unreachable from the
 suite. The function is now `rs_slc_crop()` in the library and
 `tests/test_readers.c` pins three cases chosen so the two formulas cannot agree
-on all of them, plus that `t0` still offsets from the first LINE -- the two
-conventions coexist in one struct and the crop must not treat them alike -- and
-that an unset range stays unset rather than acquiring an offset.
+on all of them, plus that `t0` still offsets from the first LINE and that an
+unset range stays unset rather than acquiring an offset.
+
+**AND A SECOND FIELD MOVES THE OTHER WAY, which the first version of this fix got
+wrong.** `rs_slc_crop()` carried `plane` across untouched, under a comment
+claiming the image plane is referenced to the scene reference point so cropping
+does not move it. It is not. `rs_geo_plane_point()` computes
+`origin + x*u_x + y*u_y` from image coordinate (0,0), and `info` calls it with
+(0,0) and labels the result *"first az, first rg"* -- so `plane.origin` is the
+ECF position of the FIRST SAMPLE and must advance by the crop offset:
+
+```
+origin += az0 * az_spacing_m * u_x  +  rg0 * rg_spacing_m * u_y
+```
+
+Left unmoved, a cropped product geolocates every sample to where the UNCROPPED
+scene had it. Measured on the fixture: 43.4 m of error at every probe, on a crop
+cut at (9, 17). `info` would print the original scene's corners and `--at` would
+resolve to the wrong ground position, both with complete and plausible output.
+
+So one struct carries two reference points and the crop has to know which is
+which -- `r_scene_m` from the scene centre, `plane.origin` from the first sample,
+moving by different amounts in different directions. The test asserts the
+property rather than the arithmetic: a surviving sample must reach the same ECF
+point through the cropped plane as through the source plane, checked through
+`rs_geo_plane_point()` so it cannot restate the implementation. Verified to fail
+against the old behaviour before being relied on.
 
 The reasoning is retired into `rs_slc_t.r_scene_m`'s contract in `slc.h`, which
 is where it constrains anything.

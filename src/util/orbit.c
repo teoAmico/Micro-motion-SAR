@@ -134,12 +134,35 @@ resonarsat_status_t rs_slc_validate(const rs_slc_t *img)
  *   t0         by az0 azimuth line intervals, which IS a first-line quantity
  *              and so does offset from zero
  *   t_dwell    recomputed from the retained line count
+ *   plane.origin  by (az0, rg0) sample steps along u_x and u_y -- see below
  *
- * Everything else is copied unchanged: spacings, carrier, platform speed and
- * the ground plane all describe the collect rather than the window onto it.
- * 'plane' in particular stays valid, because it is defined against the scene
- * reference point and cropping does not move that point -- only which samples
- * are kept. Returns RS_ERR_ARG if the origin lies outside the source. */
+ * THE IMAGE PLANE'S ORIGIN IS THE FIRST SAMPLE, NOT THE SCENE CENTRE, and the
+ * two quantities in this struct therefore move in OPPOSITE ways under a crop.
+ * rs_geo_plane_point() computes origin + x*u_x + y*u_y with x and y in metres
+ * from image coordinate (0,0) -- `info` calls it with (0,0) and labels the
+ * result "first az, first rg". So cropping to (az0, rg0) makes the new (0,0) the
+ * old (az0, rg0), and the origin must advance by exactly that:
+ *
+ *     origin += az0 * az_spacing_m * u_x  +  rg0 * rg_spacing_m * u_y
+ *
+ * where u_x runs along the first image axis (azimuth) and u_y along the second
+ * (range), matching how `info` computes its corners. Left unmoved, a cropped
+ * product geolocates every pixel to where the UNCROPPED scene had it: `info`
+ * would print the original corners and `--at` would resolve to the wrong ground
+ * position, both with complete and plausible output. That is this project's
+ * signature failure mode and the reason r_scene_m was renamed.
+ *
+ * Do not read the two updates as inconsistent. r_scene_m is referenced to the
+ * scene centre and moves by the change in CENTRE bin; plane.origin is referenced
+ * to the first sample and moves by the ORIGIN offset. One struct, two
+ * conventions, and the crop has to know which is which.
+ *
+ * Everything else is copied unchanged: spacings, carrier and platform speed
+ * describe the collect rather than the window, and u_x, u_y, sensor, sensor_vel,
+ * ref_hae, valid and is_slant describe the plane's orientation and the aperture
+ * rather than which corner of it is kept. An invalid plane stays invalid rather
+ * than acquiring an origin. Returns RS_ERR_ARG if the origin lies outside the
+ * source. */
 resonarsat_status_t rs_slc_crop(const rs_slc_t *src, size_t az0, size_t rg0,
                                 size_t n_az, size_t n_rg, rs_slc_t *dst)
 {
@@ -182,5 +205,15 @@ resonarsat_status_t rs_slc_crop(const rs_slc_t *src, size_t az0, size_t rg0,
                    : 0.0;
     dst->t0 = src->t0 + (double)az0 * src->azimuth_time_interval;
     dst->t_dwell = (double)n_az * src->azimuth_time_interval;
+
+    if (src->plane.valid) {
+        const double dx = (double)az0 * src->az_spacing_m;
+        const double dy = (double)rg0 * src->rg_spacing_m;
+        for (int i = 0; i < 3; i++) {
+            dst->plane.origin[i] = src->plane.origin[i]
+                                 + dx * src->plane.u_x[i]
+                                 + dy * src->plane.u_y[i];
+        }
+    }
     return RS_OK;
 }

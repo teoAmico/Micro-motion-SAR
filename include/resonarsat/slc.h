@@ -145,10 +145,12 @@ resonarsat_status_t rs_slc_finalise_metadata(rs_slc_t *img);
 /* Copy a rectangular region of 'src' into 'dst', which the caller must free.
  *
  * Bounds are clamped to the source rather than rejected. The metadata is carried
- * across with only what the window changes adjusted -- and 'r_scene_m' moves by
- * the change in CENTRE bin, not by rg0, because it is a scene-centre range. See
- * the implementation for the full list of what moves and what does not, and the
- * field's contract above for why that distinction is not cosmetic.
+ * across with only what the window changes adjusted, and the two geolocating
+ * fields move in OPPOSITE ways because they are referenced to different points:
+ * 'r_scene_m' by the change in CENTRE bin, because it is a scene-centre range,
+ * and 'plane.origin' by the ORIGIN offset (az0, rg0), because it is the ECF
+ * position of image coordinate (0,0). See the implementation for the full list
+ * and for what a crop that moved neither would produce.
  *
  * Returns RS_ERR_ARG for an origin outside the source or an empty size. */
 resonarsat_status_t rs_slc_crop(const rs_slc_t *src, size_t az0, size_t rg0,

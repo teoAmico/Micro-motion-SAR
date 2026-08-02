@@ -18,6 +18,7 @@
 
 #include "resonarsat/readers.h"
 #include "resonarsat/focus.h"
+#include "resonarsat/geocode.h"
 #include "rs_test.h"
 
 #include <math.h>
@@ -245,6 +246,91 @@ int main(void)
         src.r_scene_m = 0.0;
         RS_CHECK_OK(rs_slc_crop(&src, 0, 80, 32, 10, &dst));
         RS_CHECK(dst.r_scene_m == 0.0);
+        rs_slc_free(&dst);
+        rs_slc_free(&src);
+    }
+
+    /* THE IMAGE PLANE'S ORIGIN IS THE FIRST SAMPLE, SO IT MOVES THE OTHER WAY.
+     *
+     * rs_geo_plane_point() computes origin + x*u_x + y*u_y from image coordinate
+     * (0,0); `info` calls it with (0,0) and labels the result "first az, first
+     * rg". So a crop makes the new (0,0) the old (az0, rg0) and the origin must
+     * advance by exactly that. Left unmoved -- which is what rs_slc_crop() did,
+     * with a comment claiming the plane was referenced to the scene centre -- a
+     * cropped product geolocates every pixel to where the UNCROPPED scene had
+     * it, with complete and plausible output.
+     *
+     * Asserted THROUGH rs_geo_plane_point() rather than against the origin
+     * vector directly, so the test states the property that matters: the ground
+     * position of a surviving sample does not depend on how the image was cut.
+     * Checking the vector would restate the implementation's own arithmetic. */
+    RS_CASE("cropping moves the plane origin so a sample keeps its ground position");
+    {
+        rs_slc_t src;
+        RS_CHECK_OK(rs_slc_alloc(&src, 64, 100));
+        src.az_spacing_m = 3.0;
+        src.rg_spacing_m = 2.0;
+        src.azimuth_time_interval = 1e-3;
+        /* A plane whose axes are distinct and not aligned with ECF, so a swapped
+         * or dropped axis cannot pass by symmetry. */
+        src.plane.valid = 1;
+        src.plane.origin[0] = 4.0e6; src.plane.origin[1] = 1.0e6; src.plane.origin[2] = 4.6e6;
+        src.plane.u_x[0] = 0.0; src.plane.u_x[1] = 1.0; src.plane.u_x[2] = 0.0;
+        src.plane.u_y[0] = 0.6; src.plane.u_y[1] = 0.0; src.plane.u_y[2] = -0.8;
+        src.plane.ref_hae = 120.0;
+
+        const size_t az0 = 9, rg0 = 17;
+        rs_slc_t dst;
+        RS_CHECK_OK(rs_slc_crop(&src, az0, rg0, 20, 30, &dst));
+
+        /* Sample (a, r) of the crop is sample (az0+a, rg0+r) of the source.
+         * Both must land on the same ECF point. */
+        const struct { size_t a, r; } probe[] = { {0,0}, {1,0}, {0,1}, {19,29} };
+        for (size_t k = 0; k < sizeof probe / sizeof probe[0]; k++) {
+            double want[3], got[3];
+            RS_CHECK_OK(rs_geo_plane_point(&src.plane,
+                            (double)(az0 + probe[k].a) * src.az_spacing_m,
+                            (double)(rg0 + probe[k].r) * src.rg_spacing_m, want));
+            RS_CHECK_OK(rs_geo_plane_point(&dst.plane,
+                            (double)probe[k].a * dst.az_spacing_m,
+                            (double)probe[k].r * dst.rg_spacing_m, got));
+            const double dx = got[0]-want[0], dy = got[1]-want[1], dz = got[2]-want[2];
+            const double err = sqrt(dx*dx + dy*dy + dz*dz);
+            printf("    crop sample (%2zu,%2zu) -> source (%2zu,%2zu): ground error %.3g m\n",
+                   probe[k].a, probe[k].r, az0 + probe[k].a, rg0 + probe[k].r, err);
+            RS_CHECK(err < 1e-6);
+        }
+
+        /* The old behaviour must FAIL this: an unmoved origin misplaces the
+         * crop by the offset it was cut at, which is metres, not rounding. */
+        double at_uncropped[3], at_cropped[3];
+        RS_CHECK_OK(rs_geo_plane_point(&src.plane, 0.0, 0.0, at_uncropped));
+        RS_CHECK_OK(rs_geo_plane_point(&dst.plane, 0.0, 0.0, at_cropped));
+        const double mx = at_cropped[0]-at_uncropped[0],
+                     my = at_cropped[1]-at_uncropped[1],
+                     mz = at_cropped[2]-at_uncropped[2];
+        const double moved = sqrt(mx*mx + my*my + mz*mz);
+        const double expect = sqrt(pow((double)az0 * src.az_spacing_m, 2.0) +
+                                   pow((double)rg0 * src.rg_spacing_m, 2.0));
+        printf("    origin moved %.3f m (want %.3f, orthogonal axes)\n", moved, expect);
+        RS_CHECK_NEAR(moved, expect, 1e-6);
+        RS_CHECK(moved > 1.0);
+
+        /* Orientation and aperture describe the collect, not the window. */
+        RS_CHECK(dst.plane.valid == src.plane.valid);
+        RS_CHECK(dst.plane.is_slant == src.plane.is_slant);
+        RS_CHECK_NEAR(dst.plane.ref_hae, src.plane.ref_hae, 1e-12);
+        for (int i = 0; i < 3; i++) {
+            RS_CHECK_NEAR(dst.plane.u_x[i], src.plane.u_x[i], 1e-12);
+            RS_CHECK_NEAR(dst.plane.u_y[i], src.plane.u_y[i], 1e-12);
+        }
+        rs_slc_free(&dst);
+
+        /* An invalid plane stays invalid rather than acquiring an origin. */
+        src.plane.valid = 0;
+        RS_CHECK_OK(rs_slc_crop(&src, az0, rg0, 20, 30, &dst));
+        RS_CHECK(dst.plane.valid == 0);
+        RS_CHECK(dst.plane.origin[0] == src.plane.origin[0]);
         rs_slc_free(&dst);
         rs_slc_free(&src);
     }

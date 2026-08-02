@@ -2639,3 +2639,71 @@ has never been run against aspect dependence at all, and `rs_spectrum_ps_window(
 answering 6 times in 18 is a recall nobody would accept as a default. The honest
 intermediate step is that `mmotion` already prints all four policies side by side,
 and this is now recorded beside them.
+
+---
+
+## 26. The correlation route against aspect dependence: degrades, but keeps its slope
+
+Item 25 left the correlation route untested against the mechanism item 24 added.
+Run at the correlation route's own operating point -- one dominant vibrating
+target against two static ones, 20 mm amplitude, zero overlap, look count from
+the ambiguity condition, band 0.3-0.8 Hz where that count serves -- with
+`lobe_frac` the only new variable and `frac` 1.0 so the vibrating target is
+certainly a facet:
+
+```
+   lobe |    best_window        |    PS selector        | cand |  static best
+  -1.00 |  18 +1.006 0.0035 PASS|  12 +1.006 0.0028 PASS|  3.6 | 0.40  0.40  0.40
+   1.00 |  18 +0.982 0.2496 fail|   0  --     --    fail|  0.0 | 0.40  0.05  0.80
+   0.50 |  18 +1.437 0.2203 fail|   0  --     --    fail|  0.0 | 0.40  0.05  0.05
+   0.25 |  18 +1.073 0.1329 fail|   0  --     --    fail|  0.0 | 0.40  0.40  0.05
+   0.12 |  18 +0.474 0.2510 fail|   0  --     --    fail|  0.0 | 0.86  0.86  0.80
+```
+
+Half-bin bound 0.025 Hz. PASS/fail above is slope and rms only -- see the caveats.
+
+**THE FIRST ATTEMPT AT THIS WAS INVALID AND IS WORTH RECORDING.** It reused item
+25's 96-scatterer clutter scene so the two routes would be comparable, and its
+ISOTROPIC CONTROL FAILED (slope 1.564, rms 0.7675) -- which is exactly what items
+7-9 record for this route on distributed clutter: the correlator recovers the
+carrier and `rs_spectrum_best_window()` discards it. A fixture that fails before
+the manipulation is applied cannot measure the manipulation. The clutter family
+cannot control this route; the dominant-target family can.
+
+**The two routes fail differently, and that is the finding.** Against aspect
+dependence the phase route lost the relationship entirely -- slope NEGATIVE at
+three of four lobe widths, rms 0.59-1.78 Hz (item 25). The correlation route
+keeps a slope near 1 at three of four (0.982, 1.437, 1.073) and misses on
+SCATTER instead: rms 0.13-0.25 Hz, five to ten times the bound. That is
+consistent with what the two estimators read. The correlator tracks a patch's
+offset and survives losing any individual dominant; the phase route reads one
+scatterer's phase and has nothing left when that scatterer stops being dominant.
+Neither clears the bar, but only one still has a proportional response.
+
+**The PS selector never answers on any aspect arm** -- zero windows meet
+`D_A <= 0.25` at every lobe width. On this three-target fixture it has no
+material to select from once every target is a facet. Item 25's finding, that
+selecting on dispersion is what survives aspect dependence, does NOT reproduce
+here, and the difference is the fixture: 96 clutter scatterers at `frac` 0.5
+leave isotropic scatterers to be found, three targets at `frac` 1.0 leave none.
+
+### Two caveats that limit what the control arm proves
+
+**The isotropic arm is six points, not eighteen.** The only randomness in this
+fixture is aspect lobe placement, so on the `lobe -1` row the three seeds are the
+SAME SCENE computed three times. Its slope and rms are honest for six distinct
+injections; the seed pooling that makes item 14's bar meaningful is absent from
+the control specifically.
+
+**A motionless scene returns 0.40 Hz on the isotropic arm**, from both policies,
+inside the swept band. The PASS label above tests slope and rms only; on the
+static criterion this fixture's own control fails. That is a common-mode artefact
+of the fixture at these settings, of the kind item 11 records, and it is present
+BEFORE aspect dependence is added. It does not invalidate the slope result -- a
+1.006 slope across six injections is not something a fixed artefact produces --
+but it means this fixture cannot support a claim about static rejection, and the
+aspect rows' statics should not be read as evidence either way.
+
+Neither caveat is a reason to distrust the comparison between rows, which is what
+this item is for: every row shares the fixture, so the difference between them is
+the manipulation. Both are reasons not to quote the control row on its own.

@@ -15,6 +15,7 @@ because several of these are patterns rather than incidents.
 
 | date | commit | scope | outcome |
 |---|---|---|---|
+| 2026-08-02 | `cda093f` | Removing the two dead `rs_slc_t` fields | `sizeof(rs_slc_t)` falls 3976 -> 320 bytes, 92 percent of it, saving 7.3 MB on a 2048-look stack. Pipeline output bit-identical. |
 | 2026-08-02 | `2e0e1fc` | Closing the check's own open items: tests for the two uncovered branches, and the phase-reference fix they made safe | Both branches now covered. The lag test failed before the fix and passes after; the split-band test found a second defect, an unclamped coherence. Details below. |
 | 2026-08-02 | `893d9d2` | Follow-up: the two items the sweep left open, checked | Both were wrong as written. The orbit/Doppler fields are superseded rather than unfinished; two of the four "exposed but non-recovering" modes have no test at all, and `--lag` was unvalidated with platform-dependent undefined behaviour. Details below. |
 | 2026-08-02 | `6d42f29` | Full sweep: `docs/FOLLOW-UPS.md` against the source; every `.c` and `.h` under `src/`, `include/`, `tools/`, `tests/`; CLI flags against `USER_GUIDE.md`; committed run artefacts under `runs/` | 21/21 tests pass. Two pre-existing compiler warnings found (see the correction below). Eleven findings, all fixed in the same change; two new test cases pin the substantive one. |
@@ -475,10 +476,40 @@ and never fired. `coherence_min` is a threshold, not a coherence, and nothing
 requires it to be reachable; the case now sets `achieved + 1e-6` unclamped. Both
 new cases were checked by disabling the code they cover and confirming they fail.
 
+### The dead fields, removed
+
+`rs_slc_t.doppler` and `.orbit` are gone, along with `rs_dopp_poly_t`,
+`rs_state_vector_t`, `rs_orbit_t`, `RS_DOPP_POLY_MAX` and `RS_ORBIT_MAX`. Three
+call sites in total, one of them a struct-copy in `rs_subaperture_split()` that
+propagated zero to zero.
+
+**They were 92 percent of the struct.** `sizeof(rs_slc_t)` was 3976 bytes, of
+which the orbit table was 3592 and the Doppler polynomial 64. It is now 320.
+That is not incidental, because `rs_subap_stack_t` holds an ARRAY of these, one
+per sub-look:
+
+```
+   128 looks:   497.0 KB ->   40.0 KB
+   512 looks:  1988.0 KB ->  160.0 KB
+  2048 looks:  7952.0 KB ->  640.0 KB
+```
+
+`--stream` exists because this pipeline's memory ceiling shaped where a grid
+could be placed at all (`FOLLOW-UPS.md` item 22), so 7 MB of never-written
+metadata on a large stack was worth removing on its own terms.
+
+**Verified unchanged rather than assumed.** The struct every stage flows through
+changed shape, so the check is end-to-end: an `mmotion` run before and after
+produces byte-identical `_windows.csv` numbers, and `focus` still runs. 21/21
+pass, clean-tree build warning-free.
+
+The reasoning that made the removal safe is retired into `slc.h`'s file comment,
+where the next person to consider adding an orbit table will find it: git holds
+the interpolator and the evaluator, and a field should come back only WITH a
+consumer and a fixture.
+
 ### Still open
 
-- **`rs_slc_t.doppler` and `.orbit` are removable** and are not removed, because
-  deleting a field from that struct is wider than the review that found it.
 - **Neither `lag` nor `splitband` passes `rs_track_fit()`**, and the new tests do
   not claim otherwise -- they cover each branch's contract, not its accuracy.
   What each recovers is `FOLLOW-UPS.md` item 7's business and is unchanged.

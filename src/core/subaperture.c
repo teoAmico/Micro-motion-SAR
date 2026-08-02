@@ -382,8 +382,7 @@ resonarsat_status_t rs_subaperture_split(const rs_slc_t *img,
                                      .r_scene_m = img->r_scene_m, .t0 = img->t0,
                                      .t_dwell = t_sap,
                                      .incidence = img->incidence,
-                                     .v_platform = img->v_platform,
-                                     .doppler = img->doppler, .orbit = img->orbit };
+                                     .v_platform = img->v_platform };
         snprintf(stack->look[i].source, sizeof stack->look[i].source, "sublook%zu", i);
         stack->centre_time[i] = img->t0 + (double)i * stack->dt;
 

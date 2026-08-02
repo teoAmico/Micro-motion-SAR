@@ -1,5 +1,22 @@
-/* The complex image type every stage of the pipeline flows through, plus the
- * orbit and Doppler metadata that travels with it. */
+/* The complex image type every stage of the pipeline flows through.
+ *
+ * It carried an orbit state-vector table and a Doppler polynomial until the
+ * 2026-08-02 review: 3656 of the struct's 3976 bytes, 92 percent of it, for two
+ * fields NO READER EVER FILLED and nothing ever read. They were not an
+ * unfinished parse. Every format already has something better or has nothing to
+ * put there -- CPHD carries three doubles PER PULSE in rs_cphd_t.pos and
+ * rs_focus_backproject() reads them directly, SICD's ARPPos/ARPVel are parsed
+ * into 'plane.sensor' and 'plane.sensor_vel' where rs_geo_slant_to_ground()
+ * consumes them, and UAVSAR annotations carry no state vectors at all. The
+ * Doppler centroid is estimated from the samples on every call by
+ * rs_subaperture_split(), by design rather than as a fallback, which is what
+ * lets the simulator's annotation-free container run through identical code.
+ *
+ * Recorded because "unfilled field" and "field nothing should fill" look
+ * identical from the field, and this one read as the former for two years. If a
+ * burst-boundary check ever needs an annotated polynomial, add the field WITH
+ * its consumer and its fixture; git holds the interpolator and the evaluator
+ * that used to be here. See docs/CODE-REVIEW.md. */
 
 #ifndef RESONARSAT_SLC_H
 #define RESONARSAT_SLC_H
@@ -10,34 +27,6 @@
 
 #include "resonarsat/geocode.h"
 #include "resonarsat/resonarsat.h"
-
-#define RS_DOPP_POLY_MAX 6   /* highest polynomial order we retain */
-#define RS_ORBIT_MAX     64  /* state vectors kept per product */
-
-/* A Doppler centroid or FM-rate polynomial in slant-range time.
- *
- * Evaluated as sum(coeff[i] * (tau - tau_ref)^i) for i in [0, n_coeff), with
- * 'tau' the two-way slant-range time in seconds. Products that carry only a
- * constant Doppler centroid set n_coeff = 1. */
-typedef struct {
-    double coeff[RS_DOPP_POLY_MAX];
-    size_t n_coeff;
-    double tau_ref;   /* reference slant-range time, s */
-} rs_dopp_poly_t;
-
-/* One orbit state vector: time in seconds since the product epoch, position
- * and velocity in metres and metres per second in an earth-fixed frame. */
-typedef struct {
-    double t;
-    double pos[3];
-    double vel[3];
-} rs_state_vector_t;
-
-/* Platform trajectory as a short table of state vectors, interpolatable. */
-typedef struct {
-    rs_state_vector_t sv[RS_ORBIT_MAX];
-    size_t            n;
-} rs_orbit_t;
 
 /* A focused single-look complex image and everything needed to process it.
  *
@@ -97,17 +86,14 @@ typedef struct {
      * differ by half a swath -- tens of metres on a spotlight product,
      * kilometres on a stripmap one -- so code that indexes range bins against
      * this value must offset from the CENTRE bin, not from bin zero. That is one
-     * caller today: rs_crop() in tools/crop_slc.c, which moves the value by the
-     * change in centre bin. It previously added rg0 * rg_spacing_m, correct for
-     * the documented meaning and wrong for the real one. */
+     * caller today, rs_slc_crop() below, which moves the value by the change in
+     * centre bin. It previously added rg0 * rg_spacing_m -- correct for the
+     * documented meaning and wrong for the real one. */
     double r_scene_m;
     double t0;                     /* azimuth time of first line, s */
     double t_dwell;                /* target illumination time, s */
     double incidence;              /* incidence angle at scene centre, rad */
     double v_platform;             /* platform speed, m/s */
-
-    rs_dopp_poly_t doppler;
-    rs_orbit_t     orbit;
 
     /* Where this image sits on the earth, when the product says. Zeroed and
      * marked invalid for products that carry no plane definition. */

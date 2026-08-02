@@ -241,8 +241,17 @@ measurement stands. It reproduces the level real collects occupy (median `D_A` 0
 against a real 0.58-0.89) and the sign and monotonicity of the window-size response, at about
 a third of the real slope. The larger finding is a side effect: the window-level hit rate
 collapses from 45-49% to 3-10%, the first time a fixture here has behaved like a real collect
-in refusing to yield a frequency. Whether `--estimator phase` still passes `rs_track_fit()`
-against it is the open question.
+in refusing to yield a frequency.
+
+**Item 14's recovery does NOT survive it** (item 25). Item 14's own sweep against the aspect
+fixture: the reported policy, `rs_spectrum_best_window()`, fails at every lobe width with rms
+0.59-1.78 Hz against a 0.0252 Hz bound and a negative slope at three of four — and returns an
+in-band frequency for two of twelve MOTIONLESS controls. `rs_spectrum_ps_window()` is the only
+policy that behaves: it refuses where it cannot tell and, where it answers, returns slope 1.008
+and rms 0.0070, item 14's figures to four decimals, with no in-band static false positive
+anywhere. Precision without recall — 6 of 18 points. This bounds item 14 rather than
+withdrawing it: the estimator does what it claims on the scene it was measured on, and there is
+now no basis for expecting that to transfer to a real collect.
 
 `tests/rs_sim.h` now carries two fixture families: `make_clutter`-style uniform speckle
 and `rs_sim_dominant_patch()`, dominants on a lattice over a diffuse background. The

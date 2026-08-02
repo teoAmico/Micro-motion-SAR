@@ -2560,3 +2560,82 @@ passes `rs_track_fit()`'s slope-and-rms bar on an aspect-dependent sweep, and if
 not, at what lobe width it breaks. That would say how much of item 14's recovery
 survives contact with the mechanism, and it is the first fixture this project has
 that could take the question seriously.
+
+---
+
+## 25. Item 14's recovery does not survive aspect dependence, and the PS selector does
+
+Item 24c asked whether `--estimator phase` still clears `rs_track_fit()` once
+scatterers are aspect-dependent. Item 14's own sweep, unchanged -- six
+frequencies over three seeds plus a static control per seed, at item 14's
+settings -- with `lobe_frac` the only new variable:
+
+```
+   lobe |    best_window        |    PS selector        | cand |   static best     |   static PS
+        |   n  slope    rms     |   n  slope    rms     | /scn |                   |
+  -1.00 |  18 +1.008 0.0070 PASS|  17 +1.008 0.0068 PASS|  2.9 | 3.02  2.82  1.46  | 1.66  2.62  2.07
+   1.00 |  18 -0.662 1.0459 fail|   0  --     --    fail|  0.0 | 3.02  2.57 [1.26] | none  none  none
+   0.50 |  18 -0.746 1.7835 fail|   0  --     --    fail|  0.0 | 2.27  2.57  2.52  | none  none  none
+   0.25 |  18 -1.442 1.6348 fail|   1  --     --    fail|  0.0 | 3.07  2.22  3.07  | none  none  none
+   0.12 |  18 +0.430 0.5910 fail|   6 +1.008 0.0070 PASS|  0.7 |[0.71] 2.02  1.41  | none  2.02  none
+```
+
+The bar is slope within 0.15 of 1, rms below half a bin (0.0252 Hz), and each
+static control outside the swept band of 0.3-1.3 Hz. Bracketed statics are
+INSIDE it. The isotropic control returns 1.008 and 0.0070, item 14's published
+figures to four decimals, which is what says this sweep is item 14's sweep.
+
+**The reported policy fails everywhere.** `rs_spectrum_best_window()` -- what
+`mmotion` actually prints -- misses at every lobe width, with rms of 0.59 to 1.78
+Hz against a 0.0252 Hz bound, 20x to 70x over. Slope goes NEGATIVE at three of
+the four. This is not degradation, it is the absence of a relationship.
+
+**Worse, it fails unsafely.** Two of the twelve static controls come back INSIDE
+the swept band -- 1.26 Hz at `lobe_frac` 1.00 and 0.71 Hz at 0.12 -- on scenes
+where nothing moves at all. Aspect dependence gives amplitude per-look structure
+the isotropic model never had, and the prominence policy reads that structure as
+a frequency. This is the failure this project's design is organised around
+(`--null-static`, the consensus statistic, `warn rather than silently degrade`),
+reproduced now in a fixture rather than argued from first principles.
+
+**The PS selector is the only policy that behaves.** `rs_spectrum_ps_window()`
+either refuses outright -- no window meets `D_A <= 0.25`, so no answer, at three
+of the four lobe widths -- or, at `lobe_frac` 0.12, recovers with slope 1.008 and
+rms 0.0070, the isotropic figures to four decimals. It never once returns an
+in-band frequency for a static scene. Precision without recall: 6 of 18 points
+answered, 100% correct, and the refusals are correct refusals.
+
+**A NON-MONOTONICITY WORTH UNDERSTANDING.** Candidates per scene run 2.9, 0.0,
+0.0, 0.0, 0.7 -- the NARROWEST lobe yields persistent scatterers where the
+middling ones yield none. The reading is that a facet lit over 12% of the
+aperture is effectively absent from the other 88%, leaving cells that a single
+isotropic scatterer dominates cleanly, while a facet lit over half the aperture
+competes throughout and lets no cell settle. If that is right, the hardest scene
+is not the most specular one but the one in between, which is the opposite of
+what "more aspect dependence is harder" would predict. Not established: one
+sweep, and the candidate counts are small enough that a seed change could move
+them.
+
+### What this changes
+
+Item 14's recovery is now bounded: it holds where dominance is guaranteed by
+construction and does not survive a mechanism that removes that guarantee. That
+does not withdraw item 14 -- the estimator does what it claims on the scene it
+was measured on -- but it removes the basis for expecting it to transfer to a
+real collect, and it is consistent with every real run so far returning a null.
+
+It also settles the open half of the selection-policy question in
+`rs_spectrum_best_window()`'s disfavour on this fixture family. The
+`FOLLOW-UPS` record has said since items 7-9 that the tracker recovers the
+carrier and the selection policy discards it; here the tracker's information is
+enough for the PS selector and prominence not only misses it but manufactures
+answers from motionless scenes. That is a stronger argument for changing what
+`mmotion` reports than anything measured before it.
+
+NOT DONE, and the next thing: `mmotion` still reports prominence. Changing the
+reported answer to the PS selection is a user-visible change to what the tool
+claims, and it should not be made off one fixture family -- the correlation route
+has never been run against aspect dependence at all, and `rs_spectrum_ps_window()`
+answering 6 times in 18 is a recall nobody would accept as a default. The honest
+intermediate step is that `mmotion` already prints all four policies side by side,
+and this is now recorded beside them.

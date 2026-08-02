@@ -2950,3 +2950,82 @@ possible for the first time.
 differing. Amplitude dispersion should not depend on the injected frequency at
 all. Either sub-look amplitude does depend on it in a way nothing here accounts
 for, or one of those two numbers is not measuring what it appears to.
+
+
+---
+
+## 30. The bar, met on real data -- by the tracker, not by anything that reports
+
+Item 29 recovered one injected frequency from the Giza collect and said plainly
+that one point is a coincidence by this project's own standard. The sweep it
+called for has now run: five injections plus an uninjected control, all six at
+the settings of item 17's null, in the only band the sub-aperture response allows
+at 0.90 overlap (0.098-0.228 Hz, responses 0.91 down to 0.58).
+
+Window 112 is the centre window of the 15x15 tracking grid -- the one holding the
+injected scatterer.
+
+```
+ injected  win112 dom    prom     d_a   hit      consensus   cull
+  CONTROL    0.065134   13.87   0.542             0.065      0.065
+    0.098    0.097701   28.71   0.376   YES       0.065      0.065
+    0.130    0.130268   31.25   0.475   YES       0.130      0.065
+    0.163    0.162835   31.37   0.556   YES       0.163      0.163
+    0.196    0.195402   29.88   0.610   YES       0.065      0.065
+    0.228    0.227969   25.60   0.645   YES       0.065      0.065
+
+  window 112 alone : slope +0.9990  rms 0.00033 Hz   PASS (bound 0.0163)
+  consensus        : slope -0.202   rms 0.0947  Hz   FAIL
+  cull             : slope +0.000   rms 0.0990  Hz   FAIL
+```
+
+Five for five, rms fifty times under the bound, control below the swept band.
+**This is the first time anything in this project has met the README bar on real
+data**, and it is items 7-9 confirmed against a known truth rather than inferred
+from a fixture: the tracker recovers the carrier and the SELECTION POLICY
+discards it. Every run printed `NO FREQUENCY REPORTED` at 19-24% agreement.
+
+### A retraction of my own reading, mid-sweep
+
+At four points the scene-wide consensus had hit twice and missed twice, and I
+called that the shape of coincidence and suggested item 29's single point was one
+of the two. That was wrong. The scene-wide statistics were failing because they
+pool 136 windows of desert against one window of signal, not because the tracker
+missed -- which the per-window evidence file settled in seconds once read. The
+lesson is the one this project already writes down: the `*_windows.csv` beside
+every run exists so a question about the selection policy can be asked without
+reprocessing, and it should be read BEFORE concluding anything from the summary
+lines.
+
+### This bounds item 19 and item 20 sharply
+
+`D_A` at the recovering window runs 0.376 to 0.645 and NEVER meets 0.25. So the
+persistent-scatterer criterion would have rejected every one of these five
+successful recoveries, and `rs_spectrum_ps_window()` reported nothing in all six
+runs. **`D_A <= 0.25` is not necessary for phase recovery here.** Item 19's
+reading of the Giza null -- that the precondition was unmet across the scene, so
+the run could not have succeeded whatever the pyramid was doing -- is too strong
+as stated. The precondition it names is not the precondition the estimator
+actually has.
+
+### What this is not
+
+**Not a detection method.** The window was known because the target was put
+there. A positive control tests whether the chain CAN extract motion, and it can;
+finding an unknown target needs a selection policy, and every policy in the tool
+failed on this scene. The gap between those two is now measured rather than
+argued, and it is the whole of what remains.
+
+**Not a sensitivity bound.** One collect, one operating point, one amplitude --
+2 mm at 20x the median non-zero sample magnitude, which is a strong target.
+
+**Not a test of aspect dependence.** The injected scatterer is isotropic. Item 24
+established that real dominant scatterers are not, and item 25 that aspect
+dependence is exactly what breaks the phase route on fixtures. Injecting an
+aspect-dependent scatterer is the obvious next measurement and would be the
+harder test by some distance.
+
+**The band is narrow.** 0.098 to 0.228 Hz is 0.13 Hz of span, against 1.0 Hz in
+the synthetic sweeps, because the response ceiling allows no more at 0.90
+overlap. A slope fitted over that span is a weaker constraint than the number
+suggests.

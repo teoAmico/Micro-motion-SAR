@@ -184,7 +184,16 @@ the whole scene, so that run could not have succeeded whatever the pyramid was d
 separates the synthetic fixtures whose recovery and failure item 15 established, with no
 overlap, which is what makes it worth reporting.
 
-Nothing has been shown to DETECT REAL MOTION, and no collect available to this project
+**The tracker meets the bar on real data; nothing that reports does** (item 30). Five
+frequencies injected into the real Giza phase history recover in the injected window at
+slope 0.999, rms 0.00033 Hz against a 0.0163 bound, with an uninjected control below the
+swept band -- while every run printed `NO FREQUENCY REPORTED` because the scene-wide
+policies pool 136 windows of desert against one of signal. That bounds items 19-20 too:
+`D_A` at the recovering window ran 0.376-0.645 and never met 0.25, so the
+persistent-scatterer criterion would have rejected all five recoveries.
+
+Nothing has been shown to DETECT REAL MOTION -- the injected window was known because the
+target was put there -- and no collect available to this project
 contains motion known to be there. Every
 estimator and reference mode has failed at operating points this project's own
 arithmetic calls admissible; the most recent finding (`FOLLOW-UPS.md` items 7-9) is that

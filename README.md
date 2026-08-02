@@ -78,10 +78,22 @@ across the whole scene — 0 of 225 windows met the amplitude-dispersion criteri
 run could not have succeeded whatever the pyramid was doing. `--inject-vib` puts a known
 vibration into that same collect and asks whether the chain returns it.
 
-**Nothing here has been shown to detect real motion, and the correlation estimator has
-not been shown to recover a frequency anywhere.** No collect available to this project
-contains motion known to be there, so no output should be read as a demonstrated
-sensitivity.
+**On real data the tracker now meets the bar, and nothing that reports does** (item 30).
+Five frequencies injected into the real Giza phase history before sub-aperture formation,
+plus an uninjected control through identical processing: the window holding the injected
+scatterer returns **slope 0.999 and rms 0.00033 Hz** against the 0.0163 Hz half-bin bound,
+five for five, with the control landing below the swept band. Every one of those runs
+printed `NO FREQUENCY REPORTED`, because the scene-wide selection policies pool 136 windows
+of desert against one window of signal — consensus scores slope −0.202, the ampcor cull
+0.000. That is the tracker recovering the carrier and the selection policy discarding it,
+confirmed against a known truth rather than inferred from a fixture.
+
+**This is not a detection method and not a sensitivity claim.** The window was known
+because the target was put there; finding an unknown target needs a selection policy, and
+every policy here failed on that scene. The injected scatterer is isotropic, where item 24
+established real dominants are aspect-dependent and item 25 that aspect dependence is what
+breaks the phase route. **No collect available to this project contains motion known to be
+there**, so no output should be read as a demonstrated sensitivity to anything real.
 
 ## The bar
 

@@ -18,6 +18,7 @@
 
 #include "resonarsat/focus.h"
 #include "resonarsat/microm.h"
+#include "resonarsat/simulate.h"
 #include "resonarsat/subaperture.h"
 #include "rs_sim.h"
 #include "rs_test.h"
@@ -229,6 +230,61 @@ int main(void)
             printf("    negative control: a fixed 1.569 Hz gives slope %.3f, "
                    "rms %.4f Hz -- rejected\n", fs, fr);
         }
+    }
+
+    RS_CASE("the static null focuses, rather than standing in as noise");
+    {
+        /* THE CONTROL HAS TO BE A SCENE, NOT NOISE. --null-static is the only
+         * negative control this project has on real data, and everything it
+         * claims rests on the simulated scene going through the identical chain
+         * with only the motion absent. That fails silently if the phase history
+         * does not focus: a defocused null still yields a complete spectrum and
+         * a prominence distribution, just not one that means anything.
+         *
+         * It DID fail, until 2026-08-02. rs_simulate_static_like() wrote each
+         * scatterer's phase as -k*R while setting phase_ref_srp = 1, which tells
+         * rs_focus_backproject() to undo k*(R - r_ref) instead, leaving a
+         * per-pulse phase of many cycles common to every pixel. The scene
+         * focused to a peak-to-mean of 3.6 where it should reach 90-odd. No test
+         * touched this function -- it is reachable only through the CLI's
+         * --null-static -- which is why a broken control survived.
+         *
+         * Point scatterers must focus peakily. Noise cannot. */
+        rs_sim_tgt_t one[1] = {{ .x = 0, .y = 0, .z = 0, .rcs = 1.0 }};
+        rs_cphd_t ref;
+        RS_CHECK_OK(rs_sim_scene(&ref, one, 1, 20.0, 400.0, 256, 0.5));
+
+        const double centre[2] = { 0.0, 0.0 };
+        rs_cphd_t sim;
+        RS_CHECK_OK(rs_simulate_static_like(&ref, 7u, 200, centre, 24.0, 256, &sim));
+
+        /* The flag it advertises is the flag the focuser must be able to act on;
+         * a real CPHD sets 1, and the null is only a stand-in if it agrees. */
+        RS_CHECK(sim.phase_ref_srp == 1);
+
+        rs_grid_t g = { .origin = {0,0,0}, .n_x = 64, .n_y = 64,
+                        .dx = 0.5, .dy = 0.5, .height = 0.0 };
+        rs_slc_t img;
+        RS_CHECK_OK(rs_slc_alloc(&img, g.n_y, g.n_x));
+        RS_CHECK_OK(rs_focus_backproject(&sim, &g, 0, sim.n_pulse, &img));
+
+        double pk = 0.0, sum = 0.0;
+        const size_t n = img.n_az * img.n_rg;
+        for (size_t i = 0; i < n; i++) {
+            const double a = cabs(img.data[i]);
+            if (a > pk) pk = a;
+            sum += a;
+        }
+        const double mean = sum / (double)n;
+        const double ratio = (mean > 0.0) ? pk / mean : 0.0;
+        printf("      static null focuses to peak/mean %.1f\n", ratio);
+        /* Measured 93.7 focused against 3.6 defocused; 20 separates them by a
+         * margin neither seed nor grid choice comes near. */
+        RS_CHECK(ratio > 20.0);
+
+        rs_slc_free(&img);
+        rs_cphd_free(&sim);
+        rs_cphd_free(&ref);
     }
 
     RS_TEST_END();

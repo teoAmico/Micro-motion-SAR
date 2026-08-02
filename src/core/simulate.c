@@ -138,7 +138,23 @@ resonarsat_status_t rs_simulate_static_like(const rs_cphd_t *ref, unsigned seed,
             const double fbin = (R - rref) / out->dr + 0.5 * (double)n_rbin;
             if (fbin < 0.0 || fbin >= (double)n_rbin) continue;
 
-            const double phase = -k_phase * R + tp[g];
+            /* SRP-REFERENCED, TO MATCH WHAT phase_ref_srp SAYS BELOW AND WHAT
+             * A REAL COLLECT CARRIES. rs_focus_backproject() undoes
+             * k*(R - r_ref) when that flag is set and k*R when it is not, so
+             * writing the absolute phase here while setting the flag left
+             * exp(-i k r_ref[p]) behind -- a per-pulse phase of many cycles,
+             * common to every pixel, which destroys the coherent sum. Measured:
+             * the simulated scene focused to a peak-to-mean of 3.6, i.e. noise,
+             * where the same scatterers focus to 93.7 once the conventions
+             * agree.
+             *
+             * The flag stays at 1 rather than the phase being made absolute,
+             * because a real CPHD sets 1 and the whole value of this null is
+             * that it travels the SAME arithmetic as the data it stands in for.
+             * Matching the convention costs nothing; taking the other branch
+             * would mean the control no longer inherits the behaviour it exists
+             * to measure. */
+            const double phase = -k_phase * (R - rref) + tp[g];
             const double complex amp = ta[g] * (cos(phase) + I * sin(phase));
 
             /* Deposit the compressed response over the bins the envelope

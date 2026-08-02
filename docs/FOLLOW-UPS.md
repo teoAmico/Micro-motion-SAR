@@ -2707,3 +2707,53 @@ aspect rows' statics should not be read as evidence either way.
 Neither caveat is a reason to distrust the comparison between rows, which is what
 this item is for: every row shares the fixture, so the difference between them is
 the manipulation. Both are reasons not to quote the control row on its own.
+
+---
+
+## 27. `--null-static` was comparing against a defocused scene
+
+Found while working out which phase convention an injected positive control must
+write. `rs_simulate_static_like()` gave each scatterer the phase `-k*R`, absolute,
+copying `rs_sim_scene()` -- and then set `phase_ref_srp = 1`.
+`rs_focus_backproject()` reads that flag and undoes `k*(R - r_ref)` when it is
+set, `k*R` when it is not. With the two disagreeing, `exp(-i k r_ref[p])` is left
+behind: a per-pulse phase of many cycles, common to every pixel, which destroys
+the coherent sum for the entire image.
+
+Measured, same scatterers, same geometry, only the convention changed:
+
+```
+  phase_ref_srp = 1, absolute phase written : peak/mean   3.6   (noise)
+  phase_ref_srp = 1, SRP-referenced phase   : peak/mean  93.7   (focused)
+```
+
+**`--null-static` is the only negative control this project has on real data.**
+`CLAUDE.md` names it beside every result, item 11 says only a null control
+catches common-mode artefacts, and `simulate.h` argues at length that the
+shuffled null is the wrong test and this is the right one. All of that was true
+of a null built from a defocused image.
+
+FIXED by writing the phase SRP-referenced rather than by clearing the flag. Both
+self-consistent choices focus identically, but a real CPHD sets
+`phase_ref_srp = 1`, and the value of this control is that it travels the SAME
+arithmetic as the data it stands in for -- `focus.c` branches on that flag, so
+clearing it would have taken the null down a path real data never takes.
+
+**Why it survived.** Nothing tested it. `rs_simulate_static_like()` is reachable
+only through the CLI's `--null-static`, `sim_cphd` writes the project's own
+container, and the test suite builds its fixtures with `rs_sim_scene()`, which
+leaves the flag at zero and is therefore self-consistent by accident. The
+function had a 35-line header comment justifying the design and no test asserting
+the output was an image. `tests/test_nullmotion.c` now focuses the null and
+requires a peak-to-mean above 20, against 93.7 focused and 3.6 broken.
+
+**WHAT THIS DOES NOT TELL US.** Every `--null-static` figure produced before
+2026-08-02 was computed against a defocused null and should be recomputed before
+being quoted. The direction of the error is not obvious and is not assumed here:
+a defocused null has no bright scatterers, so its tracker sees noise, and whether
+that yields a HIGHER or LOWER prominence distribution than a focused static scene
+is an empirical question this item does not answer. No result currently in this
+file rests on a `--null-static` number -- the real-collect runs (items 17, 19)
+returned nulls on window agreement and amplitude dispersion, neither of which
+touches this path -- so nothing here is withdrawn. The claim being retired is
+that the control was known to work.

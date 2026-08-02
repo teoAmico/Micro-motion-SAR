@@ -556,12 +556,18 @@ resonarsat_status_t rs_read_cphd(const char *path, const rs_cphd_read_opts_t *op
     unsigned long o_signal = 0;
     const int have_signal = rs_pvp_offset(xml, "SIGNAL", &o_signal);
 
+    /* AmpSF: the per-vector amplitude scale factor. OPTIONAL in CPHD and
+     * present in both Capella products this project has read. */
+    unsigned long o_ampsf = 0;
+    const int have_ampsf = rs_pvp_offset(xml, "AmpSF", &o_ampsf);
+
     const unsigned long words = pvp_bytes / 8;
     if (have_signal && o_signal >= words) {
         rs_set_error("cphd: SIGNAL offset lies outside the %lu-word vector", words);
         goto done;
     }
-    if (o_txtime >= words || o_txpos + 3 > words || o_rcvpos + 3 > words ||
+    if ((have_ampsf && o_ampsf >= words) ||
+        o_txtime >= words || o_txpos + 3 > words || o_rcvpos + 3 > words ||
         o_srppos + 3 > words || o_sc0 >= words || o_scss >= words) {
         rs_set_error("cphd: a PVP offset lies outside the %lu-word vector", words);
         goto done;
@@ -858,9 +864,42 @@ resonarsat_status_t rs_read_cphd(const char *path, const rs_cphd_read_opts_t *op
             if (st != RS_OK) goto fail;
         }
 
+        /* THE PER-VECTOR AMPLITUDE SCALE FACTOR, WHICH THE STANDARD REQUIRES
+         * AND THIS READER IGNORED.
+         *
+         * CPHD stores signal samples that must be multiplied by the vector's
+         * AmpSF to be calibrated amplitude. Leaving it out gives every pulse a
+         * wrong and DIFFERENT gain, which is invisible in an image -- focusing
+         * averages it away -- and is not invisible at all in anything that
+         * compares amplitudes between sub-looks.
+         *
+         * IT CANNOT MOVE A FREQUENCY. AmpSF is real and positive, so no phase
+         * changes and no reported frequency changes. What it moves is every
+         * amplitude-derived statistic, and one of those is now a selection
+         * criterion: rs_microm_t.d_a, the amplitude dispersion that decides
+         * which windows hold a persistent scatterer.
+         *
+         * MEASURED, ON THE ISTANBUL COLLECT: AmpSF has a dispersion of 0.711
+         * across its 249424 vectors, a 50x span between its extremes, and 0.086
+         * between sub-look means. Injecting a gain of that dispersion into the
+         * synthetic fixture takes its amplitude dispersion from 0.083 to 0.337
+         * and its median from 0.314 to 0.553 -- which is where every real scene
+         * this project has measured sits. 16-bit sample quantisation, the other
+         * difference between the simulator and a Capella product, moves neither
+         * figure at all. See FOLLOW-UPS.md item 21. */
+        double amp_sf = 1.0;
+        if (have_ampsf) {
+            const double a = rs_be_f8(v + (size_t)o_ampsf * 8, swap);
+            /* A non-finite or non-positive factor is a broken vector, not a
+             * reason to scale the whole line to zero; leave it alone and let the
+             * validity screen above have been the judge. */
+            if (isfinite(a) && a > 0.0) amp_sf = a;
+        }
+
         float complex *dst = cphd->signal + i * n_rbin;
         for (size_t k = 0; k < n_rbin; k++) {
-            dst[k] = line[(k + (size_t)n_samp - half) % (size_t)n_samp];
+            dst[k] = (float complex)(amp_sf *
+                     line[(k + (size_t)n_samp - half) % (size_t)n_samp]);
         }
     }
 

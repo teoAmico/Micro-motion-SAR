@@ -2197,3 +2197,89 @@ the fixture used above that is a noise window at the lowest bin while the
 dispersion selector names the one holding the injection. The calibration test
 therefore reads the selector's window. Which window the figure should plot, now
 that a better selector exists, is an open question this did not settle.
+
+---
+
+## 21. AmpSF was unapplied and is now applied. It does NOT explain the D_A gap.
+
+Item 20 recorded that `rs_read_cphd()` never read `AmpSF`, the per-vector
+amplitude scale factor the CPHD standard requires be applied to the signal
+samples, and that both Capella products declare it. It is applied now, with a
+fixture test that writes a scale rising with pulse index so a reader ignoring it
+shows a flat gain where a correct one shows a ramp.
+
+**IT CANNOT MOVE A FREQUENCY**, being real and positive, so nothing about phase
+or any reported frequency changes. What it moves is amplitude, and amplitude is
+now a selection criterion.
+
+### The claim that it explained the real-vs-synthetic gap was WRONG, and this is the retraction
+
+Four real scenes sit at a best-window `D_A` of 0.38 to 0.52 where the synthetic
+fixtures reach 0.079. Injecting a per-pulse gain into the synthetic fixture
+appeared to reproduce that exactly:
+
+```
+float, calibrated (baseline)     D_A best 0.083   median 0.314
++ 16-bit quantisation                     0.083          0.314
++ unapplied per-vector gain               0.337          0.553
+```
+
+which sat squarely in the real range and looked conclusive. **Applying the real
+`AmpSF` to the real collect changed nothing:**
+
+```
+Istanbul M2 bridge   before   D_A best 0.391   median 0.893   0 of 225
+                      after            0.409          0.846   0 of 225
+```
+
+**The synthetic injection was not a faithful model.** It drew the gain as
+`exp(0.65*(-ln u - 1))`, which is unbounded and produces occasional enormous
+outlier pulses; the real `AmpSF` spans a bounded 50x. The outliers did the damage,
+not the dispersion, and the 0.083 to 0.337 movement was a property of the
+injection rather than evidence about the collect.
+
+The general lesson is the one this file exists for: a synthetic experiment that
+reproduces a real number is not thereby an explanation of it. The check that
+settled it was applying the real correction to the real data, which took twenty
+minutes and should have come first.
+
+### Ruled out, and what is left
+
+**16-bit sample quantisation is excluded.** Capella ships `RE16I_IM16I` where the
+simulator uses floats; quantising the synthetic scene to 16 bits moves `D_A` by
+nothing at all, best and median alike.
+
+**`AmpSF` is excluded**, by the measurement above.
+
+**Scatterer density is the remaining candidate and is probably the whole answer.**
+Item 15 measured `D_A` rising with scatterers per sub-look resolution cell on the
+synthetic fixtures:
+
+```
+scatterers   per cell   D_A best
+     96        1.38      0.079
+    320        4.59      0.381
+    640        9.18      0.397
+```
+
+Real terrain has hundreds to thousands per cell, not one. Fully developed speckle
+has a dispersion of `sqrt(4/pi - 1) = 0.523` by construction, and the real MEDIANS
+measured here are 0.583 to 0.893 -- at or above it. So the real scenes are behaving
+exactly as speckle should, and the synthetic fixtures are sparse in a way no real
+scene is.
+
+**If that is right, the "gap" is not a defect at all** -- it is the difference
+between a fixture with 1.4 scatterers per cell and a world with thousands, and the
+synthetic `D_A` values were never comparable to real ones.
+
+**Which puts item 20's threshold in question.** `D_A <= 0.25` was measured on
+sparse synthetic fixtures and lifts a 33 percent window-level hit rate to 95 there.
+Whether 0.25 is the right operating point on a dense real scene is untested, and
+cannot be tested without a real collect containing motion known to be there.
+
+**The one test that would separate density from everything else** is sub-look
+resolution: finer resolution puts fewer scatterers in a cell. Two data points
+already point that way -- at the same bridge position `D_A` was 0.516 at 4.41 m
+sub-look resolution and 0.391 at 0.78 m -- but the controlled version, holding
+grid, cell and window fixed while varying only `t_sap`, was started and abandoned
+when `AmpSF` looked like the answer. It is the obvious next measurement.

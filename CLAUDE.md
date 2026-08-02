@@ -224,9 +224,12 @@ the PHASE estimator work, not raising the look count.
 `rs_spectrum_ps_window()` is a fourth selection policy (item 20): it SELECTS on amplitude
 dispersion rather than gating on it, as the source literature does, at a threshold measured
 here rather than borrowed — `D_A <= 0.25` lifts a 33% window-level hit rate to 95% over 1800
-windows. Note `rs_read_cphd()` does not apply the per-vector `AmpSF` the CPHD standard
-requires; it cannot affect phase or any reported frequency, but it perturbs every
-amplitude-derived statistic including `D_A` (item 20).
+windows. `rs_read_cphd()` now applies the per-vector `AmpSF` the CPHD standard requires (item 21);
+it cannot affect phase or any reported frequency. It does NOT explain the real-vs-synthetic
+`D_A` gap — applying it to real data changed nothing, and the synthetic experiment that
+appeared to prove it did was an artefact of an unbounded injected gain. Scatterer density is
+the remaining candidate: real medians of 0.58–0.89 sit at or above the 0.523 of fully
+developed speckle, so real scenes may simply be dense in a way the sparse fixtures are not.
 
 `tests/rs_sim.h` now carries two fixture families: `make_clutter`-style uniform speckle
 and `rs_sim_dominant_patch()`, dominants on a lattice over a diffuse background. The

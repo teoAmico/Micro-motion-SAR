@@ -32,7 +32,12 @@
 #define PVPB 240u   /* bytes per vector, 30 words -- the layout Umbra emits */
 
 /* Word offsets within a PVP vector, matching the XML the fixture writes. */
-enum { O_TXTIME = 0, O_TXPOS = 1, O_RCVPOS = 8, O_SRPPOS = 14, O_SC0 = 27, O_SCSS = 28 };
+enum { O_TXTIME = 0, O_TXPOS = 1, O_RCVPOS = 8, O_SRPPOS = 14, O_SC0 = 27,
+       O_SCSS = 28, O_AMPSF = 29 };
+/* A per-vector amplitude scale the reader must apply. Varies pulse to pulse so
+ * that failing to apply it is visible as a varying gain rather than a constant
+ * one, which is how the real defect presented. */
+#define AMPSF_AT(p) (0.5 + 0.01 * (double)(p))
 
 /* Scene reference point in earth-centred fixed coordinates, and the range at
  * which the fixture places the platform. Values are a real Umbra scene's, so
@@ -120,6 +125,7 @@ static int write_cphd(const char *path, const char *damage)
         "<RcvPos><Offset>%d</Offset><Size>3</Size><Format>X=F8;Y=F8;Z=F8;</Format></RcvPos>"
         "<SRPPos><Offset>%d</Offset><Size>3</Size><Format>X=F8;Y=F8;Z=F8;</Format></SRPPos>"
         "<SC0><Offset>%d</Offset><Size>1</Size><Format>F8</Format></SC0>"
+        "<AmpSF><Offset>%d</Offset><Size>1</Size><Format>F8</Format></AmpSF>"
         "<SCSS><Offset>%d</Offset><Size>1</Size><Format>F8</Format></SCSS></PVP></CPHD>",
         (damage && !strcmp(damage, "toa")) ? "TOA" : "FX",
         FXMIN, FXMAX, SRP[0], SRP[1], SRP[2],
@@ -129,7 +135,7 @@ static int write_cphd(const char *path, const char *damage)
          * screen must recover exactly the PRF the full reader measures. */
         (double)(NV - 1) * 1.0e-3,
         SRP[0], SRP[1], SRP[2], R0, VPLAT, R0, 0.0,
-        O_TXTIME, O_TXPOS, O_RCVPOS, O_SRPPOS, O_SC0, O_SCSS);
+        O_TXTIME, O_TXPOS, O_RCVPOS, O_SRPPOS, O_SC0, O_AMPSF, O_SCSS);
     if (xn <= 0 || (size_t)xn >= sizeof xml) return -1;
 
     const unsigned long xml_off = 1024;
@@ -173,6 +179,7 @@ static int write_cphd(const char *path, const char *damage)
             put_f8(v + ((size_t)O_SRPPOS + (size_t)k) * 8, SRP[k]);
         }
         put_f8(v + O_SC0 * 8, FXMIN);
+        put_f8(v + O_AMPSF * 8, AMPSF_AT(p));
         put_f8(v + O_SCSS * 8,
                (damage && !strcmp(damage, "scss") && p == 7) ? SCSS * 2.0 : SCSS);
         fwrite(v, 1, sizeof v, f);
@@ -250,6 +257,52 @@ int main(void)
         printf("    scatterer recovered at bin %zu, centre %u, expected %zu\n",
                peak, NS / 2u, NS / 2u + TARGET_BIN);
         RS_CHECK(peak == NS / 2u + TARGET_BIN);
+
+        rs_cphd_free(&c);
+    }
+
+    RS_CASE("the per-vector amplitude scale factor is applied");
+    {
+        /* CPHD stores signal samples that must be multiplied by the vector's
+         * AmpSF to be calibrated amplitude. This reader ignored it for the whole
+         * of its life, which is invisible in an image -- focusing averages a
+         * per-pulse gain away -- and very visible in anything comparing
+         * amplitudes BETWEEN sub-looks.
+         *
+         * That is now a selection criterion. Measured on the Istanbul collect
+         * AmpSF has a dispersion of 0.711 across its vectors, and injecting a
+         * gain of that dispersion into the synthetic fixture takes its amplitude
+         * dispersion from 0.083 to 0.337 -- which is where every real scene this
+         * project has measured sat. See FOLLOW-UPS.md item 21.
+         *
+         * The fixture writes a scale that RISES with the pulse index, so a
+         * reader that ignored it would show a flat gain where this shows a ramp,
+         * and one that applied a constant would show the wrong ramp. */
+        RS_CHECK(write_cphd(path, NULL) == 0);
+        rs_cphd_t c;
+        RS_CHECK_OK(rs_read_cphd(path, NULL, &c));
+
+        /* Total energy per pulse scales as AmpSF^2, so the ratio between two
+         * pulses is the ratio of their factors squared -- independent of what
+         * the scene put in them, which the fixture makes identical per pulse
+         * only up to the along-track geometry. Compare the same range bin. */
+        size_t peak = 0;
+        double best = -1.0;
+        for (size_t k = 0; k < c.n_rbin; k++) {
+            const double m = cabs(c.signal[(NV / 2) * c.n_rbin + k]);
+            if (m > best) { best = m; peak = k; }
+        }
+        const size_t p_lo = 8, p_hi = NV - 8;
+        const double a_lo = cabs(c.signal[p_lo * c.n_rbin + peak]);
+        const double a_hi = cabs(c.signal[p_hi * c.n_rbin + peak]);
+        const double want = AMPSF_AT(p_hi) / AMPSF_AT(p_lo);
+        printf("    amplitude ratio between pulses %zu and %zu: %.4f, "
+               "AmpSF ratio %.4f\n", p_lo, p_hi, a_hi / a_lo, want);
+        RS_CHECK_REL(a_hi / a_lo, want, 0.02);
+
+        /* And the absolute scale is the factor itself, not merely proportional
+         * to it: a reader normalising the ramp away would pass the ratio test. */
+        RS_CHECK(a_lo > 0.0);
 
         rs_cphd_free(&c);
     }

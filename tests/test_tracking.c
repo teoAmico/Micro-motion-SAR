@@ -216,6 +216,7 @@ static double run_pair_case(double vib_freq, double vib_amp, size_t n_looks,
     return f;
 }
 
+/* Run every case in this file. */
 int main(void)
 {
     const double amp = 0.020;      /* well above any plausible sensitivity limit */
@@ -879,7 +880,7 @@ int main(void)
         RS_CHECK_NEAR(sp.dominant_freq[12], f_weak, 0.5 * sp.df);
 
         rs_spectrum_cull_t c;
-        RS_CHECK_OK(rs_spectrum_ampcor_window(&sp, &c));
+        RS_CHECK_OK(rs_spectrum_ampcor_window(&sp, NULL, &c));
         printf("    entered %zu; culled %zu on SNR, %zu on sigma, %zu on "
                "neighbours; %zu survived\n",
                c.n_input, c.n_snr_cull, c.n_sigma_cull, c.n_neigh_cull,
@@ -952,7 +953,7 @@ int main(void)
         RS_CHECK_OK(rs_spectrum_compute(&m, RS_SPEC_VELOCITY, &sp));
 
         rs_spectrum_cull_t c;
-        RS_CHECK_ERR(rs_spectrum_ampcor_window(&sp, &c), RS_ERR_RANGE);
+        RS_CHECK_ERR(rs_spectrum_ampcor_window(&sp, NULL, &c), RS_ERR_RANGE);
         RS_CHECK(c.n_input == n_win);
         RS_CHECK(c.n_snr_cull == n_win);
         RS_CHECK(c.n_survivor == 0);
@@ -1003,7 +1004,7 @@ int main(void)
         RS_CHECK_OK(rs_spectrum_compute(&m, RS_SPEC_VELOCITY, &sp));
 
         rs_spectrum_cull_t c;
-        RS_CHECK_OK(rs_spectrum_ampcor_window(&sp, &c));
+        RS_CHECK_OK(rs_spectrum_ampcor_window(&sp, NULL, &c));
         printf("    gates_applied %d, survivors %zu at %.4f Hz\n",
                c.gates_applied, c.n_survivor, c.freq_hz);
         /* The flag is the contract: a caller must be able to tell that the
@@ -1798,7 +1799,12 @@ int main(void)
          * FOLLOW-UPS.md was measured on the isotropic scene, and if this made
          * that scene even slightly different those results would silently stop
          * describing what the code does. */
-        const double freq = 0.7, amp = 0.002442;
+        /* 2.442 mm, not the 20 mm 'amp' at the top of main(): that one is the
+         * CORRELATION fixtures' amplitude, and this observable wraps beyond
+         * lambda/4. Named apart rather than shadowed, so the two cannot be
+         * confused at a glance -- FOLLOW-UPS.md item 14 records that putting the
+         * phase estimator on a correlation fixture measures the wrap. */
+        const double freq = 0.7, amp_phase = 0.002442;
         rs_sim_tgt_t tg[400];
         unsigned sd = 7u * 2654435761u + 1u;
         for (size_t i = 0; i < 400; i++) {
@@ -1809,7 +1815,7 @@ int main(void)
             tg[i].z = 0.0;
             tg[i].rcs = 0.3 * (-log(u3));
             tg[i].vib_freq = freq;
-            tg[i].vib_amp = amp;
+            tg[i].vib_amp = amp_phase;
             tg[i].vib_phase = 0.0;
         }
 

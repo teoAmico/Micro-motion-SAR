@@ -34,6 +34,7 @@ static resonarsat_status_t make_image(rs_slc_t *img, size_t n, double t_dwell)
     return RS_OK;
 }
 
+/* Run every case in this file. */
 int main(void)
 {
     const size_t n = 128;

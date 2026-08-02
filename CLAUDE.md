@@ -12,7 +12,14 @@ dependencies — the FFT (pocketfft) is vendored.
 Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracking or
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
-code, and several conclusions in it reversed after further measurement.
+code, and several conclusions in it reversed after further measurement. It opens with
+an index of all 30 items and their status.
+
+`docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
+own documentation rather than by measuring it, each with file:line and what a fix has
+to do. It also logs which reviews have been run, at which commit, and what they did
+not cover. Entries are removed when fixed; add a row to its "Reviews performed" table
+when you run one.
 
 ## Build, test, run
 
@@ -56,8 +63,9 @@ library's identity and `micromotion` as the tool's.
 subcommands dispatched at the bottom of the file:
 
 - `info` — a product's geometry and timing
-- `validate` — thirteen arithmetic checks on whether a collect can support the
-  measurement asked for, before any processing (`src/core/validate.c`, `validate.h`).
+- `validate` — fourteen checks on whether a collect can support the measurement
+  asked for, before any processing (`src/core/validate.c`, `validate.h`). Thirteen
+  are arithmetic; `RS_VALIDATE_GROUND_TRUTH` always reports unknown and says why.
   Takes `--estimator`: four of the checks answer differently for the phase route and
   answering them for the correlator refused a valid Giza configuration (items 16, 17)
 - `focus` — time-domain backprojection to an image (`src/core/focus.c`)
@@ -109,7 +117,7 @@ because this code is full of dimensionally interchangeable quantities that are
 physically different — Hz against rad/s, slant against ground range, azimuth line rate
 against transmit PRF — and the comment must state units and conventions.
 
-**The headers are the documentation of record.** `microm.h` is 944 lines for ~10
+**The headers are the documentation of record.** `microm.h` is 1343 lines for 17
 declarations; `subaperture.h` and `validate.h` are similar. They carry derivations,
 measured tables, and the reasoning behind each constant, and resolved `FOLLOW-UPS`
 entries are retired *into* them. When a measurement settles something, it belongs

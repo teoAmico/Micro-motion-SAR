@@ -43,6 +43,29 @@ const char *rs_last_error(void)
     return rs_error_buf;
 }
 
+/* Discard this thread's pending message.
+ *
+ * THE FAILURE THIS PREVENTS IS A MISLEADING MESSAGE, NOT A MISSING ONE. The
+ * buffer is never overwritten except by rs_set_error(), so a function that
+ * returns non-OK without calling it does not leave rs_report_error() with
+ * nothing to print -- it leaves it with the DETAIL OF AN UNRELATED EARLIER
+ * FAILURE, which is then printed in parentheses beside the new status as though
+ * it belonged to it. A truncated metadata block reporting "I/O error (cphd:
+ * %s is not seekable)" about a different file is worse than one reporting
+ * "I/O error" alone.
+ *
+ * The 2026-08-02 review found 28 runtime-reachable returns with no message, most
+ * of them allocation failures on paths that had already logged something
+ * (docs/CODE-REVIEW.md finding 6). Rather than rely on all 28 -- and every future
+ * one -- being remembered, the CLI clears the buffer before each fallible
+ * operation, so an uncovered site degrades to a bare status instead of a wrong
+ * sentence. Covering the sites is still better and is done where the detail is
+ * worth having; this is the floor under it. */
+void rs_clear_error(void)
+{
+    rs_error_buf[0] = '\0';
+}
+
 /* Print a failure to stderr in the CLI's standard shape. */
 void rs_report_error(const char *context, resonarsat_status_t st)
 {

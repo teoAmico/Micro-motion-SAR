@@ -110,6 +110,7 @@ static resonarsat_status_t analyse(const rs_sim_tgt_t *tg, size_t n_tgt,
     return RS_OK;
 }
 
+/* Run every case in this file. */
 int main(void)
 {
     /* ------------------------------------------------------------------

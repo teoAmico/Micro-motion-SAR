@@ -46,6 +46,7 @@ static double rs_ccd_patch_mean(const rs_ccd_t *ccd, size_t row, size_t col, siz
     return n ? sum / (double)n : 0.0;
 }
 
+/* Run every case in this file. */
 int main(void)
 {
     /* A stack of pure noise is enough for the invariance case: the identity

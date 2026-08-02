@@ -439,7 +439,12 @@ static resonarsat_status_t rs_coreg_shift_impl(const float complex *ref,
      * the curvature. Allocated with the ramps below so the single cleanup path
      * covers it. */
     double *grid = NULL;
-    if (!fa || !fb || !cross) { free(fa); free(fb); free(cross); return RS_ERR_ALLOC; }
+    if (!fa || !fb || !cross) {
+        free(fa); free(fb); free(cross);
+        rs_set_error("coreg: cannot allocate three %zux%zu complex buffers for the "
+                     "cross-spectrum", n_az, n_rg);
+        return RS_ERR_ALLOC;
+    }
 
     memcpy(fa, ref, n * sizeof *fa);
     memcpy(fb, img, n * sizeof *fb);
@@ -521,8 +526,19 @@ static resonarsat_status_t rs_coreg_shift_impl(const float complex *ref,
     if (coarse_az > (double)n_az / 2.0) coarse_az -= (double)n_az;
     if (coarse_rg > (double)n_rg / 2.0) coarse_rg -= (double)n_rg;
 
-    /* Refine on a fine grid spanning +/- 1 pixel about the coarse peak. */
-    double ref_az = coarse_az, ref_rg = coarse_rg, ref_mag = best_mag;
+    /* Refine on a fine grid spanning +/- 1 pixel about the coarse peak.
+     *
+     * ref_mag starts BELOW every possible magnitude rather than at 'best_mag'.
+     * That looked like the natural seed and was on the wrong scale: best_mag
+     * comes off the inverse transform, which rs_fft2() normalises by 1/n, while
+     * the lattice values come from rs_correlation_at(), which does not
+     * normalise. Comparing the two meant the seed could never win for n > 1, so
+     * it was a fallback that could not be reached -- and if the scales had ever
+     * matched, the seed would have been a lattice-external candidate the
+     * curvature code below has no grid point for. The lattice contains the
+     * coarse offset itself, so nothing is lost by letting the first evaluation
+     * win outright. See docs/CODE-REVIEW.md finding 11. */
+    double ref_az = coarse_az, ref_rg = coarse_rg, ref_mag = -1.0;
     const double step_az = 1.0 / (double)upsample_az;
     const double step_rg = 1.0 / (double)upsample_rg;
 
@@ -575,9 +591,22 @@ static resonarsat_status_t rs_coreg_shift_impl(const float complex *ref,
 
     *shift_az = ref_az;
     *shift_rg = ref_rg;
-    /* The inverse transform carries a 1/n normalisation the direct evaluation
-     * does not, so scale the direct result before comparing with the energy. */
-    *peak = (ref_mag / (double)n) / norm * (double)n;
+    /* Normalised correlation coefficient, straight from the direct evaluation.
+     *
+     * This was written as (ref_mag / n) / norm * n, with a comment saying the
+     * direct result had to be scaled against the inverse transform's 1/n. The
+     * two factors cancel exactly, so the comment described an operation the
+     * expression did not perform -- and the round trip is not even a no-op in
+     * floating point unless n is a power of two, which n_az*n_rg need not be.
+     * This project bans -ffast-math precisely because reassociation perturbs
+     * this quantity, so a gratuitous multiply-then-divide on it is the wrong
+     * shape regardless. See docs/CODE-REVIEW.md finding 11.
+     *
+     * No scaling is needed: rs_correlation_at() returns the UN-normalised sum
+     * over the cross-spectrum, and 'norm' is sqrt(ea*eb) built from the forward
+     * transforms, so by Parseval the ratio is already the coefficient in [0,1] --
+     * identical patches give sum|F|^2 over sqrt(sum|F|^2 * sum|F|^2) = 1. */
+    *peak = ref_mag / norm;
     if (*peak > 1.0) *peak = 1.0;
 
     /* Curvature, once the normalised peak it needs is known.

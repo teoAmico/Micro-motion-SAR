@@ -67,12 +67,6 @@ typedef enum {
     RS_PALETTE_JET = 3
 } rs_palette_t;
 
-/* Resolve a palette name to its enum, for a command-line option.
- *
- * Accepts "gray"/"grey", "viridis", "energy" and "jet". An unrecognised name
- * returns 'fallback' after a warning on stderr rather than failing the run: a
- * misspelt colour must not throw away an expensive computation. */
-rs_palette_t rs_palette_from_name(const char *name, rs_palette_t fallback);
 
 /* Write an 8-bit greyscale amplitude quicklook.
  *

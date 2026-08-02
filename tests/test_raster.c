@@ -53,6 +53,7 @@ static unsigned long rs_ref_crc32(const unsigned char *b, size_t n)
     return c ^ 0xFFFFFFFFUL;
 }
 
+/* Read a big-endian 32-bit unsigned value from a PNG chunk header. */
 static unsigned long rs_be32(const unsigned char *p)
 {
     return ((unsigned long)p[0] << 24) | ((unsigned long)p[1] << 16) |
@@ -151,6 +152,7 @@ static unsigned char *rs_png_decode(const unsigned char *d, size_t n,
     return raw;
 }
 
+/* Run every case in this file. */
 int main(void)
 {
     const size_t R = 37, C = 53;                /* deliberately not round, and

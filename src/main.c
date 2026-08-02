@@ -1110,7 +1110,11 @@ static resonarsat_status_t rs_null_floor(rs_subap_stack_t *stack,
         rs_microm_free(&m);
     }
 
-    if (n == 0) return RS_ERR_SINGULAR;
+    if (n == 0) {
+        rs_set_error("null control: every trial failed, so there is no floor to "
+                     "compare the measurement against");
+        return RS_ERR_SINGULAR;
+    }
     *mean = sum / (double)n;
     const double var = sum2 / (double)n - (*mean) * (*mean);
     *sd = var > 0.0 ? sqrt(var) : 0.0;
@@ -1199,7 +1203,11 @@ static resonarsat_status_t rs_null_static(const rs_cphd_t *ref, const rs_grid_t 
         rs_cphd_free(&sim);
     }
 
-    if (n == 0) return RS_ERR_SINGULAR;
+    if (n == 0) {
+        rs_set_error("null control: every trial failed, so there is no floor to "
+                     "compare the measurement against");
+        return RS_ERR_SINGULAR;
+    }
     *mean = sum / (double)n;
     const double var = sum2 / (double)n - (*mean) * (*mean);
     *sd = var > 0.0 ? sqrt(var) : 0.0;
@@ -1267,6 +1275,13 @@ static int rs_cmd_mmotion(int argc, char **argv)
                "--coherence masks windows whose sub-looks do not correlate (default\n"
                "0.4). Isolated point targets on an empty scene score below that even\n"
                "when tracking perfectly; pass 0 to inspect an unmasked result.\n"
+               "\n"
+               "IT MASKS A DIFFERENT QUANTITY UNDER --estimator phase, which reads\n"
+               "one pixel's phase and forms no correlation surface. There quality is\n"
+               "amplitude STABILITY, so --coherence F is exactly the criterion\n"
+               "D_A <= 1-F: the 0.4 default is D_A <= 0.60, a looser form of the\n"
+               "persistent-scatterer test the 'persistent scatterers' line applies at\n"
+               "0.25. The two lines are not independent evidence on that route.\n"
                "\n"
                "--reference selects which images each correlation is taken between.\n"
                "'first' (default) compares every look to look 0. 'pair' compares each\n"
@@ -1838,8 +1853,17 @@ static int rs_cmd_mmotion(int argc, char **argv)
                "rs_microm_t.d_a.\n");
     }
 
+    /* The cull's own per-window verdict, kept so PREFIX_windows.csv can record
+     * what the selector decided rather than an approximation of it. Deriving the
+     * column from the recorded thresholds could not reproduce gate 3, which
+     * reads a neighbourhood, so the file claimed 170 survivors on a run whose
+     * own header said 65. See rs_spectrum_ampcor_window_states() and
+     * docs/CODE-REVIEW.md finding 2. Allocation failure leaves it NULL and the
+     * column falls back to reporting the shared gates alone, labelled as such. */
     rs_spectrum_cull_t cull;
-    const resonarsat_status_t cull_st = rs_spectrum_ampcor_window(&spec, &cull);
+    unsigned char *cull_state = spec.n_win ? calloc(spec.n_win, 1) : NULL;
+    const resonarsat_status_t cull_st =
+        rs_spectrum_ampcor_window(&spec, cull_state, &cull);
 
     /* THE GATE. Refuse to report a frequency when the windows do not agree.
      *
@@ -2258,6 +2282,31 @@ static int rs_cmd_mmotion(int argc, char **argv)
             const double floor_rep = (spec.quant_px > 0.0)
                                    ? 2.449 * spec.quant_px : 0.0;
             fprintf(wf, "# per-window evidence behind the reported selection\n");
+            /* WHAT PRODUCED THIS FILE.
+             *
+             * Six of these were written by one injected-frequency sweep and
+             * distinguished only by the filename the operator chose; nothing in
+             * them recorded the estimator, the overlap or the injection, so a
+             * later reader could not tell a control from an injected run without
+             * the shell history. This project has already been bitten once by a
+             * run misrecording its own configuration -- FOLLOW-UPS.md item 7's
+             * `reference=first` on a lag run -- and the evidence file is the
+             * artefact it asks a reader to consult before believing a summary
+             * line. See docs/CODE-REVIEW.md finding 7. */
+            fprintf(wf, "# estimator=%s reference=%s looks=%zu overlap=%.6g "
+                        "dt_s=%.12g t_sap_s=%.12g\n",
+                    (mp.estimator == RS_MICROM_EST_PHASE)     ? "phase" :
+                    (mp.estimator == RS_MICROM_EST_SPLITBAND) ? "splitband"
+                                                              : "correlation",
+                    (mp.reference == RS_MICROM_REF_PAIR)     ? "pair" :
+                    (mp.reference == RS_MICROM_REF_ADJACENT) ? "adjacent" :
+                    (mp.reference == RS_MICROM_REF_LAG)      ? "lag" : "first",
+                    stack.n_looks, sp.overlap, stack.dt, stack.t_sap);
+            fprintf(wf, "# win_az=%zu win_rg=%zu stride_az=%zu stride_rg=%zu "
+                        "upsample_az=%zu coherence_min=%.6g inject_vib=%s\n",
+                    mp.win_az, mp.win_rg, mp.stride_az, mp.stride_rg,
+                    mp.upsample_az, mp.coherence_min,
+                    inject_hz > 0.0 ? "yes" : "no");
             fprintf(wf, "# consensus_hz=%.12g agree=%zu voting=%zu distinct=%zu "
                         "largest_block=%zu\n",
                     cons_hz, cons_agree, cons_vote, cons_distinct, cons_block);
@@ -2280,6 +2329,14 @@ static int rs_cmd_mmotion(int argc, char **argv)
                     cull.gates_applied);
             fprintf(wf, "# amplitude_dispersion best=%.12g median=%.12g "
                         "n_meeting_%.2f=%zu\n", da_lo, da_med, RS_PS_DA_MAX, n_ps);
+            /* Whether passed_cull below is the selector's verdict or the
+             * degraded fallback, so a reader summing the column knows what it
+             * should sum to. The two are not interchangeable: the fallback
+             * cannot see gate 3 and overstates the survivor set by however many
+             * windows neigh_cull removed. */
+            fprintf(wf, "# passed_cull_source=%s expected_sum=%zu\n",
+                    cull_state ? "selector" : "shared-gates-only (allocation failed)",
+                    cull_state ? cull.n_survivor : cull.n_input);
             fprintf(wf, "window,iaz,irg,dominant_hz,prominence,quality,"
                         "excursion_px,snr,sigma_px,d_a,passed_gates,"
                         "agrees_with_consensus,passed_cull\n");
@@ -2290,15 +2347,26 @@ static int rs_cmd_mmotion(int argc, char **argv)
                                     exc >= floor_rep);
                 const int agrees = passed && spec.df > 0.0 &&
                     fabs(spec.dominant_freq[w] - cons_hz) <= 0.5 * spec.df;
-                /* Recomputed from the recorded thresholds rather than exported
-                 * from the selector, so the column and the header line are
-                 * checkable against each other by whoever reads the file. */
                 const double snr_w = spec.snr ? spec.snr[w] : 0.0;
                 const double sig_w = spec.sigma_px ? spec.sigma_px[w] : 0.0;
-                const int culled = passed &&
-                    (!cull.gates_applied ||
-                     (snr_w >= cull.snr_gate &&
-                      (cull.sigma_gate <= 0.0 || sig_w <= cull.sigma_gate)));
+                /* THE SELECTOR'S OWN VERDICT, not a recomputation of it.
+                 *
+                 * This column used to be derived here from the thresholds in the
+                 * header, and that cannot express gate 3: the neighbourhood test
+                 * needs to know which windows ENTERED the cull, which a per-row
+                 * recomputation does not have. The column therefore reported
+                 * every gate-1-and-2 survivor as a cull survivor -- 170 against a
+                 * header saying 65 on the Giza run in runs/, with 105 windows
+                 * removed on neighbours and no sign of it in the file. See
+                 * docs/CODE-REVIEW.md finding 2.
+                 *
+                 * 'cull_state' comes back from rs_spectrum_ampcor_window() and
+                 * carries 3 for a full survivor, so the column now sums to
+                 * cull.n_survivor by construction. If the buffer could not be
+                 * allocated it is NULL and the fallback below reports the shared
+                 * gates only -- which is what the old column really was, and the
+                 * header line says so. */
+                const int culled = cull_state ? (cull_state[w] == 3) : passed;
                 fprintf(wf, "%zu,%zu,%zu,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,"
                             "%.12g,%d,%d,%d\n",
                         w, w / spec.n_win_rg, w % spec.n_win_rg,
@@ -2314,87 +2382,13 @@ static int rs_cmd_mmotion(int argc, char **argv)
                prefix, prefix, prefix, prefix, prefix, prefix);
     }
 
+    free(cull_state);
     rs_spectrum_free(&spec);
     rs_microm_free(&m);
     rs_subap_stack_free(&stack);
     rs_cphd_free(&c);
     return 0;
 }
-
-/* Focus vibration observations into a depth profile.
- *
- * Requires --velocity and --frequency with no defaults, and prints the full
- * assumption set alongside the result. Both requirements are deliberate: they
- * are what stops a depth axis being fabricated from library defaults. */
-
-/* Parse "--offsets x1,y1:x2,y2:..." into a flat array of metre pairs.
- *
- * Writes at most 'cap' pairs and returns how many were parsed. A NULL or empty
- * specification yields the single offset {0,0}, so the option is additive and
- * callers that do not pass it behave exactly as before. */
-static size_t rs_parse_offsets(const char *spec, double *out, size_t cap)
-{
-    if (!spec || !*spec || cap == 0) {
-        if (cap > 0) { out[0] = 0.0; out[1] = 0.0; return 1; }
-        return 0;
-    }
-    char buf[512];
-    snprintf(buf, sizeof buf, "%s", spec);
-
-    size_t n = 0;
-    for (char *tok = strtok(buf, ":;"); tok && n < cap; tok = strtok(NULL, ":;")) {
-        char *comma = strchr(tok, ',');
-        if (!comma) continue;
-        *comma = '\0';
-        out[2 * n] = atof(tok);
-        out[2 * n + 1] = atof(comma + 1);
-        n++;
-    }
-    if (n == 0) { out[0] = 0.0; out[1] = 0.0; n = 1; }
-    return n;
-}
-
-/* Vary the two assumed constants and report where the recovered depth goes.
- *
- * This is the experiment that tells a reader how much of a tomogram's depth
- * axis is measurement and how much is the assumption fed in. It belongs beside
- * the null test in any publication of results from this software, and running
- * it costs seconds. */
-/* Run the chain over one collect at several grid offsets, appending sweep rows.
- *
- * The offsets are what make the experiment valid. Merging results by wavelength
- * assumes the realisations differ only in scene content, so that a depth which
- * moves must have moved because the assumed constants moved. Three separate
- * collects violate that: they differ in slant range, incidence, dwell and
- * aperture as well, and geometry variation then arrives disguised as wavelength
- * dependence. Chipping one collect at several positions holds every geometric
- * quantity fixed and varies only what is on the ground, which is the real-data
- * counterpart of translating the scatterers in the synthetic fixture.
- *
- * The collect is read and range compressed once and reused across offsets,
- * because that is the expensive step and it does not depend on where the grid
- * sits.
- *
- * Returns the number of rows appended. An offset that cannot be processed is
- * skipped with a message rather than aborting, since the point of running
- * several is to tolerate one going wrong. */
-
-/* Vary the two assumed constants across several scenes and report where the
- * recovered depth goes.
- *
- * This is the experiment that tells a reader how much of a tomogram's depth axis
- * is measurement and how much is the assumption fed in, and it belongs beside the
- * null test in any publication of results from this software.
- *
- * Several scenes are accepted, comma-separated, and it matters that they are. A
- * single realisation cannot separate a real trend from the depth grid's
- * quantisation: the peak lands in whichever cell it lands in, and one such point
- * looks identical to a measurement. With several scenes the depths are averaged
- * per wavelength, each carries a spread, and the fit is additionally reported
- * over those that reproduce. Given one scene the command says so and withholds
- * the filtered fit rather than presenting a number it cannot support. */
-
-
 
 /* Validate a collect against a measurement, before spending hours on it.
  *
@@ -2712,6 +2706,13 @@ have_geometry:
 int main(int argc, char **argv)
 {
     if (argc < 2) { rs_usage(); return 1; }
+
+    /* Start each run with no pending message, so that a failure reported by
+     * rs_report_error() cannot carry a detail written by something else. The
+     * buffer persists until the next rs_set_error(), and the 2026-08-02 review
+     * found returns that set none -- see rs_clear_error(). Those are covered
+     * now; this is the floor under the next one. */
+    rs_clear_error();
 
     const char *cmd = argv[1];
     if (strcmp(cmd, "info") == 0)        return rs_cmd_info(argc - 1, argv + 1);

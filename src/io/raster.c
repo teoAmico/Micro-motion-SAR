@@ -84,18 +84,6 @@ static const unsigned char rs_anchor_jet[16][3] = {
     { 255,  81,   0 }, { 255,  18,   0 }, { 207,   0,   0 }, { 143,   0,   0 }
 };
 
-/* Resolve a palette name for the command line. See raster.h. */
-rs_palette_t rs_palette_from_name(const char *name, rs_palette_t fallback)
-{
-    if (!name || !*name) return fallback;
-    if (strcmp(name, "gray") == 0 || strcmp(name, "grey") == 0) return RS_PALETTE_GRAY;
-    if (strcmp(name, "viridis") == 0) return RS_PALETTE_VIRIDIS;
-    if (strcmp(name, "energy") == 0)  return RS_PALETTE_ENERGY;
-    if (strcmp(name, "jet") == 0)     return RS_PALETTE_JET;
-    fprintf(stderr, "warning: unknown palette '%s'; using the default. "
-                    "Known: gray, viridis, energy, jet\n", name);
-    return fallback;
-}
 
 /* Map a normalised value to a colour from one of the ramps above.
  *
@@ -141,7 +129,12 @@ static resonarsat_status_t rs_amp_gray(const rs_slc_t *img, double dyn_range_db,
     double *amp = malloc(n * sizeof *amp);
     double *sorted = malloc(n * sizeof *sorted);
     unsigned char *px = malloc(n);
-    if (!amp || !sorted || !px) { free(amp); free(sorted); free(px); return RS_ERR_ALLOC; }
+    if (!amp || !sorted || !px) {
+        free(amp); free(sorted); free(px);
+        rs_set_error("raster: cannot allocate quicklook buffers for a %zux%zu image",
+                     img->n_az, img->n_rg);
+        return RS_ERR_ALLOC;
+    }
 
     for (size_t i = 0; i < n; i++) amp[i] = (double)cabsf(img->data[i]);
     memcpy(sorted, amp, n * sizeof *sorted);
@@ -210,7 +203,10 @@ resonarsat_status_t rs_raster_write_map(const double *map, size_t n_row, size_t 
 
     const int colour = (palette != RS_PALETTE_GRAY) && rs_path_is_png(path);
     unsigned char *px = malloc(n * (colour ? 3u : 1u));
-    if (!px) return RS_ERR_ALLOC;
+    if (!px) {
+        rs_set_error("raster: cannot allocate a %zux%zu map raster", n_row, n_col);
+        return RS_ERR_ALLOC;
+    }
 
     for (size_t i = 0; i < n; i++) {
         double v = isfinite(map[i]) ? (map[i] - lo) / (hi - lo) : 0.0;

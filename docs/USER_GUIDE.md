@@ -4,8 +4,13 @@ How to build the tool, run it, and read what it tells you.
 
 **Read this first:** one configuration has passed the bar in `README.md` —
 `--estimator phase`, on synthetic fixtures, swept and pooled over seeds with a
-static control (`FOLLOW-UPS.md` item 14). Nothing has passed it on real data, and
-`--estimator correlation`, which is the default, has not passed it anywhere. This
+static control (`FOLLOW-UPS.md` item 14), and that recovery does **not** survive
+aspect-dependent scattering (item 25). On real data the *tracker* has met the bar
+— five injected frequencies recovered from the Giza collect at slope 0.999 — but
+every selection policy in the tool discarded the result and the tool printed *no
+frequency* each time (item 30). So nothing that **reports** has passed it on real
+data, and `--estimator correlation`, which is the default, has not passed it
+anywhere. This
 guide therefore spends as much space on how the tool refuses, and how to tell a
 measurement from an artefact, as on how to make it produce a number. That is
 still the correct ratio for this instrument.
@@ -370,6 +375,7 @@ Line by line, in the order it prints:
 | `spectra: B bins, df Hz` | `df` sets what "within half a bin" means |
 | `amplitude dispersion: best X, median Y; N of M windows meet D_A <= 0.25` | whether the scene can support `--estimator phase` at all — see below |
 | `consensus: f, agreed by A of V windows, D distinct, largest block C` | the detection statistic — see below |
+| `persistent scatterers: f from A of N candidates (D_A <= 0.25), best window W at D_A d` | the fourth policy: what only the low-dispersion windows say — see below |
 | `cull: f from A of N windows surviving (SNR x, sigma y, neighbours z removed)` | a **second, independent** selection policy — see below |
 | `sub-aperture response ... at an observation ratio of eta` | near-integer eta means the observable's response is near zero there |
 
@@ -879,9 +885,34 @@ beside it.
 Isolated point targets on an empty scene score below that even when tracking
 perfectly; pass `0` to inspect an unmasked result.
 
+**It masks a different quantity under `--estimator phase`**, which reads one
+pixel's phase and forms no correlation surface at all. There `quality` is
+amplitude *stability*, so `--coherence F` is exactly the criterion
+`D_A <= 1 − F`: the 0.40 default is `D_A <= 0.60`, a looser form of the same
+persistent-scatterer test the `persistent scatterers` line applies at 0.25. The
+two are complements to machine precision on that route, so a `quality` map and a
+`d_a` map from a phase run are one measurement shown twice, and the two output
+lines are not independent evidence. See `rs_microm_t.quality` in `microm.h`.
+
 `--no-optimize` is an audit baseline, not a better measurement: it searches the
 whole upsampled correlation surface rather than the neighbourhood of the integer
 peak, and runs serially. Backprojection is bitwise identical either way.
+
+### Flags this guide does not otherwise cover
+
+Real options, documented at length in each subcommand's own `--help` and listed
+here so the guide does not imply the set above is complete:
+
+| flag | command | what it does |
+|---|---|---|
+| `--no-detrend` | `mmotion` | skip the least-squares line removal before the periodogram |
+| `--b-shift HZ` | `mmotion` | master/slave band separation; only `--reference pair` uses it |
+| `--null-trials N` | `mmotion` | trials for the shuffled-look floor, beside `--null-static` |
+| `--range-taps N` | `focus`, `mmotion` | range-interpolator width in the backprojection kernel |
+| `--pulse-start N` | `focus` | first pulse to read, with `--max-pulses` making the read a window |
+| `--dyn-range DB` | `focus` | quicklook display range below the 99th percentile |
+| `--ccd-win N`, `--ccd-loading F` | `mmotion` | window and noise floor for the `--ccd-out` change-detection locator |
+| `--amplitude MM`, `--alpha F` | `validate` | target amplitude and aperture fraction to answer the checks for |
 
 ---
 
@@ -935,7 +966,11 @@ peak, and runs serially. Backprojection is bitwise identical either way.
   gate derived from window geometry refused correct measurements. It includes
   entries that withdraw earlier entries. Each cost hours to establish and none is
   recoverable from the code.
-- The headers. `include/resonarsat/microm.h` is 944 lines for about ten
+- **`docs/CODE-REVIEW.md`** — defects found by reading the code against its own
+  documentation rather than by measuring it: what is dead, what is described
+  inaccurately, and which run artefacts do not say what they appear to. Read it
+  before trusting a column in `PREFIX_windows.csv` or a field in `rs_slc_t`.
+- The headers. `include/resonarsat/microm.h` is 1343 lines for 17
   declarations, and carries the derivations, measured tables and reasoning behind
   every constant. `subaperture.h` and `validate.h` are the same. When a
   measurement settles something in this project it is retired *into* a header,

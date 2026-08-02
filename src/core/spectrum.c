@@ -100,6 +100,8 @@ resonarsat_status_t rs_spectrum_compute_opts(const rs_microm_t *m,
         !out->quality || !out->prominence || !out->excursion_px ||
         !out->snr || !out->sigma_px || !out->d_a) {
         rs_spectrum_free(out);
+        rs_set_error("spectrum: cannot allocate %zu windows x %zu frequency bins",
+                     m->n_win, n_freq);
         return RS_ERR_ALLOC;
     }
 
@@ -542,11 +544,12 @@ resonarsat_status_t rs_spectrum_consensus(const rs_spectrum_t *spec,
 /* Select by culling on what the correlator knew, at the default factors.
  * See microm.h. */
 resonarsat_status_t rs_spectrum_ampcor_window(const rs_spectrum_t *spec,
+                                              unsigned char *out_state,
                                               rs_spectrum_cull_t *out)
 {
     return rs_spectrum_ampcor_window_opts(spec, RS_CULL_SNR_FACTOR,
                                           RS_CULL_SIGMA_FACTOR,
-                                          RS_CULL_MIN_NEIGHBOURS, out);
+                                          RS_CULL_MIN_NEIGHBOURS, out_state, out);
 }
 
 /* Select by culling, with both tuned factors supplied. See microm.h. */
@@ -554,12 +557,16 @@ resonarsat_status_t rs_spectrum_ampcor_window_opts(const rs_spectrum_t *spec,
                                                    double snr_factor,
                                                    double sigma_factor,
                                                    size_t min_neighbours,
+                                                   unsigned char *out_state,
                                                    rs_spectrum_cull_t *out)
 {
     if (!out) return RS_ERR_ARG;
     memset(out, 0, sizeof *out);
     if (!spec || !spec->dominant_freq || !spec->quality || spec->n_win == 0)
         return RS_ERR_ARG;
+    /* Cleared before any early return, so a caller that allocated the buffer
+     * sees "nothing entered" rather than whatever was on its stack. */
+    if (out_state) memset(out_state, 0, spec->n_win);
     out->window = spec->n_win;
 
     /* The shared gates, in the same form rs_spectrum_best_window() and
@@ -586,7 +593,11 @@ resonarsat_status_t rs_spectrum_ampcor_window_opts(const rs_spectrum_t *spec,
      * gate 3 reads its neighbourhood, so no window can be decided until every
      * window's membership is known. */
     unsigned char *state = calloc(spec->n_win, 1);
-    if (!state) return RS_ERR_ALLOC;
+    if (!state) {
+        rs_set_error("spectrum: cannot allocate the cull state for %zu windows",
+                     spec->n_win);
+        return RS_ERR_ALLOC;
+    }
 
     /* Which windows enter, and the median offset uncertainty among them.
      *
@@ -601,7 +612,12 @@ resonarsat_status_t rs_spectrum_ampcor_window_opts(const rs_spectrum_t *spec,
     size_t n_sig = 0;
     if (have_surface) {
         sig = malloc(spec->n_win * sizeof *sig);
-        if (!sig) { free(state); return RS_ERR_ALLOC; }
+        if (!sig) {
+            free(state);
+            rs_set_error("spectrum: cannot allocate the offset-uncertainty scratch "
+                         "for %zu windows", spec->n_win);
+            return RS_ERR_ALLOC;
+        }
     }
     for (size_t w = 0; w < spec->n_win; w++) {
         if (spec->quality[w] < q_min) continue;
@@ -693,6 +709,8 @@ resonarsat_status_t rs_spectrum_ampcor_window_opts(const rs_spectrum_t *spec,
         if (agree >= min_neighbours) { state[w] = 3; out->n_survivor++; }
         else                         { out->n_neigh_cull++; }
     }
+
+    if (out_state) memcpy(out_state, state, spec->n_win);
 
     if (out->n_survivor == 0) {
         free(state);
@@ -790,7 +808,11 @@ resonarsat_status_t rs_spectrum_ps_window_opts(const rs_spectrum_t *spec,
     const double tol = (spec->df > 0.0) ? 0.5 * spec->df : 1e-9;
 
     unsigned char *cand = calloc(spec->n_win, 1);
-    if (!cand) return RS_ERR_ALLOC;
+    if (!cand) {
+        rs_set_error("spectrum: cannot allocate the persistent-scatterer candidate "
+                     "mask for %zu windows", spec->n_win);
+        return RS_ERR_ALLOC;
+    }
 
     for (size_t w = 0; w < spec->n_win; w++) {
         if (spec->quality[w] < q_min) continue;

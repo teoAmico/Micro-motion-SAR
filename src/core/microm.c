@@ -224,6 +224,8 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
         !out->phase || !out->quality || !out->snr || !out->sigma_px ||
         !out->d_a) {
         rs_microm_free(out);
+        rs_set_error("microm: cannot allocate the tracking result for %zu windows "
+                     "x %zu looks", n_win, n_looks);
         return RS_ERR_ALLOC;
     }
 
@@ -837,17 +839,6 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
     }
 
     return RS_OK;
-}
-
-
-/* Largest measurable line-of-sight velocity before the shift wraps. */
-double rs_microm_max_velocity(size_t win_px, double spacing_m,
-                              double slant_range, double v_platform)
-{
-    if (win_px == 0 || spacing_m <= 0.0 || slant_range <= 0.0 || v_platform <= 0.0)
-        return 0.0;
-    const double max_shift_m = 0.5 * (double)win_px * spacing_m;
-    return max_shift_m * v_platform / slant_range;
 }
 
 

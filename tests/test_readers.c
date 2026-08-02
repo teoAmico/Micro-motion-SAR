@@ -20,6 +20,7 @@
 #include "resonarsat/focus.h"
 #include "rs_test.h"
 
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,6 +29,13 @@
 
 #define ROWS 8u
 #define COLS 6u
+
+/* Flight geometry the annotation fixture declares. Named rather than inlined
+ * because the slant-range assertion has to recompute the same quantity the
+ * reader does, and a literal repeated in two files is how the two drift. */
+#define UAV_ALT_M     12500.0
+#define UAV_TERR_M      500.0
+#define UAV_LOOK_DEG     45.0
 
 /* Write a UAVSAR annotation and its companion binary.
  *
@@ -48,6 +56,15 @@ static int write_uavsar(const char *ann_path, const char *slc_path, const char *
     fprintf(a, "Number of SLC Range Bins = %u\n", COLS);
     fprintf(a, "Azimuth Spacing = 1.0\n");
     fprintf(a, "Range Spacing = 1.0\n");
+    /* The geometry block is written unless a case asks for it to be absent, so
+     * the derived-slant-range path and the "leave it unset" path are both
+     * reachable from this one writer. Values are a plausible UAVSAR flight:
+     * 12.5 km altitude over 500 m terrain at a 45 degree look. */
+    if (!(damage && !strcmp(damage, "no_geometry"))) {
+        fprintf(a, "Average Altitude (m) = %.1f\n", UAV_ALT_M);
+        fprintf(a, "Global Average Terrain Height (m) = %.1f\n", UAV_TERR_M);
+        fprintf(a, "Global Average Look Angle (deg) = %.1f\n", UAV_LOOK_DEG);
+    }
     fclose(a);
 
     if (damage && !strcmp(damage, "no_slc")) {
@@ -114,6 +131,7 @@ static int write_interchange(const char *path, const char *damage)
     return 0;
 }
 
+/* Run every case in this file. */
 int main(void)
 {
     const char *dir = getenv("TMPDIR");
@@ -129,6 +147,48 @@ int main(void)
         rs_slc_t img;
         RS_CHECK_OK(rs_read_uavsar(slc, ann, &img));
         RS_CHECK(img.n_az == ROWS && img.n_rg == COLS);
+        rs_slc_free(&img);
+    }
+
+    /* r0 IS A SLANT RANGE AND MUST NEVER BE THE PLATFORM ALTITUDE.
+     *
+     * The reader assigned `Average Altitude` straight into it, which is a height
+     * where the field is documented as a range -- low by a factor of one to two
+     * at UAVSAR geometry, and silently wrong in rs_geo_slant_to_ground() and in
+     * the sub-look ambiguity ceiling. See docs/CODE-REVIEW.md finding 3.
+     *
+     * Asserting the derived value rather than merely "not the altitude" is what
+     * makes this catch a re-introduction: a fix that got the trigonometry
+     * backwards would also differ from the altitude. */
+    RS_CASE("UAVSAR slant range is derived from the look angle, not the altitude");
+    {
+        RS_CHECK(write_uavsar(ann, slc, NULL) == 0);
+        rs_slc_t img;
+        RS_CHECK_OK(rs_read_uavsar(slc, ann, &img));
+
+        const double look = UAV_LOOK_DEG * M_PI / 180.0;
+        const double want = (UAV_ALT_M - UAV_TERR_M) / cos(look);
+        printf("    altitude %.0f m, terrain %.0f m, look %.0f deg"
+               " -> slant %.1f m (want %.1f)\n",
+               UAV_ALT_M, UAV_TERR_M, UAV_LOOK_DEG, img.r0, want);
+        RS_CHECK_NEAR(img.r0, want, 1.0);
+        RS_CHECK_NEAR(img.incidence, look, 1e-9);
+        /* The margin that makes the old defect impossible to reintroduce
+         * quietly: the right answer is 1.4x the altitude, not equal to it. */
+        RS_CHECK(img.r0 > 1.2 * UAV_ALT_M);
+        rs_slc_free(&img);
+    }
+
+    /* Absent geometry leaves r0 UNSET rather than guessed. The whole lesson of
+     * the defect above is that a plausible wrong range is worse than a missing
+     * one, and consumers already read a non-positive r0 as absent. */
+    RS_CASE("UAVSAR without a geometry block leaves the slant range unset");
+    {
+        RS_CHECK(write_uavsar(ann, slc, "no_geometry") == 0);
+        rs_slc_t img;
+        RS_CHECK_OK(rs_read_uavsar(slc, ann, &img));
+        RS_CHECK(img.r0 == 0.0);
+        RS_CHECK(img.incidence == 0.0);
         rs_slc_free(&img);
     }
 

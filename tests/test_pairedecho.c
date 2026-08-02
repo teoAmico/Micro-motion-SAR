@@ -154,6 +154,7 @@ static resonarsat_status_t rs_pe_focus(double vib_hz, double vib_amp_m,
     return st;
 }
 
+/* Run every case in this file. */
 int main(void)
 {
     const double lambda = RS_C_LIGHT / PE_FC;

@@ -25,6 +25,7 @@ static void rs_peak_cell(const rs_slc_t *img, size_t *py, size_t *px, double *pm
     *pmag = best_mag;
 }
 
+/* Run every case in this file. */
 int main(void)
 {
     /* A short dwell keeps the test fast; the geometry is unchanged. */

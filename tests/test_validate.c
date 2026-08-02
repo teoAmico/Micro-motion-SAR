@@ -38,6 +38,7 @@ static void giza(rs_validate_req_t *r)
     r->worst_gap_s   = 9.0 / 10196.35;
 }
 
+/* Run every case in this file. */
 int main(void)
 {
     rs_validate_finding_t f[RS_VALIDATE_N_CHECKS];

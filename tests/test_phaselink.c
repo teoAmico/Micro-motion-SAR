@@ -20,6 +20,8 @@
 
 /* Deterministic uniform generator, so failures reproduce exactly. */
 static unsigned rs_rng = 20260725u;
+/* Uniform pseudo-random double in [0,1), from a fixed internal seed.
+ * Deterministic so a failure reproduces exactly. */
 static double urand(void)
 {
     rs_rng = rs_rng * 1103515245u + 12345u;
@@ -79,6 +81,7 @@ static void shift_patch(const float complex *in, float complex *out,
     free(col);
 }
 
+/* Run every case in this file. */
 int main(void)
 {
     const size_t n_az = 64, n_rg = 32, n_look = 16;

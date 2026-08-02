@@ -53,6 +53,16 @@ void rs_set_error(const char *fmt, ...);
  * the string if it must outlive the immediate error path. Never returns NULL. */
 const char *rs_last_error(void);
 
+/* Discard the calling thread's pending message.
+ *
+ * Call this before a fallible operation whose failure you intend to report. The
+ * buffer persists until the next rs_set_error(), so a function that returns
+ * non-OK without setting one leaves rs_report_error() printing an UNRELATED
+ * earlier failure's detail beside the new status. Clearing first makes such a
+ * site degrade to a bare status rather than a wrong sentence. See rs_clear_error()
+ * in status.c for what the review that added it measured. */
+void rs_clear_error(void);
+
 /* Print "context: <status name> (<detail>)" to stderr, where the detail is the
  * current rs_last_error() message when one is set. This is the standard way for
  * the CLI to surface a failure; library code should set the error and return a

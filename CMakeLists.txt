@@ -97,10 +97,23 @@ foreach(t IN LISTS MM_TESTS)
     add_test(NAME ${t} COMMAND ${t})
 endforeach()
 
+# The comment rule is enforced over tests/ as well as src/ and tools/. It was
+# src/ and tools/ only, which left the shared fixture generator and the scoring
+# harness -- the code every measurement in FOLLOW-UPS.md was taken through --
+# outside the rule that exists to keep units straight. See docs/CODE-REVIEW.md
+# finding 8.
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
     add_test(NAME docs_coverage
              COMMAND ${Python3_EXECUTABLE}
                      ${CMAKE_SOURCE_DIR}/scripts/check_docs.py
-                     ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/tools)
+                     ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/tools
+                     ${CMAKE_SOURCE_DIR}/tests)
+else()
+    # Not a silent skip: without this the suite quietly becomes 20 tests while
+    # ctest still reports success, and both CLAUDE.md and the user guide say 21.
+    message(WARNING
+            "Python3 not found -- the docs_coverage test will NOT run, so the "
+            "block-comment rule is unenforced and 'ctest' reports 20 tests "
+            "rather than 21.")
 endif()

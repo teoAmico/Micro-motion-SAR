@@ -132,7 +132,11 @@ resonarsat_status_t rs_png_write(const char *path, const unsigned char *pixels,
 
     /* The filtered raw stream: every row prefixed with filter type 0. */
     unsigned char *raw = malloc(raw_len);
-    if (!raw) return RS_ERR_ALLOC;
+    if (!raw) {
+        rs_set_error("png: cannot allocate %zu bytes for a %zux%zu image",
+                     raw_len, n_col, n_row);
+        return RS_ERR_ALLOC;
+    }
     for (size_t r = 0; r < n_row; r++) {
         raw[r * (stride + 1)] = 0;
         memcpy(raw + r * (stride + 1) + 1, pixels + r * stride, stride);

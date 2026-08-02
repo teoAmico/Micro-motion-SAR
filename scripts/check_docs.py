@@ -2,7 +2,7 @@
 """Documentation coverage check.
 
 Every function definition in the scanned directories must be preceded by a
-block comment, per section 3a of the implementation plan. The rule exists
+block comment. The rule exists
 because this codebase is full of quantities that are dimensionally
 interchangeable and physically are not -- Hz against rad/s, slant against
 ground range, azimuth line rate against transmit PRF, electromagnetic against
@@ -82,7 +82,8 @@ def main(argv: list[str]) -> int:
 
     if total:
         print(f"\n{total} function(s) lack the required block comment "
-              f"(see IMPLEMENTATION_PLAN.md section 3a)")
+              f"(see the 'Conventions this codebase actually enforces' "
+              f"section of CLAUDE.md)")
         return 1
 
     print(f"docs coverage: {scanned} file(s) scanned, every function documented")

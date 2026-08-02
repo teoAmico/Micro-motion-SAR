@@ -10,13 +10,68 @@ what has been tried and disproven, including entries that withdraw earlier
 entries, and losing it means the next person repeats the work rather than reading
 it.
 
-Resolved entries are not kept here: once a finding is settled it belongs next to
-the code it constrains, and the reasoning that produced it is in the commit that
-made the change. Four were retired that way -- the correlation-transcendental identity,
-the quantisation floor's derivation, the distributed-texture fixture questions,
-and the sub-look coherence measurement behind the phase estimator's
-non-accumulating design. They now live in `rs_microm_estimator_t`,
-`rs_spectrum_best_window()` and `rs_microm_track()`.
+Resolved entries are not kept here **when nothing else depends on the reasoning**:
+once a finding is settled it belongs next to the code it constrains, and the
+reasoning that produced it is in the commit that made the change. Four were
+retired that way -- the correlation-transcendental identity, the quantisation
+floor's derivation, the distributed-texture fixture questions, and the sub-look
+coherence measurement behind the phase estimator's non-accumulating design. They
+now live in `rs_microm_estimator_t`, `rs_spectrum_best_window()` and
+`rs_microm_track()`.
+
+Several entries below are nonetheless marked resolved and kept -- items 6, 7 and
+16. They are kept because later entries argue against them by number, and an
+argument that withdraws item 6 is unreadable once item 6 is gone. Where a
+resolved entry's *tables* have been retired into a header they are not
+duplicated here; the entry says where they went.
+
+Some entries cite development notes that were kept local rather than tracked:
+`IMPLEMENTATION-VERIFICATION.md`, `POSITIVE-CONTROL.md` and
+`MODIFIED-BACKPROJECTION.md`. Those citations are marked **[local note, not in
+the repository]** where they appear, so a reader outside this working copy knows
+the reference cannot be followed rather than assuming they missed a file.
+
+Defects found by reading the code rather than by measuring it are in
+`docs/CODE-REVIEW.md`, which also records corrections made to this file. The
+2026-08-02 review corrected item 5 (the UAVSAR reader was worse than this file
+said, not better) and item 7's line numbers.
+
+---
+
+## Index
+
+| # | status | what it is about |
+|---|---|---|
+| 1 | open, partly implemented | the quantisation floor has no multiplicity correction |
+| 2 | answered, negative | no distributed-texture fixture on which the chain works |
+| 3 | open, premise unestablished | the Capella SGN override is keyed on a vendor string |
+| 4 | open, untried | long dwells may need deliberate truncation |
+| 5 | open | `rs_slc_t.r0` means three different things in three readers |
+| 6 | resolved | sub-look images are correct; the tracker does not read them |
+| 7 | resolved | `REF_LAG`, its frequency floor, and the selection policy discarding recoveries |
+| 8 | **withdrawn** | "the defect is the reference scheme" |
+| 9 | partly implemented | consensus and contiguity statistics |
+| 10 | done | re-scoring documented results through the consensus gate |
+| 11 | structural limit | the consensus gate is blind to common-mode artefacts |
+| 12 | instruments, not results | ampcor-style cull (a-e), SARPy cross-check (b), second fixture family (f) |
+| 13 | closed | overlap buys nothing for correlation; zero is the balanced setting |
+| 14 | recovery, bounded by 25 | the phase estimator was wrapping a ramp it should have removed |
+| 15 | closed | item 14's anomalies were one fixture mistake; the real-data configuration exists |
+| 16 | resolved | `validate` was estimator-blind; it now takes an estimator |
+| 17 | null, meaningful | Giza at 90% overlap: the sawtooth artefact is gone on real data |
+| 18 | screening | `validate --xml`, and the Istanbul candidate |
+| 19 | bounded by 30 | amplitude dispersion, and item 17's null as a precondition failure |
+| 20 | done | `D_A` becomes a selector; its threshold measured; `AmpSF` found unapplied |
+| 21 | **retraction** | `AmpSF` applied, and it does NOT explain the `D_A` gap |
+| 22 | done | notes from NGA's six-library; streaming stages 1 and 2 |
+| 23 | negative | neither density nor selection bias explains the `D_A` gap |
+| 24 | mechanism found | aspect-dependent scattering, and the first fixture that refuses |
+| 25 | bounds item 14 | item 14's recovery does not survive aspect dependence; the PS selector does |
+| 26 | open | the correlation route against aspect dependence |
+| 27 | fixed | `--null-static` was comparing against a defocused scene |
+| 28 | fixed | the Giza positive control was invalid: the injected target did not focus |
+| 29 | superseded by 30 | the first positive control that asked the question |
+| 30 | **the current state** | the bar met on real data by the tracker, not by anything that reports |
 
 ---
 
@@ -120,7 +175,8 @@ longer stands.
 
 **Not written as a regression test, deliberately.** The correlation sweep costs
 2 minutes 48 seconds for three seeds, which would quadruple `ctest`. The result
-is recorded here and in `IMPLEMENTATION-VERIFICATION.md` instead. If it is ever
+is recorded here and in `IMPLEMENTATION-VERIFICATION.md` **[local note, not in
+the repository]** instead. If it is ever
 worth locking in, one seed at three frequencies is about a minute and would
 catch a change of sign.
 
@@ -200,7 +256,8 @@ Every run this project has made feeds the whole collect in: 32.869 s at Giza,
 and the Istanbul candidate would be 25 or 60 s. The published work appears not
 to do that.
 
-**The direct evidence.** `MODIFIED-BACKPROJECTION.md` records that the Trento
+**The direct evidence.** `MODIFIED-BACKPROJECTION.md` **[local note, not in the
+repository]** records that the Trento
 corner-reflector validation reconstructs displacement from **the first three
 seconds of a roughly 20 s dwell**, and that the authors note the spectrogram's
 clarity degrades after about 11 s. It is already flagged there as "a design
@@ -252,13 +309,28 @@ that belongs in the `RUN.md` question, not a post-hoc reinterpretation.
 
 ## 5. `rs_slc_t.r0` means different things in different readers
 
-`slc.h:65` documents `r0` as "slant range of first range sample, m". The UAVSAR
-reader fills it that way. **The SICD reader does not**: `readers/sicd.c:410`
-sets it from the product's `SCPCOA/SlantRange`, which is the range to the scene
-centre point.
+`slc.h:65` documents `r0` as "slant range of first range sample, m". **No reader
+fills it that way**, and there are three conventions in play rather than two.
 
-On a wide swath those differ by half a swath -- tens of metres on a spotlight
-product, kilometres on a stripmap one.
+`readers/sicd.c:450` sets it from the product's `SCPCOA/SlantRange`, which is the
+range to the scene centre point. On a wide swath that differs from the first
+sample by half a swath -- tens of metres on a spotlight product, kilometres on a
+stripmap one.
+
+**CORRECTED 2026-08-02: the UAVSAR reader is worse, and this entry said it was
+right.** `readers/uavsar.c:199` reads the annotation field `Average Altitude` and
+`:213` assigns it to `img->r0`. An altitude is not a slant range at all: at
+UAVSAR's ~12.5 km flight altitude and look angles from about 20 to 65 degrees the
+near-range slant distance is 13 to 30 km, so the field is low by a factor of one
+to two and the error grows across the swath. The same four lines read
+`Global Average Terrain Height` into a local named `inc` and never use it, so
+`img->incidence` stays zero for every UAVSAR product. See `docs/CODE-REVIEW.md`
+findings 3 and 4.
+
+That changes what a fix must preserve. The two options below were written on the
+belief that UAVSAR held the documented meaning and only SICD deviated; neither is
+a simple re-pointing now, because there is no reader whose convention is the one
+to keep.
 
 **Found by** writing `validate --sicd`. The first version added
 `0.5 * n_rg * rg_spacing_m` to reach the scene centre, which is right for the
@@ -291,7 +363,8 @@ choice which".
 
 ## 6. The sub-look images are correct; the tracker does not read them
 
-`POSITIVE-CONTROL.md` localised the failure to "what reaches the correlator --
+`POSITIVE-CONTROL.md` **[local note, not in the repository]** localised the
+failure to "what reaches the correlator --
 patch extraction, the reference look, or the sub-look images themselves" and
 said "that is the next thing to bisect and it is not done here." It is now done
 one level further, and the sub-look images are eliminated.
@@ -649,15 +722,28 @@ supporting story about the floor does not.
 
 ### A provenance bug, introduced with the lag mode and now fixed
 
-`--shifts` wrote `reference=first` for a run made with `--reference lag`, and the
-`.meta` sidecar did the same: both label sites carried three-way conditionals
-that fell through to "first". Every lag run so far is misrecorded in its own
-metadata. Fixed at `main.c:1469` and `main.c:2205`.
+`--shifts` wrote `reference=first` for a run made with `--reference lag`: the
+label site carried a three-way conditional that fell through to "first". Every
+lag run before the fix is misrecorded in its own metadata. The live site is
+`main.c:1653-1655` and now handles all four modes.
+
+*(Line numbers corrected 2026-08-02. This entry recorded the fix as landing at
+`main.c:1469` and `main.c:2205`, calling the second "the `.meta` sidecar". There
+is no `.meta` sidecar in the tree and there is exactly one reference-label site
+today. Either the sidecar was removed later or the second site was the `--shifts`
+header itself.)*
 
 Worth noting how it was caught -- not by a test, but by reading a dump while
 chasing something else. The same three-way fallthrough pattern would silently
 mislabel any future mode, and nothing in the suite checks that a run's recorded
 provenance matches what produced it.
+
+**That is still true and it now costs more.** `PREFIX_windows.csv` -- the
+per-window evidence file item 30 turns on having read -- records no
+configuration at all: not `--estimator`, not `--overlap`, not `--n`, not
+`--reference`, not `--inject-vib`. Item 30's sweep left six such files whose only
+distinguishing mark is the filename the operator chose. See
+`docs/CODE-REVIEW.md` finding 7.
 
 ### Item 7, the bias explained: a 0.391 Hz multiplicative modulation
 
@@ -921,7 +1007,8 @@ wrong at 14-29%, and below a contiguous block of four, which is geometric.
 
 ## 10. Re-scoring the documented results through the consensus gate
 
-Step 3 of the plan in item 9. Every case below is one `IMPLEMENTATION-VERIFICATION.md`
+Step 3 of the plan in item 9. Every case below is one
+`IMPLEMENTATION-VERIFICATION.md` **[local note, not in the repository]**
 already records, re-run through the agreement gate.
 
 **The documented false positives mostly become declines:**

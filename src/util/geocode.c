@@ -66,7 +66,10 @@ resonarsat_status_t rs_geo_llh_to_ecf(double lat_deg, double lon_deg, double hae
                                       double ecf[3])
 {
     if (!ecf) return RS_ERR_ARG;
-    if (lat_deg < -90.0 || lat_deg > 90.0) return RS_ERR_RANGE;
+    if (lat_deg < -90.0 || lat_deg > 90.0) {
+        rs_set_error("geocode: latitude %g deg is outside [-90, 90]", lat_deg);
+        return RS_ERR_RANGE;
+    }
 
     const double a  = RS_WGS84_A;
     const double f  = RS_WGS84_F;
@@ -88,7 +91,11 @@ resonarsat_status_t rs_geo_plane_point(const rs_geo_plane_t *plane,
                                        double x_m, double y_m, double ecf[3])
 {
     if (!plane || !ecf) return RS_ERR_ARG;
-    if (!plane->valid) return RS_ERR_MISSING_META;
+    if (!plane->valid) {
+        rs_set_error("geocode: the image-area plane is unset, so this product "
+                     "carries no ground reference to project onto");
+        return RS_ERR_MISSING_META;
+    }
 
     for (int i = 0; i < 3; i++) {
         ecf[i] = plane->origin[i] + x_m * plane->u_x[i] + y_m * plane->u_y[i];
@@ -115,7 +122,11 @@ resonarsat_status_t rs_geo_plane_offset(const rs_geo_plane_t *plane,
                                         double *x_m, double *y_m)
 {
     if (!plane) return RS_ERR_ARG;
-    if (!plane->valid) return RS_ERR_MISSING_META;
+    if (!plane->valid) {
+        rs_set_error("geocode: the image-area plane is unset, so this product "
+                     "carries no ground reference to project onto");
+        return RS_ERR_MISSING_META;
+    }
 
     double ecf[3];
     const resonarsat_status_t st = rs_geo_llh_to_ecf(lat_deg, lon_deg, hae_m, ecf);

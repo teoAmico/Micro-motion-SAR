@@ -120,18 +120,24 @@ resonarsat_status_t rs_slc_finalise_metadata(rs_slc_t *img);
  * good. Returns RS_OK when every check passes. */
 resonarsat_status_t rs_slc_validate(const rs_slc_t *img);
 
-/* Evaluate a Doppler polynomial at slant-range time 'tau' in seconds. An unset
- * polynomial evaluates to zero, which is correct for products shipping no
- * Doppler annotation -- the pipeline then estimates the centroid from data. */
-double rs_dopp_poly_eval(const rs_dopp_poly_t *poly, double tau);
-
-/* Interpolate the platform state at time 't' seconds into 'out', using Lagrange
- * interpolation over the four state vectors nearest 't'. Extrapolates rather
- * than failing just outside the tabulated span, since sub-aperture centre times
- * can fall marginally outside it. Returns RS_ERR_MISSING_META on an empty
- * orbit table. */
-resonarsat_status_t rs_orbit_interp(const rs_orbit_t *orbit, double t,
-                                    rs_state_vector_t *out);
+/* THE 'doppler' AND 'orbit' FIELDS ABOVE ARE CARRIED, NOT USED.
+ *
+ * No reader populates either: neither the CPHD, SICD nor UAVSAR path writes a
+ * Doppler coefficient or a state vector, so both structures are zero on every
+ * product this software has ever read. rs_subaperture_split() copies them into
+ * each sub-look's metadata, which propagates zero to zero.
+ *
+ * A Lagrange orbit interpolator and a Horner Doppler evaluator lived here to
+ * consume them. Both were deleted in the 2026-08-02 review (docs/CODE-REVIEW.md
+ * finding 5): they were the only readers of the only fields nothing writes, so
+ * the whole chain was unreachable and untested, and this project has twice found
+ * that a documented, unexercised function does not do what its comment claims
+ * (FOLLOW-UPS.md items 27 and 28). Restore them from git when a reader actually
+ * fills the fields, and give them a fixture at the same time.
+ *
+ * The fields stay because the parse that would fill them is a real gap rather
+ * than a rejected idea, and because rs_slc_t is what a future reader writes into.
+ * Read them as reserved, not as available metadata. */
 
 /* Return a pointer to the first sample of azimuth line 'az'. No bounds check;
  * callers iterate over known dimensions. */

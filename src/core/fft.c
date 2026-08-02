@@ -36,12 +36,17 @@ resonarsat_status_t rs_fft_plan_create(size_t n, rs_fft_plan **out)
     }
 
     rs_fft_plan *p = calloc(1, sizeof *p);
-    if (!p) return RS_ERR_ALLOC;
+    if (!p) {
+        rs_set_error("fft: cannot allocate a plan for length %zu", n);
+        return RS_ERR_ALLOC;
+    }
 
     p->n = n;
     p->scratch = malloc(2 * n * sizeof *p->scratch);
     if (!p->scratch) {
         free(p);
+        rs_set_error("fft: cannot allocate the %zu-sample double scratch a "
+                     "length-%zu plan needs", 2 * n, n);
         return RS_ERR_ALLOC;
     }
 

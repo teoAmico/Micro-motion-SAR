@@ -32,6 +32,7 @@ static void demean(float complex *p, size_t n)
     for (size_t i = 0; i < n * n; i++) p[i] -= m;
 }
 
+/* Run every case in this file. */
 int main(void)
 {
     const size_t n = 32;

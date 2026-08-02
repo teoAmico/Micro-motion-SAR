@@ -24,6 +24,8 @@ resonarsat_status_t rs_phase_link(const float complex *sig,
     double complex *xn = calloc(n_sig, sizeof *xn);
     if (!gamma || !energy || !x || !xn) {
         free(gamma); free(energy); free(x); free(xn);
+        rs_set_error("phaselink: cannot allocate the %zux%zu coherence matrix and "
+                     "its eigenvector scratch", n_sig, n_sig);
         return RS_ERR_ALLOC;
     }
 
@@ -202,7 +204,11 @@ resonarsat_status_t rs_splitband_shift(const float complex *patch,
     resonarsat_status_t st = RS_OK;
 
     double *psd = rs_pl_mean_spectrum(patch, n_look, n_az, n_rg);
-    if (!psd) return RS_ERR_ALLOC;
+    if (!psd) {
+        rs_set_error("phaselink: cannot allocate the %zu-bin mean spectrum over "
+                     "%zu looks", n_az, n_look);
+        return RS_ERR_ALLOC;
+    }
 
     size_t lo = 0, hi = n_az - 1;
     rs_pl_occupied_band(psd, n_az, &lo, &hi);

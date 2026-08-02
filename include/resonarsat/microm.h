@@ -515,7 +515,39 @@ typedef struct {
      * longer an accumulated total: consecutive values are independent. */
     double *phase;              /* [n_win][n_looks], radians in (-pi, pi] */
 
-    double *quality;            /* [n_win], mean correlation peak in [0,1] */
+    /* [n_win] tracking quality in [0,1] -- BUT IT IS A DIFFERENT QUANTITY PER
+     * ESTIMATOR, and on one route it is not independent of 'd_a' below.
+     *
+     * Correlation and split-band: the mean correlation peak over the looks that
+     * produced a shift. That is the reading this field had for its first two
+     * years and is what --coherence was written to mask on.
+     *
+     * PHASE: amplitude STABILITY of the window's dominant pixel, 1 - sigma_A/mu_A
+     * -- because scoring a phase window by how constant its phase is would reward
+     * exactly the windows where nothing moves. rs_microm_track() argues that at
+     * the point it is computed.
+     *
+     * SO ON THE PHASE ROUTE THIS IS EXACTLY 1 - d_a. Both are computed from the
+     * same pixel -- the argmax of the reference-look patch -- over the same
+     * amplitudes, so they are complements to machine precision, confirmed on real
+     * collects (docs/CODE-REVIEW.md finding 1). Three consequences that are not
+     * obvious from either field alone:
+     *
+     *   - `--coherence F` on the phase route IS the criterion D_A <= 1 - F. The
+     *     default 0.4 is therefore D_A <= 0.60, a looser form of the same test
+     *     rs_spectrum_ps_window() applies at RS_PS_DA_MAX.
+     *   - The shared gate every selection policy applies, quality >= 0.5*q_max,
+     *     is on this route a SCENE-RELATIVE amplitude-dispersion gate.
+     *   - rs_spectrum_ps_window() is presented as the policy that reads different
+     *     evidence from the others. Against the correlation route it does; against
+     *     the phase route it reads the same evidence at a tighter threshold.
+     *
+     * None of that is a defect -- amplitude stability is the right precondition
+     * proxy for an observable that reads one scatterer's phase. It is recorded
+     * because a reader comparing a `quality` map against a `d_a` map on a phase
+     * run is looking at one measurement twice, and FOLLOW-UPS.md items 17 and 19
+     * report both halves as though they were separate diagnostics. */
+    double *quality;            /* [n_win] */
 
     /* [n_win] mean correlation-surface SNR, and the value that same surface
      * reaches on noise alone. Both zero for the estimators that never form a
@@ -589,7 +621,10 @@ typedef struct {
      * See FOLLOW-UPS.md item 23d.
      *
      * Zero-amplitude windows report D_A = RS_DA_MAX rather than a division by
-     * zero: an empty window is maximally dispersed, not perfectly stable. */
+     * zero: an empty window is maximally dispersed, not perfectly stable.
+     *
+     * ON THE PHASE ROUTE THIS IS EXACTLY 1 - quality, for the reasons set out on
+     * that field above. Read them together or one of them twice. */
     double *d_a;                /* [n_win] */
 
     /* [n_win] rms over looks of the one-sigma offset uncertainty in AZIMUTH,
@@ -1134,6 +1169,7 @@ typedef struct {
  * when nothing survives -- with the counts filled in, so the caller can still
  * see where the population went. */
 resonarsat_status_t rs_spectrum_ampcor_window(const rs_spectrum_t *spec,
+                                              unsigned char *out_state,
                                               rs_spectrum_cull_t *out);
 
 /* As rs_spectrum_ampcor_window(), with both tuned factors explicit.
@@ -1161,7 +1197,33 @@ resonarsat_status_t rs_spectrum_ampcor_window_opts(const rs_spectrum_t *spec,
                                                    double snr_factor,
                                                    double sigma_factor,
                                                    size_t min_neighbours,
+                                                   unsigned char *out_state,
                                                    rs_spectrum_cull_t *out);
+
+/* 'out_state', on both calls above, is a caller-supplied buffer of spec->n_win
+ * bytes, or NULL when the per-window detail is not wanted. Each byte receives
+ * what happened to that window:
+ *
+ *   0  did not enter -- failed the shared coherence gate or the quantisation
+ *      floor, so the cull never saw it
+ *   1  entered and was removed by gate 1 (surface SNR) or gate 2 (offset
+ *      uncertainty)
+ *   2  entered, cleared gates 1 and 2, and was removed by gate 3 (too few
+ *      agreeing four-neighbours)
+ *   3  survived all three
+ *
+ * It is cleared before any early return, so a caller sees "nothing entered"
+ * rather than uninitialised memory when the spectrum is rejected.
+ *
+ * WHY THIS EXISTS RATHER THAN LETTING A CALLER RECOMPUTE. mmotion's
+ * PREFIX_windows.csv used to derive its 'passed_cull' column from the recorded
+ * thresholds, which cannot reproduce gate 3 -- that gate reads a neighbourhood,
+ * and the recomputation had no way to reconstruct which windows had entered. The
+ * column therefore reported 170 survivors on a Giza run whose header said 65,
+ * because 105 windows were removed on neighbours and the column could not see
+ * it. See docs/CODE-REVIEW.md finding 2. The evidence file is the artefact this
+ * project asks a reader to consult before believing a summary line, so it has to
+ * carry the selector's own verdict rather than an approximation of it. */
 
 /* What selecting on amplitude dispersion found. See rs_spectrum_ps_window(). */
 typedef struct {
@@ -1325,19 +1387,5 @@ double rs_spectrum_subaperture_response(double t_sap, double freq);
 size_t rs_microm_recommend_looks(double vib_freq, double amp_los,
                                  double t_dwell, double lambda, double overlap);
 
-/* Return the largest line-of-sight velocity in m/s whose azimuth shift a
- * correlation window of 'win_px' pixels can measure without wrapping, given the
- * pixel spacing, slant range and platform speed.
- *
- * The azimuth shift of a radially moving target is dx = R*v_r/V, and a
- * correlation surface over an N-pixel window is unambiguous only over +/-N/2
- * pixels. Beyond that the measurement folds and reports a second harmonic. Which
- * limit applies depends on the reference mode: against look 0 the full excursion
- * must fit, whereas against the adjacent look only the change between samples
- * must, which is smaller by 2*pi*f*dt.
- *
- * Returns 0.0 for degenerate geometry. */
-double rs_microm_max_velocity(size_t win_px, double spacing_m,
-                              double slant_range, double v_platform);
 
 #endif /* RESONARSAT_MICROM_H */

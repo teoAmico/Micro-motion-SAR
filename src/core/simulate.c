@@ -81,6 +81,7 @@ resonarsat_status_t rs_simulate_static_like(const rs_cphd_t *ref, unsigned seed,
     if (!tx || !ty || !ta || !tp) {
         free(tx); free(ty); free(ta); free(tp);
         rs_cphd_free(out);
+        rs_set_error("simulate: cannot allocate scratch for %zu targets", n_target);
         return RS_ERR_ALLOC;
     }
 

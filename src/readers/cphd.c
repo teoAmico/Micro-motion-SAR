@@ -1012,6 +1012,11 @@ done:
     fclose(f);
     return st;
 
+/* No rs_set_error() here, deliberately: every 'goto io' sets one at the point
+ * of failure, where the specific detail is still in scope, and a message here
+ * would overwrite it with something vaguer. Adding a jump to this label without
+ * setting a message first would print an unrelated earlier failure's detail --
+ * see rs_clear_error(). */
 io:
     fclose(f);
     free(xml);
@@ -1067,7 +1072,11 @@ resonarsat_status_t rs_read_cphd_meta(const char *path, rs_cphd_meta_t *out)
         xml[size] = '\0';
     } else {
         /* The XML block on its own, which is what the data layout extracts. */
-        if (fseek(fp, 0, SEEK_END) != 0) { fclose(fp); return RS_ERR_IO; }
+        if (fseek(fp, 0, SEEK_END) != 0) {
+            fclose(fp);
+            rs_set_error("cphd-meta: cannot determine the size of %s", path);
+            return RS_ERR_IO;
+        }
         const long len = ftell(fp);
         if (len <= 0 || (unsigned long)len > RS_CPHD_XML_MAX) {
             fclose(fp);
@@ -1080,6 +1089,9 @@ resonarsat_status_t rs_read_cphd_meta(const char *path, rs_cphd_meta_t *out)
         rewind(fp);
         if (fread(xml, 1, (size_t)len, fp) != (size_t)len) {
             free(xml); fclose(fp);
+            rs_set_error("cphd-meta: %s is %ld bytes but only a short read "
+                         "succeeded -- a truncated download reads like this",
+                         path, len);
             return RS_ERR_IO;
         }
         xml[len] = '\0';

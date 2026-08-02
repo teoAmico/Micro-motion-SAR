@@ -209,6 +209,7 @@ static int write_cphd(const char *path, const char *damage)
     return 0;
 }
 
+/* Run every case in this file. */
 int main(void)
 {
     const char *dir = getenv("TMPDIR");

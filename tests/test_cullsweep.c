@@ -317,7 +317,7 @@ static resonarsat_status_t run_full(double freq, double amp, unsigned seed,
         const resonarsat_status_t s2 =
             rs_spectrum_ampcor_window_opts(&spec, SNR_FACTORS[i],
                                            RS_CULL_SIGMA_DEFAULT,
-                                           RS_CULL_MIN_NBR_DEFAULT, &cull_i);
+                                           RS_CULL_MIN_NBR_DEFAULT, NULL, &cull_i);
         out->cull_hz_f[i]   = (s2 == RS_OK) ? cull_i.freq_hz : -1.0;
         out->cull_surv_f[i] = cull_i.n_survivor;
     }
@@ -327,12 +327,12 @@ static resonarsat_status_t run_full(double freq, double amp, unsigned seed,
         const resonarsat_status_t s2 =
             rs_spectrum_ampcor_window_opts(&spec, RS_CULL_SNR_FACTOR_DEFAULT,
                                            RS_CULL_SIGMA_DEFAULT, NBR_MINS[i],
-                                           &cull_i);
+                                           NULL, &cull_i);
         out->cull_hz_n[i] = (s2 == RS_OK) ? cull_i.freq_hz : -1.0;
     }
 
     rs_spectrum_cull_t cull;
-    const resonarsat_status_t cst = rs_spectrum_ampcor_window(&spec, &cull);
+    const resonarsat_status_t cst = rs_spectrum_ampcor_window(&spec, NULL, &cull);
     /* The counts are filled in on the refusal path too, and are wanted there
      * most: they say which gate removed the population. */
     out->cull_input    = cull.n_input;
@@ -426,6 +426,7 @@ static void print_fit(const char *name, size_t n_ans, size_t n_dist,
     printf("  %-10s %8zu %9zu %10.3f %9.4f\n", name, n_ans, n_dist, slope, rms);
 }
 
+/* Run every case in this file. */
 int main(void)
 {
     const double amp = 0.020;

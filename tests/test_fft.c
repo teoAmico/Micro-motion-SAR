@@ -35,6 +35,7 @@ static void test_round_trip(size_t n)
     free(orig);
 }
 
+/* Run every case in this file. */
 int main(void)
 {
     RS_CASE("round trip, power of two");

@@ -159,7 +159,11 @@ resonarsat_status_t rs_focus_backproject_opts(const rs_cphd_t *cphd,
     const int RS_TAP_STEPS = 2048;
     if (taps > 0) {
         ktab = malloc((size_t)(RS_TAP_STEPS + 1) * (size_t)taps * sizeof *ktab);
-        if (!ktab) return RS_ERR_ALLOC;
+        if (!ktab) {
+            rs_set_error("focus: cannot allocate a %d x %d range-interpolator "
+                         "tap table", RS_TAP_STEPS + 1, taps);
+            return RS_ERR_ALLOC;
+        }
         for (int q = 0; q <= RS_TAP_STEPS; q++) {
             const double f = (double)q / (double)RS_TAP_STEPS;
             for (int t = -half_taps + 1; t <= half_taps; t++) {

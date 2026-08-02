@@ -110,7 +110,10 @@ resonarsat_status_t rs_fig_create(rs_fig_t *f, size_t w, size_t h,
     if (w == 0 || h == 0) return RS_ERR_ARG;
 
     unsigned char *px = malloc(w * h * 3u);
-    if (!px) return RS_ERR_ALLOC;
+    if (!px) {
+        rs_set_error("figure: cannot allocate a %zux%zu RGB canvas", w, h);
+        return RS_ERR_ALLOC;
+    }
 
     for (size_t i = 0; i < w * h; i++) {
         px[i * 3u + 0] = rgb[0];

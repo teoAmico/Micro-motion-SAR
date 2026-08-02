@@ -97,6 +97,25 @@ static resonarsat_status_t rs_ann_lookup_double(const char *path, const char *ke
     return RS_OK;
 }
 
+/* Look up the first of several spellings of one numeric annotation field.
+ *
+ * UAVSAR annotations name the same quantity differently across product
+ * generations -- "slc_1_1x1 Rows" against "Number of SLC Lines" is the case the
+ * dimension parse already handles inline. 'keys' is a NULL-terminated list tried
+ * in order; the first that parses wins. Returns RS_ERR_MISSING_META, naming the
+ * FIRST spelling, if none is present, so the message says what was wanted rather
+ * than reciting every alias. */
+static resonarsat_status_t rs_ann_lookup_any(const char *path, const char *const *keys,
+                                             double *out)
+{
+    for (size_t i = 0; keys[i]; i++) {
+        if (rs_ann_lookup_double(path, keys[i], out) == RS_OK) return RS_OK;
+    }
+    rs_set_error("uavsar: annotation %s has no '%s' field (nor any known alias)",
+                 path, keys[0]);
+    return RS_ERR_MISSING_META;
+}
+
 /* Read a UAVSAR SLC and its annotation into an image. */
 resonarsat_status_t rs_read_uavsar(const char *slc_path, const char *ann_path, rs_slc_t *img)
 {
@@ -155,7 +174,11 @@ resonarsat_status_t rs_read_uavsar(const char *slc_path, const char *ann_path, r
     /* Read row by row rather than in one call, so a truncated file is caught at
      * the row that fails instead of after a multi-gigabyte read. */
     float *row = malloc(n_rg * 2 * sizeof *row);
-    if (!row) { fclose(f); rs_slc_free(img); return RS_ERR_ALLOC; }
+    if (!row) {
+        fclose(f); rs_slc_free(img);
+        rs_set_error("uavsar: cannot allocate a %zu-sample line buffer", n_rg);
+        return RS_ERR_ALLOC;
+    }
 
     for (size_t a = 0; a < n_az; a++) {
         if (fread(row, sizeof *row, n_rg * 2, f) != n_rg * 2) {
@@ -178,7 +201,7 @@ resonarsat_status_t rs_read_uavsar(const char *slc_path, const char *ann_path, r
      * the along-track spacing and platform speed, from which the line interval
      * follows directly and consistently. */
     double az_spacing = 0.0, rg_spacing = 0.0, v_platform = 0.0;
-    double centre_freq = 0.0, r0 = 0.0, inc = 0.0;
+    double centre_freq = 0.0;
 
     if ((st = rs_ann_lookup_double(ann_path, "1x1 SLC Azimuth Pixel Spacing",
                                    &az_spacing)) != RS_OK &&
@@ -193,11 +216,9 @@ resonarsat_status_t rs_read_uavsar(const char *slc_path, const char *ann_path, r
         return st;
     }
 
-    /* These three are optional: absent ones leave sensible fallbacks rather
-     * than failing, since a product missing platform speed is still usable for
-     * anything that does not need absolute geometry. */
-    if (rs_ann_lookup_double(ann_path, "Average Altitude", &r0) != RS_OK) r0 = 0.0;
-    if (rs_ann_lookup_double(ann_path, "Global Average Terrain Height", &inc) != RS_OK) inc = 0.0;
+    /* These are optional: absent ones leave the field unset rather than failing,
+     * since a product missing platform speed is still usable for anything that
+     * does not need absolute geometry. */
     if (rs_ann_lookup_double(ann_path, "Average Along Track Velocity", &v_platform) != RS_OK)
         v_platform = 0.0;
     if (rs_ann_lookup_double(ann_path, "Center Frequency", &centre_freq) != RS_OK)
@@ -206,11 +227,61 @@ resonarsat_status_t rs_read_uavsar(const char *slc_path, const char *ann_path, r
     /* UAVSAR annotations state the centre frequency in MHz. */
     if (centre_freq < 1e6) centre_freq *= 1e6;
 
+    /* SLANT RANGE, DERIVED -- AND NEVER THE PLATFORM ALTITUDE.
+     *
+     * This assigned `Average Altitude` straight into r0 for two years.
+     * rs_slc_t.r0 is documented as a SLANT RANGE and an altitude is a HEIGHT:
+     * at UAVSAR's ~12.5 km flight altitude and look angles from about 20 to 65
+     * degrees the near-range slant distance is 13 to 30 km, so the field was low
+     * by a factor of one to two and the error grew across the swath. It reached
+     * rs_geo_slant_to_ground() and the sub-look ambiguity ceiling, both of which
+     * consume r0 and neither of which can notice a plausible wrong value. See
+     * docs/CODE-REVIEW.md finding 3 and FOLLOW-UPS.md item 5.
+     *
+     * The geometry the annotation does support: the platform sits at
+     * 'altitude', the reference surface at 'terrain', and the beam leaves at
+     * 'look' from nadir, so the slant range to that surface is
+     *
+     *     R = (altitude - terrain) / cos(look)
+     *
+     * TWO APPROXIMATIONS, BOTH STATED RATHER THAN BURIED. This is the range at
+     * the scene's average look angle, not to the first range sample -- so it
+     * carries the SICD reader's convention rather than the one slc.h documents,
+     * which is the open half of FOLLOW-UPS.md item 5 and is not resolved here.
+     * And it is flat-earth: for a platform at 12.5 km the look angle and the
+     * incidence angle differ by well under a tenth of a degree, where for an
+     * orbital sensor they differ by several, so the same substitution would be
+     * wrong for CPHD and is admissible only because this reader is airborne.
+     *
+     * If any of the three fields is missing, r0 stays ZERO rather than being
+     * guessed. Consumers already treat a non-positive r0 as absent, and the
+     * whole lesson of the defect above is that a plausible wrong geometry is
+     * worse than a missing one. */
+    static const char *const alt_keys[]  = { "Average Altitude", NULL };
+    static const char *const terr_keys[] = { "Global Average Terrain Height",
+                                             "Average Terrain Height", NULL };
+    static const char *const look_keys[] = { "Global Average Look Angle",
+                                             "Average Look Angle", NULL };
+    double altitude_m = 0.0, terrain_m = 0.0, look_deg = 0.0;
+    const int have_alt  = (rs_ann_lookup_any(ann_path, alt_keys,  &altitude_m) == RS_OK);
+    const int have_terr = (rs_ann_lookup_any(ann_path, terr_keys, &terrain_m)  == RS_OK);
+    const int have_look = (rs_ann_lookup_any(ann_path, look_keys, &look_deg)   == RS_OK);
+
+    double slant_m = 0.0, incidence_rad = 0.0;
+    if (have_look && look_deg > 0.0 && look_deg < 90.0) {
+        incidence_rad = look_deg * M_PI / 180.0;
+        if (have_alt) {
+            const double height = altitude_m - (have_terr ? terrain_m : 0.0);
+            if (height > 0.0) slant_m = height / cos(incidence_rad);
+        }
+    }
+
     img->fc = centre_freq;
     img->az_spacing_m = az_spacing;
     img->rg_spacing_m = rg_spacing;
     img->v_platform = v_platform;
-    img->r0 = (r0 > 0.0) ? r0 : 0.0;
+    img->r0 = slant_m;
+    img->incidence = incidence_rad;
 
     /* Derive the azimuth line interval from spacing and speed. If the platform
      * speed is unavailable, fall back to a nominal UAVSAR value so the image is
@@ -230,8 +301,13 @@ resonarsat_status_t rs_read_uavsar(const char *slc_path, const char *ann_path, r
 
     if ((st = rs_slc_finalise_metadata(img)) != RS_OK) { rs_slc_free(img); return st; }
 
-    snprintf(img->source, sizeof img->source, "UAVSAR%s",
-             assumed_speed ? " (assumed platform speed)" : "");
+    /* Say what was assumed and what could not be derived, because both change
+     * how far the geometry can be trusted and neither is visible in the numbers.
+     * A zero r0 in particular reads as "unset" only if something says so. */
+    snprintf(img->source, sizeof img->source, "UAVSAR%s%s",
+             assumed_speed ? " (assumed platform speed)" : "",
+             (slant_m > 0.0) ? " (slant range derived from look angle)"
+                             : " (no slant range: needs altitude and look angle)");
 
     if ((st = rs_slc_validate(img)) != RS_OK) {
         /* Validation failure is reported but not fatal for a reader: the

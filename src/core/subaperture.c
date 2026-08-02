@@ -234,7 +234,12 @@ resonarsat_status_t rs_subaperture_split(const rs_slc_t *img,
      * relative to the Doppler centroid. */
     double *centre = malloc(n_looks * sizeof *centre);
     double *width  = malloc(n_looks * sizeof *width);
-    if (!centre || !width) { free(centre); free(width); return RS_ERR_ALLOC; }
+    if (!centre || !width) {
+        free(centre); free(width);
+        rs_set_error("subaperture: cannot allocate band centres and widths for "
+                     "%zu looks", n_looks);
+        return RS_ERR_ALLOC;
+    }
 
     double t_sap = 0.0;
 
@@ -345,6 +350,8 @@ resonarsat_status_t rs_subaperture_split(const rs_slc_t *img,
     if (!stack->look || !stack->centre_time || (params->pair && !stack->slave)) {
         free(centre); free(width);
         rs_subap_stack_free(stack);
+        rs_set_error("subaperture: cannot allocate a %zu-look stack%s",
+                     n_looks, params->pair ? " with slave bands" : "");
         return RS_ERR_ALLOC;
     }
     for (size_t i = 0; i < n_looks; i++) {
@@ -551,6 +558,7 @@ resonarsat_status_t rs_subaperture_from_cphd(const struct rs_cphd *cphd_in,
     stack->centre_time = calloc(n_looks, sizeof *stack->centre_time);
     if (!stack->look || !stack->centre_time) {
         rs_subap_stack_free(stack);
+        rs_set_error("subaperture: cannot allocate a %zu-look stack", n_looks);
         return RS_ERR_ALLOC;
     }
 
@@ -661,6 +669,8 @@ resonarsat_status_t rs_subaperture_from_cphd_stream(const char *path,
         free(start); free(r0); free(vp); free(acc);
         rs_cphd_free(&geo);
         rs_subap_stack_free(stack);
+        rs_set_error("subaperture: cannot allocate the streaming accumulators for "
+                     "%zu looks", n_looks);
         return RS_ERR_ALLOC;
     }
 

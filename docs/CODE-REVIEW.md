@@ -1,0 +1,331 @@
+# Code review
+
+Findings from reading the implementation against its own documentation. Each
+entry says what was wrong, how it was established, and what was done.
+Unlike `FOLLOW-UPS.md`, which records what has been *measured*, this file records
+what has been *read* -- defects visible in the source, in the documentation of
+record, or in the artefacts a run leaves behind.
+
+Entries are removed once the fix has been in the tree long enough that nobody
+would reintroduce them from memory. The reasoning behind a fix lives in the
+commit and beside the code; what is kept here is the *shape* of the mistake,
+because several of these are patterns rather than incidents.
+
+## Reviews performed
+
+| date | commit | scope | outcome |
+|---|---|---|---|
+| 2026-08-02 | `6d42f29` | Full sweep: `docs/FOLLOW-UPS.md` against the source; every `.c` and `.h` under `src/`, `include/`, `tools/`, `tests/`; CLI flags against `USER_GUIDE.md`; committed run artefacts under `runs/` | 21/21 tests pass. Two pre-existing compiler warnings found (see the correction below). Eleven findings, all fixed in the same change; two new test cases pin the substantive one. |
+
+What that review did **not** cover, so nobody reads more into it than was done:
+no ASAN or UBSAN run, no fuzzing of the readers, no re-execution of any
+`FOLLOW-UPS` measurement, and no review of `third_party/pocketfft`.
+
+### A correction to this file's own first draft
+
+The first version of this review said the build was clean under
+`-Wall -Wextra -Wshadow -Wconversion`. **It was not.** That claim came from an
+incremental build in which the two files carrying warnings had nothing to
+recompile, so the warnings were never re-emitted and the grep found nothing. A
+clean-tree rebuild showed two:
+
+```
+src/main.c:2371       unused function 'rs_parse_offsets'      [-Wunused-function]
+tests/test_tracking.c:1801  declaration shadows a local variable  [-Wshadow]
+```
+
+Both predate this review, confirmed by rebuilding the stashed tree. Both are now
+fixed. The lesson is the one this project already writes down about processing
+runs and applies equally to its own tooling: **an incremental result is not a
+measurement of the whole.** Verify a build claim against a clean tree, the same
+way `--null-static` exists because a result read off one configuration says
+nothing about another.
+
+---
+
+## Fixed in this review
+
+### 1. On the phase route, `quality` and `d_a` were the same number, undocumented
+
+`src/core/microm.c` computes amplitude dispersion at the brightest pixel of the
+reference-look patch, and then, for the phase estimator, computes
+`q = 1 - sigma_A/mu_A` from the same pixel and the same amplitudes. The two are
+exact complements, and the identity holds to machine precision on committed
+real-data runs:
+
+```
+runs/giza/2026-08-02-inject-sweep/sweep_0.163_windows.csv
+  quality=0.255033  d_a=0.744967  1-d_a=0.255033   diff  5.6e-17
+  quality=0.290199  d_a=0.709801  1-d_a=0.290199   diff  5.6e-17
+  quality=0.039791  d_a=0.960209  1-d_a=0.039791   diff  2.0e-13
+```
+
+Three consequences, none of them recorded anywhere:
+
+- `--coherence F` on the phase route **is** the criterion `D_A <= 1 - F`. The
+  default 0.4 is `D_A <= 0.60` -- a looser form of the test
+  `rs_spectrum_ps_window()` applies at 0.25.
+- The shared gate every policy applies, `quality >= 0.5 * q_max`, is on that
+  route a scene-relative amplitude-dispersion gate.
+- `rs_spectrum_ps_window()` is presented as the policy reading evidence the
+  others do not. Against correlation it does; against phase it reads the same
+  evidence at a tighter threshold.
+
+`microm.h` documented `quality` as "mean correlation peak in `[0,1]`", true only
+for correlation and split-band, and the eighty-line block on `d_a` beside it
+never mentioned the relationship.
+
+**Fixed** by documenting the identity on both fields in `microm.h`, restating
+`--coherence` per estimator in the `mmotion` help, and adding the same to
+`USER_GUIDE.md` section 9. The arithmetic is unchanged: amplitude stability is
+the right precondition proxy for an observable that reads one scatterer's phase,
+and `rs_microm_track()` argues that where it is computed. What was wrong was the
+description, and the fact that a reader comparing a `quality` map against a
+`d_a` map was looking at one measurement twice.
+
+### 2. `passed_cull` in `PREFIX_windows.csv` disagreed with its own header
+
+The column was recomputed per row from the recorded thresholds, which cannot
+express gate 3 -- the neighbourhood test needs to know which windows *entered*
+the cull, and a per-row recomputation does not have that. Both committed Giza
+runs:
+
+```
+run                                   header said          column summed to
+2026-08-01-phase-highoverlap   input=170 survivors=65        passed_cull=170
+                               neigh_cull=105
+2026-08-02-inject-sweep 0.163  input=136 survivors=47        passed_cull=136
+                               neigh_cull=89
+```
+
+105 and 89 windows marked as surviving a cull that removed them, in the artefact
+`CLAUDE.md` calls "the evidence file written beside every run so a later question
+about the selection policy can be asked without reprocessing" and that item 30's
+retraction turns on having read.
+
+**Fixed** by giving `rs_spectrum_ampcor_window()` and
+`rs_spectrum_ampcor_window_opts()` an optional `out_state` buffer carrying each
+window's fate (0 did not enter, 1 culled by gates 1-2, 2 culled by gate 3, 3
+survived). `mmotion` writes the selector's verdict rather than an approximation,
+and records `passed_cull_source` and `expected_sum` in the header so a reader
+summing the column knows what it should sum to. Verified on a fresh run with
+`neigh_cull=5`: the column sums to 0 against `survivors=0`, where the old code
+printed 6.
+
+### 3. The UAVSAR reader filled `r0` from the platform's altitude
+
+`readers/uavsar.c` read the annotation field `Average Altitude` into `img->r0`,
+documented in `slc.h` as "slant range of first range sample, m". An altitude is
+not a slant range: at UAVSAR's ~12.5 km flight altitude and look angles from
+about 20 to 65 degrees the near-range slant distance is 13 to 30 km, so the field
+was low by a factor of one to two and the error grew across the swath. It reached
+`rs_geo_slant_to_ground()` and the sub-look ambiguity ceiling -- the two consumers
+`FOLLOW-UPS.md` item 5 already names as where an `r0` error propagates invisibly.
+
+Item 5 recorded the opposite, stating that UAVSAR held the documented meaning and
+only SICD deviated. There were three conventions in play, not two, and item 5's
+two proposed fixes both assumed the wrong baseline.
+
+**Fixed** by deriving the slant range from geometry the annotation does support,
+`R = (altitude - terrain) / cos(look)`, with both approximations stated in the
+code: it is the range at the scene's average look angle rather than to the first
+sample, and the look-for-incidence substitution is admissible only because this
+reader is airborne. If any field is missing, `r0` stays **zero** rather than
+guessed, and `img->source` says so. `FOLLOW-UPS.md` item 5 is corrected.
+`tests/test_readers.c` pins the derived value, the incidence, that the answer
+exceeds 1.2x the altitude, and that absent geometry leaves the field unset.
+
+### 4. The same reader parsed a terrain height into a variable named `inc`
+
+`readers/uavsar.c` filled a local named `inc` from `Global Average Terrain
+Height` and never read it again, so `img->incidence` was zero for every UAVSAR
+product and `rs_slc_validate()` permits zero explicitly.
+
+Two defects in four lines. The dead store was harmless; a metre quantity read
+into a variable named for a radian one, in the codebase whose comment rule exists
+because it is full of dimensionally interchangeable quantities, was not. Had the
+assignment been completed, `cos(incidence)` would have been taken of a height in
+metres. `-Wall -Wextra` could not see it: the variable is "used" as the address
+of an out-parameter.
+
+**Fixed** with finding 3 -- `img->incidence` now carries the look angle in
+radians when the annotation provides it, and nothing reads a height into it.
+
+### 5. Seven exported functions were never called
+
+Defined, declared in a public header, referenced from no `.c` file anywhere.
+Decided per symbol rather than in bulk:
+
+| symbol | outcome |
+|---|---|
+| `rs_dopp_poly_eval` | **deleted** |
+| `rs_orbit_interp` | **deleted** |
+| `rs_microm_max_velocity` | **deleted** -- `validate`'s ambiguity check derives the same quantity, and two derivations of one number is how they diverge |
+| `rs_palette_from_name` | **deleted** -- it resolved a `--palette` option that does not exist |
+| `rs_geo_project_to_height` | **kept** -- a documented seam paired with the unimplemented range-Doppler locator, whose "what this is not sufficient for" analysis is the valuable part |
+| `rs_fft_plan_length`, `rs_slc_row` | **kept** -- one-line accessors that complete an interface and assert nothing |
+
+The first two were the larger finding. `rs_dopp_poly_t` and `rs_orbit_t` are
+**never populated by any reader** -- no CPHD, SICD or UAVSAR path writes a
+Doppler coefficient or a state vector -- so both structures are zero on every
+product this software has read, and `rs_subaperture_split()` propagates zero to
+zero. The two functions were the only readers of fields nothing writes, making
+the whole chain unreachable and untested. This project has twice found that a
+documented, unexercised function does not do what its comment claims
+(`FOLLOW-UPS.md` items 27 and 28), which is the argument against keeping such
+code on the grounds that it looks correct. The struct fields stay, marked
+reserved in `slc.h`, because the parse that would fill them is a real gap rather
+than a rejected idea.
+
+Also deleted: `rs_parse_offsets` in `src/main.c`, a leftover of the removed
+tomography sweep, together with four orphaned comment blocks documenting
+functions that no longer exist.
+
+### 6. Failure returns with no message printed a *stale* one
+
+`CLAUDE.md` states the convention without qualification: every fallible function
+calls `rs_set_error()` immediately before returning non-OK. `rs_error_buf` is
+never cleared, so a return that skips it does not print "no detail" -- it prints
+the detail of an unrelated earlier failure, in parentheses, as though it applied.
+`validate --xml` on a truncated block gave `I/O error (<whatever failed last>)`.
+
+104 sites returned non-OK with no message within six lines. 76 were `if (!ptr)`
+guards against programmer error and are left alone. The other 28 were reachable
+at runtime.
+
+**Fixed both ways, because they are not alternatives.** All 28 now carry a
+message naming the sizes or the file involved, except `cphd.c`'s `io:` label,
+whose single `goto` sets one at the point of failure and which is now commented
+to say a message here would overwrite a better one. And `rs_clear_error()` was
+added and is called at CLI entry, so an uncovered site degrades to a bare status
+rather than a wrong sentence. Covering the sites is better; the clear is the
+floor under the next one somebody forgets.
+
+### 7. `PREFIX_windows.csv` recorded no run provenance
+
+Not the estimator, the overlap, the look count, the reference mode or the
+injection. Item 30's sweep left six such files distinguished only by the filename
+the operator chose. `FOLLOW-UPS.md` item 7 records the same class of defect found
+by hand -- `--shifts` writing `reference=first` for a `--reference lag` run --
+and closes with the observation that nothing in the suite checks a run's recorded
+provenance against what produced it.
+
+**Fixed:** two header lines now record estimator, reference, looks, overlap,
+`dt`, `t_sap`, window and stride, upsample, coherence threshold, and whether
+`--inject-vib` was used.
+
+Item 7 also cited the fix as landing at `main.c:1469` and `main.c:2205`, one of
+them "the `.meta` sidecar". No such sidecar exists and there was one label site.
+Corrected in `FOLLOW-UPS.md`.
+
+### 8. `docs_coverage` skipped `tests/` and vanished silently without Python
+
+The check ran over `src/` and `tools/` only, leaving `tests/` -- 6100 lines
+including `rs_sim.h` and `rs_test.h`, the fixture generator and scoring harness
+every claim in `FOLLOW-UPS.md` was measured through -- outside the rule. Run
+against it, 16 functions lacked the required comment. `include/` passed clean.
+
+Separately, the test was wrapped in `if(Python3_Interpreter_FOUND)` with no
+`else`, so without an interpreter the suite quietly became 20 tests while `ctest`
+still reported success and both `CLAUDE.md` and the user guide said 21.
+
+**Fixed:** `tests` added to the scanned roots, the 16 functions documented, and a
+CMake warning added on the skip path. `check_docs.py` also cited
+`IMPLEMENTATION_PLAN.md section 3a` in its docstring and in the message printed
+to a developer at the moment the test fails; that file is not in the repository,
+and the citation now points at `CLAUDE.md`.
+
+### 9. `FOLLOW-UPS.md` cited three documents not in the repository
+
+`IMPLEMENTATION-VERIFICATION.md` (items 2 and 10), `POSITIVE-CONTROL.md` (item 6)
+and `MODIFIED-BACKPROJECTION.md` (item 4) were development notes kept local,
+which is what the `docs/` allow-list is for. The cost is that a reader outside
+this working copy cannot follow a citation that load-bearing -- item 4's whole
+numerical argument rests on a second-hand summary of one of them.
+
+**Fixed** by marking each `[local note, not in the repository]`, so the reference
+reads as unavailable rather than as a file the reader failed to find. Whether
+those notes should be tracked is a separate decision and is still open.
+
+### 10. Stale counts and claims in the user-facing documentation
+
+| where | said | now |
+|---|---|---|
+| `CLAUDE.md`, `USER_GUIDE.md` | `microm.h` is 944 lines for ~10 declarations | 1343 lines, 17 declarations |
+| `USER_GUIDE.md` opening | "Nothing has passed [the bar] on real data" | states item 30: the *tracker* met it, every policy discarded the result, so nothing that **reports** has |
+| `USER_GUIDE.md` section 6 | output-line table | the `persistent scatterers:` row was missing |
+| `USER_GUIDE.md` section 9 | `--coherence` masks windows that do not correlate | qualified per estimator, per finding 1 |
+| `CLAUDE.md` | "thirteen arithmetic checks" | fourteen checks, thirteen arithmetic, with `RS_VALIDATE_GROUND_TRUTH` named as the one that always reports unknown |
+
+Ten flags were documented in the tool's `--help` and nowhere in `USER_GUIDE.md`.
+A table now covers `--no-detrend`, `--b-shift`, `--null-trials`, `--range-taps`,
+`--pulse-start`, `--dyn-range`, `--ccd-win`, `--ccd-loading`, `--amplitude` and
+`--alpha`.
+
+### 11. Two things in the numerical core
+
+`src/core/coreg.c` computed `*peak = (ref_mag / n) / norm * n` under a comment
+saying the direct evaluation had to be scaled against the inverse transform's
+`1/n`. The two factors cancel, so the comment described an operation the
+expression did not perform -- and the round trip is not a no-op in floating point
+unless `n = n_az * n_rg` is a power of two, which it need not be. This project
+bans `-ffast-math` because reassociation perturbs exactly this quantity.
+**Fixed** to `ref_mag / norm`, with the Parseval argument for why no scaling is
+needed written where the wrong claim used to be.
+
+Related, in the same function: `ref_mag` was seeded from `best_mag`, which comes
+off the inverse transform at `1/n` of the scale every later comparison uses, so
+the seed could never win and was an unreachable fallback. **Fixed** to `-1.0`, so
+the first lattice evaluation wins outright -- the lattice contains the coarse
+offset, so nothing is lost, and the curvature code below now always has a grid
+point for the winner.
+
+`sigma_rg_px` is computed by `rs_coreg_shift_impl()` and read only by
+`tests/test_coreg.c`. **Left as is**: `microm.h` states the reason -- "azimuth
+alone because azimuth is the observable" -- so this is a documented choice, and
+the cost is one curvature evaluation in the innermost loop.
+
+---
+
+## Checked and found clean
+
+Recorded so a later reviewer knows what not to redo.
+
+- **Build.** Clean under `-Wall -Wextra -Wshadow -Wconversion` at `-O2`,
+  **verified against a clean tree** rather than an incremental one. No unused
+  functions, no unused variables, no shadowing, no flagged conversions.
+- **Tests.** 21/21 pass in Release, ~195 s.
+- **No unfinished-work markers.** No `TODO`, `FIXME`, `XXX` or `HACK` anywhere.
+  The two occurrences of "unimplemented" (`subaperture.c`, `geocode.h`) are both
+  deliberate non-implementations with the reasoning recorded and the seam marked.
+- **Symbol citations.** Every `rs_*` symbol named in `FOLLOW-UPS.md` exists.
+  Every flag named in `USER_GUIDE.md` exists in `src/main.c` or in
+  `tools/sarpy_crosscheck.py`.
+- **Header coverage.** `check_docs.py` over `include/` reports nothing.
+- **Error-handling structure.** Every fallible function returns
+  `resonarsat_status_t`; no library code prints; the error buffer is
+  `_Thread_local` and safe inside the OpenMP regions in `rs_microm_track()` and
+  `rs_focus_backproject_opts()`.
+- **Selection-policy gates.** The four duplicated copies of the shared gate are
+  equivalent in effect. The duplication is deliberate and argued in `spectrum.c`.
+- **Constants against their documentation.** `RS_CULL_SNR_FACTOR`,
+  `RS_CULL_SIGMA_FACTOR`, `RS_CULL_MIN_NEIGHBOURS`, `RS_PS_DA_MAX`, `RS_DA_MAX`,
+  `RS_COREG_SIGMA_MAX` and `RS_COREG_MAX_SURFACE` all match the values their
+  headers and the `FOLLOW-UPS` sweeps quote.
+
+## Open, deliberately
+
+Not defects, but decisions a later reader should know were made rather than
+missed.
+
+- **`rs_slc_t.r0` still means two things.** SICD holds a scene-centre slant
+  range; UAVSAR now holds a look-angle-derived range to the reference surface,
+  which is the same convention. Neither is the first-sample range `slc.h`
+  documents. `FOLLOW-UPS.md` item 5's rename is still the fix and is still not
+  done.
+- **The orbit and Doppler parse does not exist.** Finding 5 removed the dead
+  consumers; nothing fills the fields. That is a gap in the readers, not
+  something the deletion resolved.
+- **`--reference pair`, `adjacent` and `lag`, and `--estimator splitband`,
+  recover nothing** and are exposed because the sources describe them. Unchanged
+  by this review.

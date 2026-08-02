@@ -483,7 +483,50 @@ int main(void)
         RS_CHECK(none != NULL && none->level == RS_V_UNKNOWN);
     }
 
-    RS_CASE("the default estimator is correlation, so old callers are unaffected");
+    RS_CASE("the pulse route is exempt from the grid-width requirement");
+    {
+        /* The check's message had always said "The pulse route is exempt" and
+         * then returned FAIL anyway, because nothing told it which route the run
+         * would take. On the Istanbul collect at 0.90 overlap that meant a pulse
+         * run -- mmotion's default -- got VERDICT: FAIL from a requirement it is
+         * exempt from. Item 16's defect one layer down. */
+        rs_validate_req_t r;
+        giza(&r);
+        r.target_freq_hz = 2.0;
+        r.overlap = 0.90;
+        r.alpha = 0.0067;          /* many looks, so the spectral route wants a
+                                    * grid far wider than any run would use */
+        r.grid_n = 512;
+
+        /* Copied, not pointed at: find() returns into 'f', which the second
+         * rs_validate() call overwrites. Printing both pointers afterwards
+         * showed the same string twice and looked like the flag being ignored. */
+        r.route = RS_VALIDATE_ROUTE_SPECTRAL;
+        rs_validate(&r, f, &n);
+        const rs_validate_finding_t *found = find(f, n, RS_VALIDATE_GRID);
+        RS_CHECK(found != NULL);
+        const rs_validate_finding_t spectral = *found;
+
+        r.route = RS_VALIDATE_ROUTE_PULSE;
+        rs_validate(&r, f, &n);
+        found = find(f, n, RS_VALIDATE_GRID);
+        RS_CHECK(found != NULL);
+        const rs_validate_finding_t pulse = *found;
+
+        printf("    spectral: %s\n    pulse:    %s\n",
+               spectral.detail, pulse.detail);
+        RS_CHECK(spectral.level == RS_V_FAIL);
+        RS_CHECK(pulse.level == RS_V_PASS);
+        const rs_validate_finding_t *pu = &pulse;
+
+        /* A PASS and not an UNKNOWN: the requirement does not exist for this
+         * route, which is an answer. The phase route's sensitivity floor is a
+         * question this command cannot answer at all, and reports UNKNOWN. The
+         * two cases are different and must not print the same. */
+        RS_CHECK(pu->level != RS_V_UNKNOWN);
+    }
+
+    RS_CASE("the defaults are the pulse route and the correlation estimator");
     {
         /* rs_validate_req_default() must keep answering for the correlator: a
          * caller that predates the field gets the behaviour its results were
@@ -491,6 +534,9 @@ int main(void)
         rs_validate_req_t r;
         rs_validate_req_default(&r);
         RS_CHECK(r.estimator == RS_MICROM_EST_CORRELATION);
+        /* rs_build_subaps() takes the pulse route when --subap is absent, and a
+         * screen that assumed otherwise would refuse the default run. */
+        RS_CHECK(r.route == RS_VALIDATE_ROUTE_PULSE);
     }
 
     RS_TEST_END();

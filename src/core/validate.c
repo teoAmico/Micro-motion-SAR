@@ -125,14 +125,23 @@ void rs_validate_req_default(rs_validate_req_t *req)
 {
     if (!req) return;
     memset(req, 0, sizeof *req);
+    /* EVERY DEFAULT HERE MIRRORS WHAT mmotion ACTUALLY RUNS, and where it did
+     * not the screen judged a configuration nobody would use: 'grid_n' was 512
+     * against mmotion's --size default of 128, and 'upsample' was 40 against a
+     * tracker default of 10, which made the sensitivity check quote an
+     * interpolation limit four times finer than the run would reach. A screen
+     * whose defaults differ from the tool's is answering about a different run.
+     * 'alpha' has no counterpart -- mmotion takes a look count, not an aperture
+     * fraction -- so --n derives it; see rs_cmd_validate(). */
     req->alpha = 0.05;
-    req->overlap = 0.40;
-    req->upsample = 40;
-    req->cell_m = 1.0;
-    req->grid_n = 512;
-    req->win = 32;
+    req->overlap = 0.40;         /* mmotion --overlap */
+    req->upsample = 10;          /* rs_microm_params_default() upsample_az */
+    req->cell_m = 1.0;           /* mmotion --cell */
+    req->grid_n = 128;           /* mmotion --size */
+    req->win = 32;               /* mmotion --win */
     req->coherence_min = 0.40;   /* rs_microm_params_default() */
     req->estimator = RS_MICROM_EST_CORRELATION;   /* likewise */
+    req->route = RS_VALIDATE_ROUTE_PULSE;         /* rs_build_subaps() default */
 }
 
 /* Run every check and write the findings. */
@@ -249,12 +258,26 @@ rs_validate_level_t rs_validate(const rs_validate_req_t *req,
         /* The spectral route splits a focused image and needs twice as many
          * azimuth lines as looks. The pulse route has no such constraint. */
         const size_t need = (size_t)(2.0 * n_looks + 0.5);
+        /* The exemption is real and is now honoured rather than merely stated.
+         * A pass, not an UNKNOWN: the requirement does not exist for this route,
+         * which is an answer, where the phase route's sensitivity floor is a
+         * question this check cannot answer at all. */
+        if (req->route != RS_VALIDATE_ROUTE_SPECTRAL) {
+            WORST(rs_v_add(out, &n, RS_VALIDATE_GRID, RS_V_PASS, "grid width",
+                  "the pulse route backprojects each pulse window separately "
+                  "rather than splitting a focused image, so the spectral "
+                  "route's n_az >= 2*n_looks = %zu requirement does not apply. "
+                  "--size %zu would %s it were the run taking that route.",
+                  need, req->grid_n,
+                  (req->grid_n >= need) ? "have been enough if" : "NOT be enough if"));
+        } else {
         WORST(rs_v_add(out, &n, RS_VALIDATE_GRID,
               (req->grid_n >= need) ? RS_V_PASS : RS_V_FAIL, "grid width",
               "the uniform spectral route needs n_az >= 2*n_looks = %zu; "
               "--size %zu %s. The pulse route is exempt.",
               need, req->grid_n,
               (req->grid_n >= need) ? "is enough" : "is NOT enough"));
+        }
     }
 
     /* ---- the observation ratio, which is the ghost-resolution limit ------- */

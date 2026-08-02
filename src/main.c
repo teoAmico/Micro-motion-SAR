@@ -2084,6 +2084,8 @@ static int rs_cmd_validate(int argc, char **argv)
                "                           [--overlap F] [--upsample N]\n"
                "                           [--cell M] [--size N]\n"
                "                           [--estimator correlation|phase|splitband]\n"
+               "                           [--subap pulse|uniform|paper]\n"
+               "                           [--n LOOKS]\n"
                "\n"
                "--estimator picks which observable the checks are answered\n"
                "for, and four of them differ. The band ceiling is the\n"
@@ -2152,6 +2154,20 @@ static int rs_cmd_validate(int argc, char **argv)
             else if (strcmp(est, "splitband") == 0)   req.estimator = RS_MICROM_EST_SPLITBAND;
             else fprintf(stderr, "warning: unknown --estimator '%s'; "
                                  "validating for correlation\n", est);
+        }
+    }
+
+    /* And which sub-aperture route, for RS_VALIDATE_GRID. Same vocabulary as
+     * mmotion's --subap so the flag can be copied straight across. */
+    {
+        const char *route = rs_opt(argc, argv, "--subap");
+        if (route) {
+            if (strcmp(route, "uniform") == 0 || strcmp(route, "paper") == 0)
+                req.route = RS_VALIDATE_ROUTE_SPECTRAL;
+            else if (strcmp(route, "pulse") == 0)
+                req.route = RS_VALIDATE_ROUTE_PULSE;
+            else fprintf(stderr, "warning: unknown --subap '%s'; "
+                                 "validating for the pulse route\n", route);
         }
     }
 
@@ -2296,8 +2312,25 @@ static int rs_cmd_validate(int argc, char **argv)
 have_geometry:
     req.target_freq_hz = rs_opt_double(argc, argv, "--frequency", 0.0);
     req.target_amp_m   = rs_opt_double(argc, argv, "--amplitude", 0.0) / 1000.0;
-    req.alpha    = rs_opt_double(argc, argv, "--alpha", req.alpha);
     req.overlap  = rs_opt_double(argc, argv, "--overlap", req.overlap);
+
+    /* ALPHA FROM THE LOOK COUNT, because mmotion has no --alpha and a user
+     * should not have to convert by hand between the two commands. With N looks
+     * at fractional overlap f spanning a dwell T, consecutive sub-apertures step
+     * by t_sap*(1-f) and the last one ends at T, so
+     *
+     *     T = t_sap * (1 + (N-1)*(1-f))   ->   alpha = t_sap/T = 1/(1+(N-1)(1-f))
+     *
+     * which is exactly what rs_subaperture_from_cphd() solves for the pulse
+     * window. --alpha still overrides, for callers reasoning in the published
+     * literature's units. */
+    {
+        const double n_looks = rs_opt_double(argc, argv, "--n", 0.0);
+        if (n_looks >= 2.0 && req.overlap < 1.0) {
+            req.alpha = 1.0 / (1.0 + (n_looks - 1.0) * (1.0 - req.overlap));
+        }
+    }
+    req.alpha    = rs_opt_double(argc, argv, "--alpha", req.alpha);
     req.upsample = (size_t)rs_opt_double(argc, argv, "--upsample", (double)req.upsample);
     req.cell_m   = rs_opt_double(argc, argv, "--cell", req.cell_m);
     req.grid_n   = (size_t)rs_opt_double(argc, argv, "--size", (double)req.grid_n);

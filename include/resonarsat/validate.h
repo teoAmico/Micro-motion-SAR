@@ -30,6 +30,17 @@
 #include "resonarsat/microm.h"
 #include "resonarsat/resonarsat.h"
 
+/* Which sub-aperture route a run will take.
+ *
+ * The distinction that matters here is whether the stack comes from splitting a
+ * FOCUSED IMAGE spectrally -- 'uniform' and 'paper' both do -- or from
+ * backprojecting each pulse window separately, which 'pulse' does. Only the
+ * first carries a grid-width requirement. */
+typedef enum {
+    RS_VALIDATE_ROUTE_PULSE = 0,   /* --subap pulse (the default) */
+    RS_VALIDATE_ROUTE_SPECTRAL     /* --subap uniform or --subap paper */
+} rs_validate_route_t;
+
 /* How much a finding should worry the caller.
  *
  * RS_V_FAIL means the requested measurement cannot work at this configuration,
@@ -131,6 +142,25 @@ typedef struct {
      * rs_microm_params_default(), so a caller that does not set it gets the
      * behaviour every recorded result was produced under. */
     rs_microm_estimator_t estimator;
+
+    /* WHICH SUB-APERTURE ROUTE THE RUN WILL TAKE, for the same reason the
+     * estimator is here: one check answers only for the spectral one.
+     *
+     * RS_VALIDATE_GRID requires n_az >= 2*n_looks because splitting a focused
+     * image into N bands needs twice as many azimuth lines as bands. The PULSE
+     * route does not split anything -- it backprojects each pulse window
+     * separately -- so the constraint does not exist for it. The check's own
+     * message has always said "The pulse route is exempt" and then returned
+     * RS_V_FAIL anyway, because it had no way to know which route was intended.
+     *
+     * Measured cost, on the Istanbul collect: at alpha 0.67% and 0.90 overlap
+     * the spectral route would want n_az >= 2967 against a --size of 512, so a
+     * pulse run -- which is mmotion's default -- got VERDICT: FAIL from a
+     * requirement it is exempt from. That is item 16's defect one layer down.
+     *
+     * Defaults to RS_VALIDATE_ROUTE_PULSE, matching rs_build_subaps() when
+     * --subap is absent. */
+    rs_validate_route_t route;
 } rs_validate_req_t;
 
 /* One check's verdict, with the number behind it. */

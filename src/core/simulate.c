@@ -107,7 +107,24 @@ resonarsat_status_t rs_simulate_static_like(const rs_cphd_t *ref, unsigned seed,
     out->r_near = r0 - 0.5 * (double)n_rbin * out->dr;
 
     const double k_phase = 4.0 * M_PI / out->lambda;
-    const double sigma = 2.0 * out->dr / 2.355;   /* FWHM of about two bins */
+    /* Envelope width in BINS, because the offset it is evaluated against is in
+     * bins. Writing it in metres -- sigma = 2*dr/2.355 -- while comparing against
+     * (b - fbin) made the deposit a single-bin spike on a real collect: at
+     * Capella's dr the envelope fell to 4.5e-4 one bin away, so the response was
+     * not band-limited.
+     *
+     * THAT IS NOT A COSMETIC ERROR, IT DESTROYS MIGRATING TARGETS.
+     * rs_focus_backproject() interpolates between neighbouring bins to read a
+     * sub-bin range. A properly sampled response several bins wide reconstructs
+     * accurately; a one-bin spike does not, so the amplitude it recovers swings
+     * with the FRACTIONAL part of fbin. A target parked at the scene reference
+     * point sits at a fixed fbin, has a fixed fraction, and focuses perfectly --
+     * which is why every test passed. A target 552 m off-centre migrates across
+     * 191 bins, sweeps the fraction repeatedly, and its pulse-to-pulse amplitude
+     * modulation collapses the coherent sum. Measured at Giza: peak-to-median
+     * 714 at the reference point against 3.5 at the offset, the latter
+     * indistinguishable from speckle. See FOLLOW-UPS.md item 28. */
+    const double sigma = 2.0 / 2.355;             /* FWHM of two bins */
     const double inv_2s2 = 1.0 / (2.0 * sigma * sigma);
 
 #ifdef _OPENMP
@@ -275,7 +292,8 @@ resonarsat_status_t rs_simulate_inject_vibrator(rs_cphd_t *cphd,
 
     const size_t n_rbin = cphd->n_rbin;
     const double k_phase = 4.0 * M_PI / lambda;
-    const double sigma = 2.0 * cphd->dr / 2.355;   /* FWHM of about two bins */
+    /* In BINS, for the reason rs_simulate_static_like() states at length. */
+    const double sigma = 2.0 / 2.355;              /* FWHM of two bins */
     const double inv_2s2 = 1.0 / (2.0 * sigma * sigma);
 
     /* Accounted rather than assumed: see rs_inject_report_t. */

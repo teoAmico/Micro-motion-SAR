@@ -25,6 +25,7 @@
 
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* Processing applied identically to every scene here, so that any difference in
  * the result is attributable to the scene rather than to the parameters. */
@@ -374,6 +375,86 @@ int main(void)
         /* And the control arm must not, or the chain is answering from
          * something other than the injection. */
         RS_CHECK(got[0] < 0.0 || fabs(got[0] - f_inj) > 0.05);
+    }
+
+    RS_CASE("an injected target focuses when it MIGRATES across range bins");
+    {
+        /* THE CASE THE OTHER TESTS STRUCTURALLY COULD NOT REACH. Both the static
+         * null and the injected-vibrator tests put their targets at the grid
+         * origin of a scene built around them, so the target sits at a fixed
+         * range bin for every pulse and its fractional bin position never moves.
+         * That hides an entire class of defect, and did: the deposit envelope's
+         * width was written in metres and evaluated against an offset in bins,
+         * making the response a single-bin spike rather than a band-limited
+         * pulse. rs_focus_backproject() interpolates between bins, so the
+         * amplitude it recovers swung with the fractional part of the bin index
+         * -- invisible at a fixed fraction, fatal once the target migrates.
+         *
+         * Measured on the Giza collect at a 552 m offset, where the target walks
+         * 191 bins: peak-to-median 3.5, indistinguishable from speckle, against
+         * 744 after the fix. FOLLOW-UPS.md item 28.
+         *
+         * Offsetting the grid from the scene reference point is what makes the
+         * target migrate, and is the whole point of this case. */
+        const double off_x = 20.0;
+        const double centre[2] = { off_x, 0.0 };
+
+        /* rs_simulate_static_like() cannot host this test: its receive window
+         * FOLLOWS 'centre', so a target at the grid origin sits at a fixed bin
+         * whatever offset is passed and migration is zero by construction --
+         * which is precisely why the defect survived it. rs_sim_scene() keeps
+         * r_ref on the scene origin, as a real product keeps it on the SRP, so
+         * a target placed away from that origin migrates the way a real one
+         * does. */
+        rs_sim_tgt_t bg[3];
+        memset(bg, 0, sizeof bg);
+        bg[0].x = 0.0;   bg[0].y = 0.0;  bg[0].rcs = 1.0;
+        bg[1].x = -8.0;  bg[1].y = 6.0;  bg[1].rcs = 0.8;
+        bg[2].x = 14.0;  bg[2].y = -5.0; bg[2].rcs = 0.9;
+        rs_cphd_t c;
+        RS_CHECK_OK(rs_sim_scene(&c, bg, 3, 20.0, 400.0, 256, 0.5));
+
+        rs_inject_report_t rep;
+        RS_CHECK_OK(rs_simulate_inject_vibrator(&c, centre, 0.7, 0.002442,
+                                                20.0, &rep));
+        RS_CHECK(rep.n_deposited == rep.n_pulse);
+        /* If the target does not move between bins this case is not testing
+         * what it claims, so assert the migration itself. */
+        printf("      target migrates %.1f range bins over the dwell\n",
+               rep.fbin_max - rep.fbin_min);
+        RS_CHECK(rep.fbin_max - rep.fbin_min > 2.0);
+
+        rs_grid_t g = { .n_x = 64, .n_y = 64, .dx = 0.5, .dy = 0.5,
+                        .height = 0.0 };
+        g.origin[0] = centre[0]; g.origin[1] = centre[1];
+        rs_slc_t img;
+        RS_CHECK_OK(rs_slc_alloc(&img, g.n_x, g.n_y));
+        RS_CHECK_OK(rs_focus_backproject(&c, &g, 0, c.n_pulse, &img));
+
+        double pk = 0.0, tot = 0.0, sum = 0.0;
+        size_t pk_i = 0;
+        const size_t n = img.n_az * img.n_rg;
+        for (size_t i = 0; i < n; i++) {
+            const double a = cabs(img.data[i]);
+            if (a > pk) { pk = a; pk_i = i; }
+            tot += a * a;
+            sum += a;
+        }
+        const double mean = sum / (double)n;
+        const double share = 100.0 * pk * pk / tot;
+        printf("      peak/mean %.1f, brightest cell holds %.2f%% of energy\n",
+               (mean > 0.0) ? pk / mean : 0.0, share);
+        /* A defocused target scores single digits and spreads its energy over
+         * the patch; a focused one concentrates it. Measured 744 and 13.6% on a
+         * real collect after the fix, against 3.5 and 0.20% before. */
+        RS_CHECK(pk / mean > 50.0);
+        RS_CHECK(share > 2.0);
+        /* And it must land where it was injected, not merely somewhere. */
+        const long dix = (long)(pk_i / img.n_rg) - 32;
+        RS_CHECK(dix > -8 && dix < 8);
+
+        rs_slc_free(&img);
+        rs_cphd_free(&c);
     }
 
     RS_TEST_END();

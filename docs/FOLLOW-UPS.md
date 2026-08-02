@@ -2846,10 +2846,64 @@ were written, documented at length, and never checked to produce what they
 claimed. The check that caught both is the same one: form an image and look at
 whether the thing that should be there is there.
 
+### Cause: the deposit envelope's width was in metres and its argument in bins
+
+`src/core/simulate.c` computed `sigma = 2.0 * dr / 2.355` -- METRES -- and then
+evaluated `exp(-d*d / 2 sigma^2)` with `d = b - fbin`, which is in BINS.
+`tests/rs_sim.h` does the same calculation correctly, converting the offset to
+metres with `* dr`, so the two simulators disagreed and only the untested one was
+wrong.
+
+At Capella's range sampling that makes the deposited response a SINGLE-BIN SPIKE:
+
+```
+   sigma 0.255 (metres, compared against bins)     corrected: sigma 0.849 bins
+     d = 0 bins   1.00                               d = 0    1.000
+     d = 1        4.5e-04                            d = 1    0.500
+     d = 2        4.2e-14                            d = 2    0.062
+```
+
+A one-bin spike is not band-limited, and `rs_focus_backproject()` interpolates
+between neighbouring bins to read a sub-bin range. A properly sampled response
+several bins wide reconstructs accurately; a spike does not, so the amplitude
+backprojection recovers swings with the FRACTIONAL part of `fbin`.
+
+That is why the failure looked geometric. A target at the scene reference point
+sits at a fixed `fbin` -- 2048.0 every pulse -- so its fraction never changes,
+every pulse reads the same point of the envelope, and it focuses perfectly. A
+target 552 m off-centre migrates across 191 bins, sweeps the fraction repeatedly,
+and the resulting pulse-to-pulse amplitude modulation collapses the coherent sum.
+
+FIXED, in both functions. Measured at the same Giza offset that failed:
+
+```
+                    peak/median   energy in brightest cell
+  before                  3.5              0.20%
+  after                 744.2             13.60%
+```
+
+**`rs_simulate_static_like()` carried the same error**, so item 27's fix was
+necessary and not sufficient: on a real collect the static null's scatterers are
+spread over hundreds of metres, every one of them migrates, and every one was
+being deposited as a spike. `--null-static` on real data was wrong twice over,
+for two independent reasons, and both are now fixed.
+
+**Why no test caught it.** Every fixture placed its target at the grid origin of
+a scene built around it, and `rs_simulate_static_like()` puts its receive window
+on `centre` -- so migration was zero by construction no matter what offset was
+passed. `tests/test_nullmotion.c` now hosts the case on `rs_sim_scene()`, whose
+`r_ref` stays on the scene origin as a real product's stays on the SRP, asserts
+the target actually migrates (9.8 bins) before asserting it focuses, and requires
+peak-to-mean above 50 with the peak landing where it was injected.
+
+### Still unexplained
+
+The focused peak lands about 3.5 cells -- 1.75 m -- from the injection point in
+azimuth, positive at the scene reference point and negative at the Giza offset.
+Small, symmetric, and not accounted for. It does not prevent focusing and is not
+the defect above, but it is a loose end.
+
 ### Next
 
-Find why a migrating injected target defocuses. Until then `--inject-vib` is
-sound only where range migration over the dwell is small, and `focus --inject-vib`
-should be run before believing any `mmotion --inject-vib` result -- the peak must
-be a point at the image centre. A guard belongs in the tool: measure the injected
-target's focused peak-to-median and refuse to report a null when it is low.
+Re-run the Giza positive control, which is now the first time the question will
+actually have been asked.

@@ -1,4 +1,4 @@
-# Micro-motion-SAR
+# Micromotion
 
 <p align="center">
   <img src="assets/logo.png" alt="Micro-Motion SAR logo" width="420">
@@ -28,72 +28,45 @@ The targets are stable man-made structures — bridges, dams, towers — under l
 spotlight coverage, whose dominant modes project usefully onto the satellite line of sight.
 That last condition is a real constraint and no software can check it for you.
 
-## Status: baseline only
+## Status
 
-The chain is being built a stage at a time, each verified before the next is trusted. What
-exists and passes its tests:
+Nothing here has detected real motion. Everything below is measured, and the
+numbers behind each claim are in [`docs/FOLLOW-UPS.md`](docs/FOLLOW-UPS.md).
 
-- readers for CPHD (32-bit float and 16-bit integer samples), SICD and UAVSAR
-- time-domain backprojection
-- sub-aperture decomposition, coregistration, phase linking
-- `validate` — thirteen arithmetic checks on whether a collect can support the measurement
-  you intend, before any of it is processed, answered for the `--estimator` you will
-  actually run with: four of them mean different things for a correlation observable and
-  a phase one
-- null-test machinery, `rs_track_fit()`, a cross-window consensus statistic, an
-  ampcor-style cull on what the correlation surfaces themselves say, and a
-  per-window evidence file written beside every result
-- an in-data positive control, `mmotion --inject-vib` — a scatterer of known frequency
-  and amplitude added to the real phase history *before* sub-aperture formation, so the
-  whole chain runs over it. A null on a real collect cannot on its own be told apart from
-  a chain that cannot see motion in that data; this is what tells them apart
-- a cross-check of the CPHD reader against SARPy (`tools/sarpy_crosscheck.py`),
-  which is the only thing here that tests the parse of a real vendor product
+**What exists.** Readers for CPHD, SICD and UAVSAR; image formation; the
+sub-aperture and tracking chain; `validate`, which checks whether a collect can
+support the measurement you want before any of it is processed; and the controls
+that make a result worth reporting — a motionless-scene null, a per-window
+evidence file beside every run, and `--inject-vib`, which adds a vibration of
+known frequency to real data so that a blank result can be told apart from a
+blind pipeline. 21 tests pass.
 
-21 tests pass. **The phase estimator recovers injected frequencies on synthetic fixtures**
-— slope 1.008 and rms 0.0070 Hz against a half-bin bound of 0.0252, swept and pooled over
-three clutter seeds, each with a static control that lands outside the swept band. That is
-the first thing here to meet the bar below.
+**On simulated data it recovers vibration — until the simulation gets harder.**
+The phase estimator reads injected frequencies back almost exactly on a simple
+scene. Give the simulated scatterers a realistic property they had been missing —
+brightness that changes with viewing angle, as a building face or a bridge
+girder's does — and the recovery collapses, and motionless scenes start returning
+confident answers. Items 14, 24 and 25.
 
-**It is also now bounded, by measurement rather than by caveat.** `docs/FOLLOW-UPS.md`
-item 14 noted that the simulator gives every scatterer analytically exact phase, so the
-sub-look decorrelation that most threatens a phase observable is absent by construction.
-Item 24 added that mechanism — facets bright over only part of the aperture — and item 25
-ran item 14's own sweep against it. The recovery does not survive: slope goes negative at
-three of four settings, rms rises to 0.59–1.78 Hz against the 0.0252 bound, and two of
-twelve *motionless* controls come back with a confident in-band frequency. So the estimator
-does what it claims on the scene it was measured on, and there is no basis for expecting
-that to transfer to a real collect. Selecting on amplitude dispersion is the only policy
-that survives the change: it refuses where it cannot tell, and where it answers it returns
-item 14's figures to four decimals.
+**On real data it finds an injected vibration exactly, and then refuses to report
+it.** Five vibrations were added to a real Giza collect, one run each, plus one
+run with nothing added. The patch of ground holding the added vibration returned
+the right frequency all five times, with an error fifty times smaller than the
+test requires, and the untouched run returned something outside the tested range.
+The tool printed *no frequency* every time — because it decides by asking whether
+many patches agree, and 135 patches of empty desert outvote the one patch that
+was right. So the measurement works and the thing that reports it does not. That
+is the open problem. Item 30.
 
-On the real Giza collect the same estimator at 90% overlap returns a **null**, refused at
-16% window agreement, with no trace of the fixed-frequency artefact the old
-implementation produced at 100% agreement — the first evidence outside simulation that
-the fix holds. Nothing in that scene is known to move, so the null bounds nothing.
+**Why that is not a detection.** The right patch was known in advance, because
+that is where the vibration was put. Finding an unknown target means choosing the
+right patch out of hundreds, which is exactly the step that failed. The added
+vibration is also an idealisation: a real scatterer's brightness changes with
+angle and this one's does not, which is the property that broke the simulated
+case above.
 
-Whether that null says anything about Giza at all is a separate question, and it is now
-testable rather than arguable. Item 19 showed the phase route's precondition was unmet
-across the whole scene — 0 of 225 windows met the amplitude-dispersion criterion — so the
-run could not have succeeded whatever the pyramid was doing. `--inject-vib` puts a known
-vibration into that same collect and asks whether the chain returns it.
-
-**On real data the tracker now meets the bar, and nothing that reports does** (item 30).
-Five frequencies injected into the real Giza phase history before sub-aperture formation,
-plus an uninjected control through identical processing: the window holding the injected
-scatterer returns **slope 0.999 and rms 0.00033 Hz** against the 0.0163 Hz half-bin bound,
-five for five, with the control landing below the swept band. Every one of those runs
-printed `NO FREQUENCY REPORTED`, because the scene-wide selection policies pool 136 windows
-of desert against one window of signal — consensus scores slope −0.202, the ampcor cull
-0.000. That is the tracker recovering the carrier and the selection policy discarding it,
-confirmed against a known truth rather than inferred from a fixture.
-
-**This is not a detection method and not a sensitivity claim.** The window was known
-because the target was put there; finding an unknown target needs a selection policy, and
-every policy here failed on that scene. The injected scatterer is isotropic, where item 24
-established real dominants are aspect-dependent and item 25 that aspect dependence is what
-breaks the phase route. **No collect available to this project contains motion known to be
-there**, so no output should be read as a demonstrated sensitivity to anything real.
+**No collect available to this project contains motion known to be there**, so no
+output should be read as sensitivity to anything real.
 
 ## The bar
 

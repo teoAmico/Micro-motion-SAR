@@ -1084,6 +1084,7 @@ static int rs_cmd_mmotion(int argc, char **argv)
                "                          [--offset X,Y | --at LAT,LON]\n"
                "                          [--subap pulse|uniform|paper]\n"
                "                          [--no-detrend] [--null-static N]\n"
+               "                          [--inject-vib FREQ_HZ[,AMP_MM[,REL]]]\n"
                "                          [--estimator correlation|phase|splitband]\n"
                "                          [--shuffle-looks SEED] [--null-trials N]\n"
                "                          [--fmin HZ]\n"
@@ -1179,6 +1180,31 @@ static int rs_cmd_mmotion(int argc, char **argv)
     }
 
     rs_warn_sampling(&c, c.n_pulse, cell);
+
+    /* THE POSITIVE CONTROL, applied to the phase history before anything reads
+     * it, so the whole chain runs over it. A null on a real collect cannot
+     * distinguish a still scene from a chain that cannot see motion in this
+     * data; running once with this tells you which. See simulate.h. */
+    const char *inject = rs_opt(argc, argv, "--inject-vib");
+    if (inject) {
+        double f_inj = 0.0, amp_mm = 2.0, rel = 20.0;
+        if (sscanf(inject, "%lf,%lf,%lf", &f_inj, &amp_mm, &rel) < 1) {
+            fprintf(stderr, "mmotion: --inject-vib wants FREQ_HZ[,AMP_MM[,REL]], "
+                            "got '%s'\n", inject);
+            rs_cphd_free(&c); return 1;
+        }
+        const double origin[2] = { grid.origin[0], grid.origin[1] };
+        st = rs_simulate_inject_vibrator(&c, origin, f_inj, amp_mm * 1e-3, rel);
+        if (st != RS_OK) {
+            rs_report_error("mmotion", st); rs_cphd_free(&c); return 1;
+        }
+        printf("POSITIVE CONTROL: injected a %.4f Hz scatterer at the grid origin,\n"
+               "  %.3f mm vertical displacement, %.1fx the scene's median non-zero\n"
+               "  sample magnitude. THIS RUN IS ABOUT THE PIPELINE, NOT THE SCENE:\n"
+               "  if %.4f Hz does not come back, a null anywhere in this collect is\n"
+               "  not evidence that the ground is still.\n",
+               f_inj, amp_mm, rel, f_inj);
+    }
 
     /* Resolved before the sub-apertures are built, because that is the stage it
      * first has to reach. */

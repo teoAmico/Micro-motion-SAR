@@ -170,3 +170,133 @@ resonarsat_status_t rs_simulate_static_like(const rs_cphd_t *ref, unsigned seed,
     free(tx); free(ty); free(ta); free(tp);
     return RS_OK;
 }
+
+/* Median magnitude of a sample of the phase history, as the brightness scale an
+ * injected scatterer is measured against.
+ *
+ * Sampled rather than exhaustive: a real collect holds billions of samples and
+ * the median only has to set a scale. The stride is forced odd so the sample is
+ * not confined to one column of each pulse.
+ *
+ * OVER THE NON-ZERO SAMPLES ONLY. A synthetic scene occupies a few dozen of its
+ * range bins and leaves the rest exactly zero, so the median over ALL samples is
+ * zero and the scale collapses -- which is how this was first written and what
+ * the injected-vibrator test caught. On a real collect, where every bin carries
+ * clutter or noise, the two agree. Returns 0 only if the phase history is
+ * entirely zero or non-finite, which the caller reports rather than dividing by.
+ *
+ * Probing stops after a bounded number of positions so an almost-empty container
+ * cannot make this walk the whole array for a scale it will not find. */
+static double rs_signal_median_mag(const rs_cphd_t *cphd, size_t want)
+{
+    const size_t total = cphd->n_pulse * cphd->n_rbin;
+    if (total == 0) return 0.0;
+    if (want == 0) want = 1u << 16;
+    if (want > total) want = total;
+
+    double *v = malloc(want * sizeof *v);
+    if (!v) return 0.0;
+
+    const size_t stride = ((total / want) | 1u);
+    size_t n = 0, probed = 0;
+    const size_t probe_max = 16 * want;
+    for (size_t i = 0; n < want && probed < probe_max && i < total;
+         i += stride, probed++) {
+        const double a = (double)cabsf(cphd->signal[i]);
+        if (isfinite(a) && a > 0.0) v[n++] = a;
+    }
+    if (n == 0) { free(v); return 0.0; }
+
+    /* Insertion sort: n is bounded by 'want' and this runs once per injection. */
+    for (size_t i = 1; i < n; i++) {
+        const double k = v[i];
+        size_t j = i;
+        while (j > 0 && v[j - 1] > k) { v[j] = v[j - 1]; j--; }
+        v[j] = k;
+    }
+    const double m = v[n / 2];
+    free(v);
+    return m;
+}
+
+/* Add a vibrating point scatterer to a real collect. See simulate.h. */
+resonarsat_status_t rs_simulate_inject_vibrator(rs_cphd_t *cphd,
+                                                const double centre[2],
+                                                double freq_hz, double amp_m,
+                                                double rel_amp)
+{
+    if (!cphd || !centre) return RS_ERR_ARG;
+    if (cphd->n_pulse == 0 || !cphd->t || !cphd->pos || !cphd->r_ref ||
+        !cphd->signal) {
+        rs_set_error("inject: the collect carries no pulse geometry");
+        return RS_ERR_ARG;
+    }
+    if (!isfinite(freq_hz) || freq_hz <= 0.0) {
+        rs_set_error("inject: frequency must be positive and finite (got %g Hz)",
+                     freq_hz);
+        return RS_ERR_ARG;
+    }
+    if (!isfinite(amp_m) || !isfinite(rel_amp)) {
+        rs_set_error("inject: amplitude %g m and relative brightness %g must be "
+                     "finite", amp_m, rel_amp);
+        return RS_ERR_ARG;
+    }
+    if (!(cphd->dr > 0.0)) {
+        rs_set_error("inject: the collect has no range bin spacing");
+        return RS_ERR_ARG;
+    }
+    const double lambda = (cphd->lambda > 0.0) ? cphd->lambda
+                        : ((cphd->fc > 0.0) ? RS_C_LIGHT / cphd->fc : 0.0);
+    if (!(lambda > 0.0)) {
+        rs_set_error("inject: the collect has no carrier wavelength");
+        return RS_ERR_ARG;
+    }
+
+    if (rel_amp <= 0.0) rel_amp = 1.0;
+    const double scale_ref = rs_signal_median_mag(cphd, 0);
+    if (!(scale_ref > 0.0)) {
+        rs_set_error("inject: the collect's samples have no finite magnitude to "
+                     "scale against");
+        return RS_ERR_ARG;
+    }
+    const double amp = rel_amp * scale_ref;
+
+    const size_t n_rbin = cphd->n_rbin;
+    const double k_phase = 4.0 * M_PI / lambda;
+    const double sigma = 2.0 * cphd->dr / 2.355;   /* FWHM of about two bins */
+    const double inv_2s2 = 1.0 / (2.0 * sigma * sigma);
+
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static)
+#endif
+    for (size_t i = 0; i < cphd->n_pulse; i++) {
+        const double px = cphd->pos[3 * i + 0];
+        const double py = cphd->pos[3 * i + 1];
+        const double pz = cphd->pos[3 * i + 2];
+
+        /* Vertical displacement; the collect's own geometry projects it onto the
+         * line of sight, which is why the observable is smaller than amp_m. */
+        const double dz = amp_m * sin(2.0 * M_PI * freq_hz * cphd->t[i]);
+
+        const double dx = px - centre[0];
+        const double dy = py - centre[1];
+        const double dzz = pz - dz;
+        const double R = sqrt(dx * dx + dy * dy + dzz * dzz);
+
+        const double fbin = (R - cphd->r_ref[i]) / cphd->dr + 0.5 * (double)n_rbin;
+        if (!isfinite(fbin) || fbin < 0.0 || fbin >= (double)n_rbin) continue;
+
+        /* Whichever reference the data were recorded on -- see item 27. */
+        const double phase =
+            -k_phase * (cphd->phase_ref_srp ? (R - cphd->r_ref[i]) : R);
+        const double complex a = amp * (cos(phase) + I * sin(phase));
+
+        float complex *row = cphd->signal + i * n_rbin;
+        const long lo = (long)(fbin - 4.0), hi = (long)(fbin + 4.0);
+        for (long b = (lo < 0 ? 0 : lo); b <= hi && b < (long)n_rbin; b++) {
+            const double d = (double)b - fbin;
+            row[b] += (float complex)(a * exp(-d * d * inv_2s2));
+        }
+    }
+    return RS_OK;
+}

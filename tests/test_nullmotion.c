@@ -287,5 +287,85 @@ int main(void)
         rs_cphd_free(&ref);
     }
 
+    RS_CASE("an injected vibrator is recovered from an otherwise static collect");
+    {
+        /* THE POSITIVE CONTROL. Every real collect this project has processed
+         * returns a null, and a null cannot distinguish "nothing moved" from
+         * "this chain cannot see motion in this data". rs_simulate_inject_vibrator()
+         * settles that by adding a scatterer of known frequency to the phase
+         * history BEFORE sub-aperture formation, so the whole chain -- decomposition,
+         * tracking, spectrum -- runs over the real clutter and geometry.
+         *
+         * Here the stand-in for a real collect is a static scene, which is the
+         * hardest honest test of the control: nothing else in it moves, so the
+         * only thing that can produce the injected frequency is the injection.
+         *
+         * Both arms, because a positive control that fires without the injection
+         * is not a control. */
+        const double f_inj = 0.7;
+        const double amp_z = 0.002442;   /* ~2 mm along the line of sight, inside
+                                          * the lambda/4 wrap the phase route has */
+        double got[2] = { -1.0, -1.0 };
+
+        for (int arm = 0; arm < 2; arm++) {
+            rs_sim_tgt_t one[1] = {{ .x = 0, .y = 0, .z = 0, .rcs = 1.0 }};
+            rs_cphd_t ref;
+            RS_CHECK_OK(rs_sim_scene(&ref, one, 1, 20.0, 400.0, 256, 0.5));
+
+            const double centre[2] = { 0.0, 0.0 };
+            rs_cphd_t c;
+            RS_CHECK_OK(rs_simulate_static_like(&ref, 11u, 300, centre, 24.0,
+                                                256, &c));
+            rs_cphd_free(&ref);
+
+            if (arm == 1) {
+                RS_CHECK_OK(rs_simulate_inject_vibrator(&c, centre, f_inj,
+                                                        amp_z, 20.0));
+            }
+
+            rs_grid_t g = { .origin = {0,0,0}, .n_x = 64, .n_y = 64,
+                            .dx = 0.5, .dy = 0.5, .height = 0.0 };
+            rs_subap_params_t sp;
+            rs_subap_params_default(&sp);
+            sp.n_looks = 128;
+            sp.overlap = 0.0;
+            rs_subap_stack_t st;
+            RS_CHECK_OK(rs_subaperture_from_cphd(&c, &g, &sp, &st));
+
+            rs_microm_params_t mp;
+            rs_microm_params_default(&mp);
+            mp.estimator = RS_MICROM_EST_PHASE;
+            mp.win_az = mp.win_rg = 32;
+            mp.stride_az = mp.stride_rg = 16;
+            mp.coherence_min = 0.0;
+            rs_microm_t m;
+            RS_CHECK_OK(rs_microm_track(&st, &mp, &m));
+
+            rs_spectrum_t spec;
+            RS_CHECK_OK(rs_spectrum_compute(&m, RS_SPEC_VELOCITY, &spec));
+
+            /* Selected the way the source literature does: the injected
+             * scatterer is a persistent one by construction, so this is the
+             * policy that should find it. */
+            rs_spectrum_ps_t ps;
+            if (rs_spectrum_ps_window(&spec, &ps) == RS_OK) got[arm] = ps.freq_hz;
+            printf("      %s: %.3f Hz (D_A %.3f, %zu candidates of %zu)\n",
+                   arm ? "injected " : "control  ",
+                   got[arm], ps.d_a, ps.n_candidate, ps.n_input);
+
+            rs_spectrum_free(&spec);
+            rs_microm_free(&m);
+            rs_subap_stack_free(&st);
+            rs_cphd_free(&c);
+        }
+
+        /* The injected arm must return the injected frequency. */
+        RS_CHECK(got[1] >= 0.0);
+        RS_CHECK_NEAR(got[1], f_inj, 0.05);
+        /* And the control arm must not, or the chain is answering from
+         * something other than the injection. */
+        RS_CHECK(got[0] < 0.0 || fabs(got[0] - f_inj) > 0.05);
+    }
+
     RS_TEST_END();
 }

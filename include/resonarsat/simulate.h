@@ -69,4 +69,58 @@ resonarsat_status_t rs_simulate_static_like(const rs_cphd_t *ref, unsigned seed,
                                             double extent_m,
                                             size_t n_rbin, rs_cphd_t *out);
 
+/* Inject a vibrating point scatterer into a real collect's phase history.
+ *
+ * THE POSITIVE CONTROL, AND WHY A NULL WITHOUT ONE IS NOT A RESULT.
+ *
+ * rs_simulate_static_like() answers "what does this processing report when
+ * nothing moves". It cannot answer the question that matters when a real collect
+ * comes back empty: was the scene still, or is this chain incapable of seeing
+ * motion in this data? Those produce the same output, and every real run this
+ * project has made returns it. Item 19 addressed that indirectly -- the phase
+ * route's precondition was unmet at Giza, so the run could not have succeeded --
+ * but indirectly is the most a precondition can do.
+ *
+ * This is the direct answer. It adds a scatterer of known frequency and known
+ * line-of-sight amplitude to the REAL phase history, before sub-aperture
+ * formation, and the identical chain then runs over real clutter, real
+ * coherence, the real orbit and the real look geometry. If the injected
+ * frequency comes back, the chain can see motion in THIS data and a null
+ * elsewhere in the scene means something. If it does not, the null was never
+ * evidence about the ground.
+ *
+ * INJECTED BEFORE THE SUB-APERTURE STAGE, WHICH IS WHAT MAKES IT A CONTROL ON
+ * THE WHOLE CHAIN. A control injected into the tracked series would exercise
+ * only the spectral estimator, and one injected into the tomographic
+ * observations only the inversion; neither would say whether sub-aperture
+ * formation and sub-pixel tracking can extract motion from this collect, which
+ * is the step in doubt.
+ *
+ * 'centre' is the scatterer's position in the same scene frame as the focusing
+ * grid, so passing the grid origin puts it where the analysis windows are.
+ * 'freq_hz' and 'amp_m' are its vibration; amp_m is a DISPLACEMENT AMPLITUDE in
+ * metres along z, which the collect's own geometry projects onto the line of
+ * sight, so the observable is smaller than the number passed. For the phase
+ * estimator keep the projected amplitude below about lambda/8: the observable
+ * wraps beyond lambda/4 and an injection that wraps tests nothing.
+ *
+ * 'rel_amp' scales the scatterer against the median of the scene's own
+ * NON-ZERO sample magnitudes, so a value of 1 makes it typical of the clutter it sits in and 10
+ * makes it a dominant. It is relative and BOUNDED for the reason item 21
+ * records: an unbounded injected gain produced a result there that had to be
+ * retracted, because the outliers rather than the mechanism carried it. Values
+ * far above ~100 make the control easier than any real target and prove little.
+ *
+ * The written phase follows the collect's own phase_ref_srp convention, so the
+ * injected scatterer focuses by the same arithmetic as everything already in the
+ * data (see item 27 for what happens when those disagree).
+ *
+ * Modifies 'cphd' in place, adding to the existing samples rather than
+ * replacing them. Returns RS_ERR_ARG on a NULL argument, a collect carrying no
+ * pulse geometry, or a non-finite or non-positive frequency. */
+resonarsat_status_t rs_simulate_inject_vibrator(rs_cphd_t *cphd,
+                                                const double centre[2],
+                                                double freq_hz, double amp_m,
+                                                double rel_amp);
+
 #endif /* RESONARSAT_SIMULATE_H */

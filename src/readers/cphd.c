@@ -907,10 +907,18 @@ resonarsat_status_t rs_read_cphd(const char *path, const rs_cphd_read_opts_t *op
          * applying it is the reading application's job, which is why its absence
          * here was invisible for so long: nothing in the format forces it.
          *
-         * Worth taking from that implementation and not taken yet:
-         * Wideband::allOnes() skips the scaling pass entirely when every factor
-         * is 1.0, which a conformant product with unity AmpSF otherwise pays for
-         * once per sample. */
+         * Taken from that implementation: Wideband::allOnes() skips the scaling
+         * work entirely when every factor is 1.0, and the unity case is branched
+         * out below. The saving is SMALLER HERE than there, and the difference is
+         * worth stating rather than overclaiming -- six-library scales in a
+         * separate pass over the array, which allOnes() elides completely,
+         * whereas this multiply is fused into the copy that has to happen
+         * anyway. What is elided is one complex-by-real multiply per sample, in a
+         * loop that also does a modulo. The case it actually pays for is a
+         * product carrying NO AmpSF at all, which is the case the field being
+         * optional exists to allow; a Capella product has a per-vector factor
+         * with a dispersion of 0.711 and takes the scaling path on nearly every
+         * vector. */
         double amp_sf = 1.0;
         if (have_ampsf) {
             const double a = rs_be_f8(v + (size_t)o_ampsf * 8, swap);
@@ -921,9 +929,20 @@ resonarsat_status_t rs_read_cphd(const char *path, const rs_cphd_read_opts_t *op
         }
 
         float complex *dst = cphd->signal + i * n_rbin;
-        for (size_t k = 0; k < n_rbin; k++) {
-            dst[k] = (float complex)(amp_sf *
-                     line[(k + (size_t)n_samp - half) % (size_t)n_samp]);
+        /* Branched per vector rather than once for the whole array: it catches
+         * the all-unity product the reference tests for, and also a product
+         * whose factors are unity on some vectors and not others, which a single
+         * whole-array test would miss. The branch is per vector, not per
+         * sample. */
+        if (amp_sf == 1.0) {
+            for (size_t k = 0; k < n_rbin; k++) {
+                dst[k] = line[(k + (size_t)n_samp - half) % (size_t)n_samp];
+            }
+        } else {
+            for (size_t k = 0; k < n_rbin; k++) {
+                dst[k] = (float complex)(amp_sf *
+                         line[(k + (size_t)n_samp - half) % (size_t)n_samp]);
+            }
         }
     }
 

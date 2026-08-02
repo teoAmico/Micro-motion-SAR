@@ -2315,9 +2315,24 @@ reference leaves open, and making it per-vendor is a judgement about data rather
 than about the format. That is better ground than the note previously stood on,
 and both headers now say so.
 
-**One optimisation not taken yet.** `Wideband::allOnes()` skips the scaling pass
-entirely when every scale factor is 1.0. A conformant product with unity AmpSF
-currently pays a multiply per sample here for nothing.
+**One optimisation, now taken.** `Wideband::allOnes()` skips the scaling pass
+entirely when every scale factor is 1.0. `rs_read_cphd()` now branches the unity
+case out of its copy loop.
+
+The saving is SMALLER HERE than in the reference, and the difference matters more
+than the change does. six-library scales in a separate pass over the array, which
+`allOnes()` elides completely; this multiply is fused into a copy that has to
+happen regardless, so what is elided is one complex-by-real multiply per sample
+in a loop that also does a modulo -- and the modulo is plausibly the larger cost
+of the two. The saving is UNMEASURED: benchmarking the CPHD read path needs a
+real vendor product, since `sim_cphd` writes this project's own container.
+
+The case it pays for is a product carrying no AmpSF at all, which is the case the
+field being optional exists to allow. A Capella product has a per-vector factor
+with a dispersion of 0.711 and takes the scaling path on nearly every vector, so
+this does nothing for the collects this project actually processes. Branched per
+vector rather than once per array, which catches the reference's all-unity case
+and also a product that is unity on some vectors and not others.
 
 **And a structural point it shares with GDAL.** The reference's fundamental read
 is WINDOWED -- a range of vectors and a range of samples -- and GDAL's raster

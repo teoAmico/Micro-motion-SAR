@@ -71,7 +71,8 @@ said, not better) and item 7's line numbers.
 | 27 | fixed | `--null-static` was comparing against a defocused scene |
 | 28 | fixed | the Giza positive control was invalid: the injected target did not focus |
 | 29 | superseded by 30 | the first positive control that asked the question |
-| 30 | **the current state** | the bar met on real data by the tracker, not by anything that reports |
+| 30 | bounded by 31 | the bar met on real data by the tracker, not by anything that reports |
+| 31 | **the current state** | the reported policy had the right frequency; the scene-wide GATE discarded it |
 
 ---
 
@@ -3296,3 +3297,95 @@ harder test by some distance.
 the synthetic sweeps, because the response ceiling allows no more at 0.90
 overlap. A slope fitted over that span is a weaker constraint than the number
 suggests.
+
+---
+
+## 31. The reported policy had the right frequency all along; the GATE discarded it
+
+Item 30 established that the tracker recovers five injected frequencies from the
+Giza collect at slope 0.999 while every run printed `NO FREQUENCY REPORTED`, and
+concluded that "the SELECTION POLICY discards it". That is right about the
+outcome and wrong about which stage. **Measured offline against the six
+`*_windows.csv` files those runs left**, with no reprocessing --
+`runs/giza/2026-08-03-policy-offline/`:
+
+```
+run       gated  inj bin   best(prom)   consensus   block-rank   block-diff
+0.098       123        3   0.098 HIT    0.065  --   0.065  --    0.098 HIT
+0.130       136        4   0.130 HIT    0.130 HIT   0.065  --    0.130 HIT
+0.163       136        5   0.163 HIT    0.163 HIT   0.065  --    0.163 HIT
+0.196       136        6   0.195 HIT    0.065  --   0.065  --    0.195 HIT
+0.228       136        7   0.228 HIT    0.065  --   0.065  --    0.228 HIT
+CONTROL     171        -   0.130        0.065       0.065        0.033
+
+  best (prominence)          5/5    control answers 0.130 Hz
+  consensus (plurality)      2/5    control answers 0.065 Hz
+  block-rank                 0/5    control answers 0.065 Hz
+  block-rank minus control   5/5    control answers 0.033 Hz
+```
+
+**`rs_spectrum_best_window()` -- the policy `mmotion` actually reports -- named
+the injected frequency in FIVE OF FIVE runs.** Item 30 did not test this; its
+table reports window 112's own dominant bin beside the consensus and cull, and
+concluded from those two that selection had failed. The scene-wide agreement
+GATE is what suppressed the answer, at 19-24% against a one-third threshold, and
+that gate is structurally wrong for this problem: the signal occupies a 9-12
+window block and 136 windows of desert dilute it below any fixed fraction.
+
+**Contiguity alone is worse, not better, and this is worth recording because it
+was the obvious next idea.** Ranking candidate frequencies by their largest
+4-connected block gets 0 of 5: the desert produces a 12-window block at 0.065 Hz
+-- the lowest bins -- in every run including the control, and it wins every time.
+That is item 11's common-mode artefact defeating a spatial statistic exactly as
+item 11 says only a null control can catch.
+
+### What is actually missing is a REFUSAL criterion, and one may exist
+
+The frequency is not the problem. Two independent statistics find it 5/5. What
+the tool lacks is something that says *no* on a scene with nothing in it, without
+being a scene-wide fraction. The winning window's prominence is a candidate:
+
+```
+run        max prom   2nd    ratio   blk@winner   margin vs control
+0.098         35.35  35.35   1.000           11                   7
+0.130         32.56  32.56   1.000           12                   4
+0.163         31.97  31.97   1.000            9                   1
+0.196         30.04  30.04   1.000           11                   8
+0.228         25.77  25.60   1.007            9                   3
+CONTROL       17.48  17.16   1.019            8                   0
+
+injected 25.77-35.35 against a control of 17.48 -- a 1.47x gap, no overlap
+```
+
+Note the `ratio` column: max over runner-up is 1.000 in four of five runs,
+because the top two windows are NEIGHBOURS OF THE SAME TARGET. Any criterion of
+the form "the peak stands clear of its rivals" is therefore useless here -- the
+rivals are the signal. It is the ABSOLUTE prominence that separates.
+
+### Four reasons this is a lead and not a result
+
+*Five injected runs and one control.* Any threshold chosen after seeing this
+table is fitted to it. Item 12c's warning applies unchanged: a policy that
+answers only where the answer is easy scores well and has demonstrated nothing.
+
+*The target is strong.* 2 mm at 20x the median non-zero sample magnitude, which
+item 30 already flags as "not a sensitivity bound". A 1.47x prominence gap may be
+a direct consequence of that amplitude and shrink to nothing for a weaker one.
+Nothing here bounds where it fails.
+
+*The control-differenced block statistic is degenerate on the control*, since
+differencing a run against itself gives zero everywhere. Its 5/5 is real; its
+"control answers 0.033 Hz" proves nothing about false positives. A deployment
+would difference against `--null-static`, which item 27 made a real control, and
+that has not been run at these settings.
+
+*Prominence is anti-correlated with correctness everywhere else in this file* --
+items 7-9 on synthetic clutter, item 25 where it manufactures in-band answers
+from motionless aspect-dependent scenes. This is real data pointing the other
+way. Both can hold, since the failure modes differ, but prominence is not
+vindicated in general by one collect with a bright injected target in it.
+
+**The concrete next step is therefore not a new statistic.** It is to replace the
+scene-wide agreement gate with one that survives a localised target, and to
+calibrate its threshold against `--null-static` at these settings rather than
+against the five points above.

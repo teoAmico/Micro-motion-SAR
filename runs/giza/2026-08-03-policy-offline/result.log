@@ -1,0 +1,26 @@
+run       gated  inj bin        best(prom)    consensus   block-rank   block-diff
+0.098       123        3        0.098  HIT    0.065  --    0.065  --   0.098  HIT
+0.130       136        4        0.130  HIT   0.130  HIT    0.065  --   0.130  HIT
+0.163       136        5        0.163  HIT   0.163  HIT    0.065  --   0.163  HIT
+0.196       136        6        0.195  HIT    0.065  --    0.065  --   0.195  HIT
+0.228       136        7        0.228  HIT    0.065  --    0.065  --   0.228  HIT
+CONTROL     171        -             0.130        0.065        0.065        0.033
+
+  best (prominence)          5/5 injected runs correct;  control answers 0.130 Hz
+  consensus (plurality)      2/5 injected runs correct;  control answers 0.065 Hz
+  block-rank                 0/5 injected runs correct;  control answers 0.065 Hz
+  block-rank minus control   5/5 injected runs correct;  control answers 0.033 Hz
+
+--- Is there a REFUSAL criterion? The frequency is found; the null is not. ---
+run        max prom     2nd  ratio  blk@winner  blk margin vs ctrl  n@winner
+0.098         35.35   35.35  1.000          11                   7        23
+0.130         32.56   32.56  1.000          12                   4        28
+0.163         31.97   31.97  1.000           9                   1        32
+0.196         30.04   30.04  1.000          11                   8        22
+0.228         25.77   25.60  1.007           9                   3        13
+CONTROL       17.48   17.16  1.019           8                   0        31
+
+--- separation of the winning window's prominence ---
+  injected runs: 25.77 .. 35.35
+  control:       17.48
+  gap:           1.47x  (SEPARATES)

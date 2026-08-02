@@ -15,14 +15,16 @@ because several of these are patterns rather than incidents.
 
 | date | commit | scope | outcome |
 |---|---|---|---|
+| 2026-08-03 | `55c4aa5` | Full ASAN + UBSAN pass over the whole suite | Clean: 17/17 binaries, **zero** sanitizer diagnostics. Sanitizers verified armed. See below. |
 | 2026-08-02 | `cda093f` | Removing the two dead `rs_slc_t` fields | `sizeof(rs_slc_t)` falls 3976 -> 320 bytes, 92 percent of it, saving 7.3 MB on a 2048-look stack. Pipeline output bit-identical. |
 | 2026-08-02 | `2e0e1fc` | Closing the check's own open items: tests for the two uncovered branches, and the phase-reference fix they made safe | Both branches now covered. The lag test failed before the fix and passes after; the split-band test found a second defect, an unclamped coherence. Details below. |
 | 2026-08-02 | `893d9d2` | Follow-up: the two items the sweep left open, checked | Both were wrong as written. The orbit/Doppler fields are superseded rather than unfinished; two of the four "exposed but non-recovering" modes have no test at all, and `--lag` was unvalidated with platform-dependent undefined behaviour. Details below. |
 | 2026-08-02 | `6d42f29` | Full sweep: `docs/FOLLOW-UPS.md` against the source; every `.c` and `.h` under `src/`, `include/`, `tools/`, `tests/`; CLI flags against `USER_GUIDE.md`; committed run artefacts under `runs/` | 21/21 tests pass. Two pre-existing compiler warnings found (see the correction below). Eleven findings, all fixed in the same change; two new test cases pin the substantive one. |
 
 What that review did **not** cover, so nobody reads more into it than was done:
-no ASAN or UBSAN run, no fuzzing of the readers, no re-execution of any
-`FOLLOW-UPS` measurement, and no review of `third_party/pocketfft`.
+no fuzzing of the readers, no re-execution of any `FOLLOW-UPS` measurement, and
+no review of `third_party/pocketfft`. (It also listed "no ASAN or UBSAN run" --
+that gap is closed, see the full pass below.)
 
 ### A correction to this file's own first draft
 
@@ -507,6 +509,37 @@ The reasoning that made the removal safe is retired into `slc.h`'s file comment,
 where the next person to consider adding an orbit table will find it: git holds
 the interpolator and the evaluator, and a field should come back only WITH a
 consumer and a fixture.
+
+### The full ASAN + UBSAN pass
+
+`-fsanitize=address,undefined` over the entire suite, with OpenMP enabled -- so
+the parallel regions in `rs_microm_track()` and `rs_focus_backproject_opts()`
+were instrumented, which is where a data race or a per-thread buffer overrun
+would live. `ASAN_OPTIONS=detect_stack_use_after_return=1:strict_string_checks=1`.
+
+**Clean. 17 of 17 binaries, zero diagnostics, zero failures.** 415 s against 190 s
+in Release.
+
+**Checked properly, because `ctest` alone could not have shown this.** With
+`UBSAN_OPTIONS=halt_on_error=0`, a UBSAN violation prints to stderr and leaves the
+exit code at zero, so a test reports "Passed" with a runtime error in its output --
+and `ctest --output-on-failure` shows output only for tests that failed. A green
+`ctest` run is therefore not evidence of a clean sanitizer pass. Every binary was
+re-run directly with stderr captured and the combined output scanned for
+`runtime error`, `AddressSanitizer`, `LeakSanitizer` and `SUMMARY:`.
+
+**And the sanitizers were verified armed rather than assumed.** A canary with a
+deliberate heap-buffer-overflow and a signed-shift overflow, built with the same
+flags, produced three diagnostics; `nm` shows 25 `__asan` symbols in
+`test_tracking`. Zero findings from an uninstrumented build would have looked
+identical to zero findings from a clean one -- the same trap as the incremental
+build that produced this file's first wrong claim.
+
+**What it does not cover.** No leak detection: LeakSanitizer is unavailable on
+arm64 macOS, so allocations never freed are still unchecked by anything. The
+suite exercises the readers against a malformed-input corpus but not a fuzzer.
+And ASAN sees only paths the tests take -- `--reference pair` and the streaming
+CPHD routes get exercised, the CLI's own argument handling does not.
 
 ### Still open
 

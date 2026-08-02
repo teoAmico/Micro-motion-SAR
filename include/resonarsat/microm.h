@@ -566,6 +566,28 @@ typedef struct {
      * of 225 windows met it -- a margin wide enough that the calibration
      * question does not change the reading.
      *
+     * THIS IS MEASURED AT THE ARGMAX OF THE REFERENCE LOOK, WHICH BIASES IT
+     * UPWARD. Selecting a pixel on one realisation and then measuring it across
+     * all of them favours pixels that happened to be high in that one look, and
+     * the bias grows with the number of candidates in the window. MEASURED
+     * (item 23), tracking one shared stack at both sizes: 4x the candidates
+     * moves the synthetic median from 0.452 to 0.477. Real, negligible, and far
+     * too small to explain the 0.079-against-0.38 gap between the fixtures and
+     * real collects.
+     *
+     * COMPARE MEDIANS ACROSS RUNS, NOT MINIMA. The best D_A in a run is a
+     * minimum over its windows, so a configuration with fewer windows reports a
+     * worse best for purely that reason -- on a fixed grid, win 16/32/64 gives
+     * 225/49/9 windows. The same caution applies to the per-run "best" the CLI
+     * prints.
+     *
+     * ON REAL DATA D_A RISES STEEPLY WITH WINDOW SIZE AND ON THE FIXTURES IT
+     * DOES NOT: the same 4x moves the real median by 0.95 against the
+     * fixtures' 0.025. Since it is the same code over the same geometry, that
+     * is a statement about scenes -- the brightest return in a real scene is
+     * also the most aspect-selective one, which `rs_sim_scene()` does not model.
+     * See FOLLOW-UPS.md item 23d.
+     *
      * Zero-amplitude windows report D_A = RS_DA_MAX rather than a division by
      * zero: an empty window is maximally dispersed, not perfectly stable. */
     double *d_a;                /* [n_win] */

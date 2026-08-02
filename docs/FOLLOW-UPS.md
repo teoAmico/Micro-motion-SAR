@@ -2252,6 +2252,8 @@ nothing at all, best and median alike.
 **`AmpSF` is excluded**, by the measurement above.
 
 **Scatterer density is the remaining candidate and is probably the whole answer.**
+*(SUPERSEDED BY ITEM 23 -- swept on real data, density does not explain it. The
+synthetic table below stands; what does not stand is the inference from it.)*
 Item 15 measured `D_A` rising with scatterers per sub-look resolution cell on the
 synthetic fixtures:
 
@@ -2337,3 +2339,127 @@ form so a hostile offset cannot wrap an addition. GDAL's CPHD driver is a
 RAWDataset container reader with no CPHD semantics at all -- no range
 compression, no PVP geometry, no AmpSF, no SGN -- so there is nothing in it to
 learn from for this format.
+
+---
+
+## 23. Neither scatterer density nor the brightest-pixel selection explains the D_A gap
+
+Item 21 left scatterer density as the last standing candidate for why real
+collects reach an amplitude dispersion of 0.38-0.52 at best where the synthetic
+fixtures reach 0.079. Two experiments here, and both come back negative. The gap
+survives.
+
+### 23a. Resolution: the density axis, swept on real data
+
+A first attempt was confounded -- it changed cell size and window size along with
+resolution, so a median D_A above 1.0 could have been oversampling rather than
+scene content. Redone with the physical window FIXED at 32 m of ground and the
+cell TRACKING sub-look resolution, so every pixel is one independent resolution
+cell and the window always searches the same patch. Istanbul M2 bridge,
+`--offset -488,-1864 --estimator phase --rbins 6144 --coherence 0`:
+
+```
+    n      ov   t_sap   res_m   cell   win   grid   DA_best    DA_med
+  128    0.40   0.324    4.41    4.0     8     32     0.539     1.425
+   64    0.75   1.492    0.96    1.0    32    128     0.481     1.865
+   32   0.898   6.006    0.24   0.25   128    256     1.394     1.636
+```
+
+Cell area falls from 19.5 m^2 to 0.06 m^2 -- roughly 340x fewer scatterers
+competing inside one resolution cell -- and D_A does not fall with it. Best goes
+0.539, 0.481, 1.394; no median comes near the 0.523 of fully developed speckle.
+If density were what separates real scenes from the fixtures, this is the axis
+that would have shown it.
+
+TWO CAVEATS, ONE OF THEM INHERENT. At fixed dwell, sub-look resolution cannot be
+varied without varying look count and overlap, and both move D_A on their own:
+resolution, `n` and overlap are one knob here, not three. And only AZIMUTH
+resolution changes -- range resolution is set by bandwidth -- so the finest point
+oversamples in range. This sweep bounds the density effect rather than isolating
+it.
+
+### 23b. The brightest-pixel selection bias: real, and far too small
+
+`rs_microm_track()` computes D_A at the ARGMAX OF THE REFERENCE LOOK and then
+measures that pixel across all looks (`src/core/microm.c`). That is a selection on
+one realisation followed by a measurement over all of them, so it is biased
+upward, and the bias must grow with the number of candidate pixels in the window.
+23a ran windows of 64, 1024 and 16384 pixels, and the synthetic D_A work used
+32x32 windows where the real runs used the default 64x64 -- so the bias was a live
+explanation for part of the gap, in the direction that flatters the fixtures.
+
+Measured on synthetic, tracking ONE shared sub-aperture stack at both window
+sizes so nothing but candidate count differs, over the same 3 seeds x 6
+frequencies x 4 fixtures:
+
+```
+  win     n   DA_med   DA_min   D_A<=0.25   hit rate   ungated
+   32  1800    0.452    0.073   318 win        95.0%     33.3%
+   64   288    0.477    0.093    44 win       100.0%     27.1%
+```
+
+A 4x increase in candidates moves the median by 0.025 and the minimum by 0.020.
+The bias is real and it is negligible: it cannot account for 0.079 against 0.38.
+**The gap is not an artefact of how D_A is measured.**
+
+Two things worth keeping. The `D_A <= 0.25` threshold of item 20 SURVIVES the
+window change -- 95.0% at win 32, 100.0% at win 64, against ungated 33.3% and
+27.1% -- so that threshold is not an artefact of the window size it was measured
+at. And the effect is not uniform across fixtures: `lattice3` degrades (median
+0.264 to 0.430, hit 66.0% to 38.9%) while `clutter96` improves (0.372 to 0.351,
+47.8% to 63.9%), which is what a window growing past one lattice dominant should
+do.
+
+### 23c. Real data responds to window size, and the fixtures do not
+
+The same control on the real collect, everything fixed except `--win` (n 64,
+overlap 0.75, cell 1.0, grid 128 -- the middle row of 23a):
+
+```
+  win   px_in_win   n_windows   DA_best   DA_med
+   16         256         225     0.422    0.915
+   32        1024          49     0.481    1.865
+   64        4096           9     2.021    2.590
+```
+
+The win-32 point reproduces 23a's middle row exactly, so that row is confirmed
+rather than a single-run fluke.
+
+READ THE MEDIAN, NOT THE BEST. `DA_best` is a MINIMUM over the windows in the
+run, and a fixed grid gives 225, 49 and 9 windows as the window grows -- so the
+best degrades partly because it is drawn from a smaller sample. That caveat
+applies to the synthetic table above too: min 0.073 over 1800 draws against 0.093
+over 288 is about what pure sampling would give, which makes the selection bias
+smaller still. The median is the statistic to compare, and it rises 0.915, 1.865,
+2.590 (the last from only 9 windows, so it is noisy).
+
+**Real data responds strongly to window size where the fixtures barely respond at
+all**: a 4x candidate increase moves the real median by 0.95 and the synthetic
+median by 0.025, a factor of nearly 40. Since the two runs execute the same code
+over the same window geometry, the difference is in the SCENE, not the estimator.
+
+### 23d. What this leaves: aspect-dependent scattering, not density
+
+A bigger window finds a brighter argmax. On the fixtures that pixel is MORE
+stable across sub-looks; on the bridge it is LESS. The natural reading is that
+the strongest returns in a real scene are the most ANGLE-SELECTIVE ones --
+specular faces, dihedrals and multipath off bridge structure, bright over part of
+the aperture and gone over the rest -- so a window that reaches further finds a
+scatterer that is stronger in the reference look and less persistent across looks.
+The fixtures cannot reproduce that: item 12f already established that
+`rs_sim_scene()` gives every scatterer analytically exact phase and isotropic
+response, so it has NO SUB-LOOK DECORRELATION to speak of. A simulated dominant
+is dominant in every look by construction.
+
+That makes aspect-dependent scattering the leading explanation of the D_A gap,
+and it is the same modelling deficiency item 12f identified from the coherence
+gate. Two independent measurements now point at the propagation model rather than
+at the target list. It is a hypothesis, not a result: the test is to give
+`rs_sim_scene()` an aspect-dependent response and see whether synthetic D_A moves
+into the 0.4-0.9 band real scenes occupy, and whether the window-size response
+appears with it.
+
+RULED OUT SO FAR, for the record: 16-bit sample quantisation (item 21, no
+effect), per-vector AmpSF (item 21, measured, no effect), scatterer density
+(23a), and the brightest-pixel selection bias (23b).
+

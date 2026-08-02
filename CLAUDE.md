@@ -227,9 +227,15 @@ here rather than borrowed — `D_A <= 0.25` lifts a 33% window-level hit rate to
 windows. `rs_read_cphd()` now applies the per-vector `AmpSF` the CPHD standard requires (item 21);
 it cannot affect phase or any reported frequency. It does NOT explain the real-vs-synthetic
 `D_A` gap — applying it to real data changed nothing, and the synthetic experiment that
-appeared to prove it did was an artefact of an unbounded injected gain. Scatterer density is
-the remaining candidate: real medians of 0.58–0.89 sit at or above the 0.523 of fully
-developed speckle, so real scenes may simply be dense in a way the sparse fixtures are not.
+appeared to prove it did was an artefact of an unbounded injected gain. **Scatterer density
+does not explain it either** (item 23): swept on real data across a 340× change in cell area,
+`D_A` does not follow. Nor does the brightest-pixel selection bias — 4× the candidate pixels
+moves the synthetic median by 0.025, where it moves the real median by 0.95. That last
+asymmetry is the lead: real scenes respond ~40× more strongly to window size than the
+fixtures do, which points at ASPECT-DEPENDENT SCATTERING, the same modelling gap item 12f
+found from the coherence side. `rs_sim_scene()` gives every scatterer an isotropic,
+analytically exact response, so a simulated dominant is dominant in every look by
+construction. Untested; the test is to give the simulator an angle-dependent response.
 
 `tests/rs_sim.h` now carries two fixture families: `make_clutter`-style uniform speckle
 and `rs_sim_dominant_patch()`, dominants on a lattice over a diffuse background. The

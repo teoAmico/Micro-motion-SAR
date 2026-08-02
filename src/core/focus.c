@@ -133,6 +133,7 @@ resonarsat_status_t rs_focus_backproject_opts(const rs_cphd_t *cphd,
      * that asserts the two modes agree bitwise is testing the scheduler, which is
      * the only thing that differs. */
     const int single_thread = opts && opts->single_thread;
+    const int accumulate = opts && opts->accumulate;
 
     /* Interpolator width. Anything below 4 is the historical two-tap linear
      * path; see rs_focus_opts_t for why the wider kernel exists. */
@@ -243,7 +244,8 @@ resonarsat_status_t rs_focus_backproject_opts(const rs_cphd_t *cphd,
             acc_im += sr * ci + si * cr;
         }
 
-        img->data[(size_t)cell] = (float)acc_re + (float)acc_im * I;
+        const float complex v = (float)acc_re + (float)acc_im * I;
+        img->data[(size_t)cell] = accumulate ? (img->data[(size_t)cell] + v) : v;
     }
 
     free(ktab);

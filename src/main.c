@@ -206,6 +206,37 @@ static int rs_opt_no_optimize(int argc, char **argv)
  * reported rather than applied quietly: it lowers the effective PRF, and with it
  * the vibration frequency the sub-aperture stage can reach without aliasing. */
 static resonarsat_status_t rs_load_cphd(rs_cphd_t *c, const char *path, size_t rbin_window,
+                                        size_t pulse_stride, size_t max_pulses);
+
+/* Load one BLOCK of pulses, for the streaming focus path.
+ *
+ * CPHD only: the simulator's own container has no windowed read and does not
+ * need one, since nothing it writes approaches the memory a real collect does.
+ * Refuses rather than silently loading everything, because a caller that asked
+ * for a block and got a collect would be surprised at 11 GB rather than at the
+ * error. */
+static resonarsat_status_t rs_load_cphd_window(rs_cphd_t *c, const char *path,
+                                               size_t rbin_window,
+                                               size_t pulse_stride,
+                                               size_t count, size_t first)
+{
+    char probe[5] = { 0 };
+    FILE *f = fopen(path, "rb");
+    if (!f) { rs_set_error("cannot open %s", path); return RS_ERR_IO; }
+    const size_t n = fread(probe, 1, sizeof probe, f);
+    fclose(f);
+    if (n != sizeof probe || memcmp(probe, "CPHD/", 5) != 0) {
+        rs_set_error("--stream needs a CPHD product; %s is not one", path);
+        return RS_ERR_FORMAT;
+    }
+    const rs_cphd_read_opts_t o = { .rbin_window = rbin_window,
+                                    .pulse_stride = pulse_stride,
+                                    .max_pulses = count,
+                                    .pulse_first = first };
+    return rs_read_cphd(path, &o, c);
+}
+
+static resonarsat_status_t rs_load_cphd(rs_cphd_t *c, const char *path, size_t rbin_window,
                                         size_t pulse_stride, size_t max_pulses)
 {
     char probe[5] = { 0 };
@@ -716,7 +747,7 @@ static int rs_cmd_focus(int argc, char **argv)
                "                       [--size N] [--cell M] [--offset X,Y | --at LAT,LON]\n"
                "                       [--pulse-start N --pulse-count N] [--raw FILE]\n"
                "                       [--rbins N] [--max-pulses N] [--pulse-stride N]\n"
-               "                       [--range-taps N] [--no-optimize]\n"
+               "                       [--range-taps N] [--no-optimize] [--stream N]\n"
                "\n"
                "--rbins reads a window of range bins and --max-pulses caps how many\n"
                "pulses are READ, not merely used. A large collect will not fit in\n"
@@ -754,9 +785,27 @@ static int rs_cmd_focus(int argc, char **argv)
 
     rs_cphd_t c;
     const size_t rbin_window = (size_t)rs_opt_double(argc, argv, "--rbins", 0.0);
-    resonarsat_status_t st = rs_load_cphd(&c, in, rbin_window,
-                       (size_t)rs_opt_double(argc, argv, "--pulse-stride", 0.0),
-                       (size_t)rs_opt_double(argc, argv, "--max-pulses", 0.0));
+    const size_t p_stride = (size_t)rs_opt_double(argc, argv, "--pulse-stride", 0.0);
+    const size_t p_max = (size_t)rs_opt_double(argc, argv, "--max-pulses", 0.0);
+
+    /* Streaming: hold one block of pulses instead of the collect. Backprojection
+     * is a sum over pulses, so focusing block by block and accumulating is exact
+     * -- see rs_focus_opts_t.accumulate. The first block is loaded normally
+     * because the image plane it carries is what --at resolves against. */
+    const size_t stream_blk = (size_t)rs_opt_double(argc, argv, "--stream", 0.0);
+    size_t stream_total = 0;
+    resonarsat_status_t st;
+    if (stream_blk > 0) {
+        rs_cphd_meta_t meta;
+        st = rs_read_cphd_meta(in, &meta);
+        if (st != RS_OK) { rs_report_error("focus", st); return 1; }
+        stream_total = meta.n_pulse;
+        if (p_stride > 1) stream_total = (stream_total + p_stride - 1) / p_stride;
+        if (p_max && stream_total > p_max) stream_total = p_max;
+        st = rs_load_cphd_window(&c, in, rbin_window, p_stride, stream_blk, 0);
+    } else {
+        st = rs_load_cphd(&c, in, rbin_window, p_stride, p_max);
+    }
     if (st != RS_OK) { rs_report_error("focus", st); return 1; }
 
     const size_t size = (size_t)rs_opt_double(argc, argv, "--size", 256);
@@ -824,7 +873,55 @@ static int rs_cmd_focus(int argc, char **argv)
         printf("range interpolation: %d-tap windowed sinc "
                "(default is 2-tap linear)\n", fopts.range_taps);
     }
-    st = rs_focus_backproject_opts(&c, &grid, p_start, p_count, &fopts, &img);
+    if (stream_blk > 0) {
+        /* --pulse-start/--pulse-count select a sub-aperture of a resident
+         * collect and mean nothing here; say so rather than silently ignoring
+         * a flag the caller passed. */
+        if (rs_opt(argc, argv, "--pulse-start") || rs_opt(argc, argv, "--pulse-count")) {
+            printf("note: --pulse-start/--pulse-count are ignored with --stream; "
+                   "the whole collect is focused\n");
+        }
+        rs_focus_opts_t sopts = fopts;
+        sopts.accumulate = 1;
+        memset(img.data, 0, img.n_az * img.n_rg * sizeof *img.data);
+        printf("streaming up to %zu pulses in blocks of %zu (%.2f GB resident "
+               "instead of %.2f GB)\n",
+               stream_total, stream_blk,
+               (double)stream_blk * (double)c.n_rbin * 8.0 / 1073741824.0,
+               (double)stream_total * (double)c.n_rbin * 8.0 / 1073741824.0);
+
+        /* stream_total comes from NumVectors, which counts vectors the validity
+         * screen then rejects -- 8 of 335149 on this collect. So it is an UPPER
+         * BOUND, and the loop ends on the first short block rather than on the
+         * count, which would otherwise ask the reader for pulses past the end. */
+        size_t done = 0;
+        for (size_t first = 0; first < stream_total; first += stream_blk) {
+            rs_cphd_t blk;
+            const size_t want = (first + stream_blk > stream_total)
+                                  ? stream_total - first : stream_blk;
+            if (want < 2) break;      /* the reader needs two pulses to focus */
+            st = rs_load_cphd_window(&blk, in, rbin_window, p_stride, want, first);
+            if (st != RS_OK) {
+                rs_report_error("focus", st);
+                rs_slc_free(&img); rs_cphd_free(&c);
+                return 1;
+            }
+            const size_t got = blk.n_pulse;
+            st = rs_focus_backproject_opts(&blk, &grid, 0, got, &sopts, &img);
+            rs_cphd_free(&blk);
+            if (st != RS_OK) {
+                rs_report_error("focus", st);
+                rs_slc_free(&img); rs_cphd_free(&c);
+                return 1;
+            }
+            done += got;
+            if (got < want) break;    /* last block: the screen removed some */
+        }
+        printf("  focused %zu pulses in %zu blocks\n", done,
+               (done + stream_blk - 1) / stream_blk);
+    } else {
+        st = rs_focus_backproject_opts(&c, &grid, p_start, p_count, &fopts, &img);
+    }
     if (st != RS_OK) {
         rs_report_error("focus", st);
         rs_slc_free(&img); rs_cphd_free(&c);

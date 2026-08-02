@@ -230,6 +230,21 @@ typedef struct {
      * was, so that reasoning is worth revisiting deliberately rather than by
      * drift. */
     int range_taps;
+
+    /* Add into 'img' rather than overwrite it, so a caller can focus a collect
+     * in pulse blocks and sum them.
+     *
+     * Backprojection is a sum over pulses, so blocking is EXACT rather than an
+     * approximation: focusing pulses 0..N and adding the result of focusing
+     * N..M gives the same image as focusing 0..M, to the bit, provided the same
+     * cells are visited in the same order within each block. That is what makes
+     * the streaming path in rs_cmd_focus() worth having -- it trades an 11 GB
+     * resident array for one block, and it does not trade away the answer. See
+     * FOLLOW-UPS.md item 22.
+     *
+     * The caller must zero 'img' before the first block. Geometry fields are
+     * written on every call, so the last block's mid-pulse supplies them. */
+    int accumulate;
 } rs_focus_opts_t;
 
 /* As rs_focus_backproject(), with execution options.

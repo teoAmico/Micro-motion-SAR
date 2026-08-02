@@ -67,11 +67,25 @@ resonarsat_status_t rs_read_uavsar(const char *slc_path, const char *ann_path, r
  * 0 or 1 keeps all of them -- note that striding lowers the effective PRF and
  * so lowers the vibration frequency the sub-aperture stage can reach without
  * aliasing, which is why it defaults off. 'max_pulses' caps the count after
- * striding, for smoke tests; 0 means no cap. */
+ * striding, for smoke tests; 0 means no cap.
+ *
+ * 'pulse_first' skips that many pulses (after striding and validity screening)
+ * before the first one kept, which together with 'max_pulses' makes this a
+ * WINDOWED read: a caller can walk a collect in blocks instead of holding it.
+ * That is the primitive NGA's six-library exposes as
+ * cphd::Wideband::read(channel, firstVector, lastVector, ...) and the one GDAL's
+ * block model assumes; see FOLLOW-UPS.md item 22 for why this reader wanted it.
+ *
+ * A block read costs one extra pass over the PVP block, which is small, and the
+ * same seek-and-read per signal vector the whole-file path already does. The
+ * geometry arrays it fills describe ONLY the pulses in the window, so a caller
+ * accumulating across blocks must sum the per-block results rather than expect
+ * one container to describe the collect. */
 typedef struct rs_cphd_read_opts {
     size_t rbin_window;
     size_t pulse_stride;
     size_t max_pulses;
+    size_t pulse_first;
 } rs_cphd_read_opts_t;
 
 /* Read a CPHD 1.x phase-history file into the focusing container.

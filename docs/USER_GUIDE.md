@@ -222,6 +222,26 @@ this machine has 25.8 GB. Pass --rbins 4805 or fewer to read a range window, or
 `--pulse-count` limits focusing but loads the whole collect first, so it does not
 help memory. Use `--max-pulses`.
 
+**`--stream N` removes the ceiling for `focus`.** It walks the collect in blocks
+of N pulses and sums them, holding one block instead of the whole phase history.
+Backprojection is a sum over pulses, so this is exact, not an approximation — the
+streamed image is bit-identical to the monolithic one, verified at three block
+sizes on a real collect.
+
+```sh
+./build/micromotion focus --cphd scene.cphd --at LAT,LON --stream 16384 --out q.png
+```
+
+At `--rbins 1024` on the Giza collect that is 0.12 GB resident against 2.56 GB,
+for about 6% more runtime spent re-reading the header and PVP block per block.
+16384 is a reasonable default; smaller blocks save more memory and cost more
+re-parsing.
+
+**It applies to `focus` only.** `mmotion` still loads the whole collect, and that
+is where the 11–16 GB actually goes — see `FOLLOW-UPS.md` item 22 for why the
+sub-aperture stage needs a different shape (one pass over blocks, accumulating
+into every sub-look that overlaps each block) and has not been done yet.
+
 ### Match the aperture to the cell
 
 This collect focuses to 0.051 m. Backproject that onto a 2 m grid and it aliases

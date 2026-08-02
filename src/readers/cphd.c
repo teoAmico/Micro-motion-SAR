@@ -687,6 +687,18 @@ resonarsat_status_t rs_read_cphd(const char *path, const rs_cphd_read_opts_t *op
     /* ---- Pulse and bin selection ---- */
     const size_t stride = (opts && opts->pulse_stride > 1) ? opts->pulse_stride : 1;
     size_t n_pulse = (n_valid + stride - 1) / stride;
+
+    /* Windowed read: skip 'pulse_first' of the strided, validity-screened
+     * pulses before keeping any. Applied before 'max_pulses' so the pair
+     * describes a block -- see rs_cphd_read_opts_t. */
+    const size_t first = (opts) ? opts->pulse_first : 0;
+    if (first >= n_pulse) {
+        rs_set_error("cphd: pulse_first %zu is past the %zu usable pulses in %s",
+                     first, n_pulse, path);
+        st = RS_ERR_ARG;
+        goto done;
+    }
+    n_pulse -= first;
     if (opts && opts->max_pulses && n_pulse > opts->max_pulses) n_pulse = opts->max_pulses;
 
     size_t n_rbin = (size_t)n_samp;
@@ -770,7 +782,7 @@ resonarsat_status_t rs_read_cphd(const char *path, const rs_cphd_read_opts_t *op
     const size_t half = n_rbin / 2u;
 
     for (size_t i = 0; i < n_pulse; i++) {
-        const unsigned long p = (unsigned long)valid[i * stride];
+        const unsigned long p = (unsigned long)valid[(i + first) * stride];
         const unsigned char *v = pvp + (size_t)p * pvp_bytes;
 
         double tx[3], rcv[3], srp[3];

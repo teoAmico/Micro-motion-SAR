@@ -2337,15 +2337,45 @@ and also a product that is unity on some vectors and not others.
 **And a structural point it shares with GDAL.** The reference's fundamental read
 is WINDOWED -- a range of vectors and a range of samples -- and GDAL's raster
 model is block-based with a cache. Both take streaming as the primitive. This
-reader loads `n_pulse * n_rbin` complex floats up front, which is 12.3 GB for the
+reader loaded `n_pulse * n_rbin` complex floats up front, which is 12.3 GB for the
 Istanbul collect at `--rbins 6144` and 39.7 GB at full range extent, and that
-ceiling has shaped several decisions in this project: reconnaissance focusing has
-to use `--max-pulses`, and the M2 bridge sat near the edge of the affordable range
-window. Backprojection accumulates over pulses and is inherently streamable, as
-is the sub-aperture stage -- read each pulse once and accumulate it into whichever
-sub-looks contain it. Peak memory would fall from 12-16 GB to under 100 MB and
-`--rbins` would stop being a constraint. Not implemented; the largest single
-structural improvement available to the readers.
+ceiling shaped several decisions in this project: reconnaissance focusing had to
+use `--max-pulses`, and the M2 bridge sat near the edge of the affordable range
+window.
+
+**STAGE 1 IS DONE (2026-08-02): `focus --stream N`.** `rs_cphd_read_opts_t` gained
+`pulse_first`, which with `max_pulses` makes the read windowed -- the same
+primitive `Wideband::read()` exposes -- and `rs_focus_opts_t` gained `accumulate`.
+`focus` now walks the collect in blocks of N pulses and sums them.
+
+Backprojection is a sum over pulses, so blocking is EXACT rather than an
+approximation, and that is the test: the streamed image is BIT-IDENTICAL to the
+monolithic one, same SHA-256, at block sizes 8192, 16384 and 65536.
+
+```
+  block size   blocks   resident        image
+  monolithic        1   2.56 GB         (reference)
+       65536        6   0.50 GB         bit-identical
+       16384       21   0.12 GB         bit-identical
+        8192       41   0.06 GB         bit-identical
+```
+
+Measured at `--rbins 1024`; the saving scales with `--rbins`, so at the 4096 used
+for the Giza runs it is 11 GB against 0.25 GB. Runtime cost is about 6% at 16384
+(79.4 s against 75.0 s), from re-parsing the header and PVP block per block.
+
+One defect found and fixed while doing it: the block count derived from
+`NumVectors`, which counts the 8 vectors of 335149 that the validity screen then
+rejects, so the loop could ask the reader for pulses past the end. It now ends on
+the first short block instead.
+
+**STAGE 2, NOT DONE, is where the practical win is.** `mmotion` is what holds
+11-16 GB for half an hour, not `focus`. The sub-aperture stage is streamable the
+same way but needs more care: reading each sub-look's pulse range separately would
+re-read the file about ten times at 0.90 overlap, so the right shape is a SINGLE
+pass over pulse blocks, accumulating each block into every sub-look whose pulse
+range intersects it. Memory would be one block plus the whole stack of sub-look
+images -- 128 looks of 256x256 is only 67 MB -- so about 0.3 GB against 11 GB.
 
 **Nothing worth taking on safety.** GDAL's NITF truncation guard fires only above
 a million blocks and is self-described as "really a very safe bound"; this

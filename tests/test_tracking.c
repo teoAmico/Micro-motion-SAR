@@ -1536,6 +1536,94 @@ int main(void)
         free(m.vel_los); free(m.quality); free(m.d_a);
     }
 
+    RS_CASE("the millimetre spectrum axis reads the injected amplitude");
+    {
+        /* mmotion writes the spectrum twice: as a power density, which is what
+         * the selection policies rank on, and as an amplitude in millimetres,
+         * which is what a reader can place against the literature's envelope of
+         * 0.10 to 10.43 mm. The second is only worth having if it is right.
+         *
+         * The conversion assumes a bin-centred tone in a Hann-windowed one-sided
+         * periodogram, PSD_peak = A^2/(2*ENBW) with ENBW = 1.5*df, so
+         * A = sqrt(3*PSD*df). This asserts the arithmetic against a known
+         * injection rather than against the textbook it came from, and asserts
+         * LINEARITY, which no scaling error can fake: halving the injected
+         * amplitude must halve the reading. */
+        const double amps[] = { 0.002442, 0.001221 };
+        double read_mm[2] = { 0.0, 0.0 };
+
+        for (size_t ai = 0; ai < 2; ai++) {
+            rs_sim_tgt_t tg[96];
+            unsigned rs = 7u * 2654435761u + 1u;
+            for (size_t i = 0; i < 96; i++) {
+                rs = rs * 1103515245u + 12345u;
+                const double u1 = (double)(rs >> 8) / 16777216.0;
+                rs = rs * 1103515245u + 12345u;
+                const double u2 = (double)(rs >> 8) / 16777216.0;
+                rs = rs * 1103515245u + 12345u;
+                const double u3 = (double)(rs >> 8) / 16777216.0;
+                tg[i].x = (u1 - 0.5) * 24.0;
+                tg[i].y = (u2 - 0.5) * 24.0;
+                tg[i].z = 0.0;
+                tg[i].rcs = 0.3 * (-log(u3 > 1e-6 ? u3 : 1e-6));
+                tg[i].vib_freq = 0.5;
+                tg[i].vib_amp = amps[ai];
+                tg[i].vib_phase = 0.0;
+            }
+
+            rs_cphd_t c;
+            RS_CHECK_OK(rs_sim_scene(&c, tg, 96, 20.0, 400.0, 256, 0.5));
+            rs_grid_t g = { .origin = {0,0,0}, .n_x = 96, .n_y = 96,
+                            .dx = 0.5, .dy = 0.5, .height = 0.0 };
+            rs_subap_params_t sp;
+            rs_subap_params_default(&sp);
+            sp.n_looks = 128;
+            sp.overlap = 0.0;
+            rs_subap_stack_t st;
+            RS_CHECK_OK(rs_subaperture_from_cphd(&c, &g, &sp, &st));
+            rs_microm_params_t mp;
+            rs_microm_params_default(&mp);
+            mp.estimator = RS_MICROM_EST_PHASE;
+            mp.win_az = mp.win_rg = 32;
+            mp.stride_az = mp.stride_rg = 16;
+            mp.coherence_min = 0.0;
+            rs_microm_t m;
+            RS_CHECK_OK(rs_microm_track(&st, &mp, &m));
+            rs_spectrum_t spec;
+            RS_CHECK_OK(rs_spectrum_compute(&m, RS_SPEC_DISPLACEMENT, &spec));
+
+            /* Read it at the window the dispersion selector names, which is the
+             * one holding a persistent scatterer; the most PROMINENT window on
+             * this fixture is a noise window at the lowest bin. */
+            rs_spectrum_ps_t ps;
+            RS_CHECK_OK(rs_spectrum_ps_window(&spec, &ps));
+            const double *psd = spec.psd + ps.window * spec.n_freq;
+            size_t kb = 1;
+            for (size_t k = 1; k < spec.n_freq; k++) if (psd[k] > psd[kb]) kb = k;
+            read_mm[ai] = 1000.0 * sqrt(3.0 * psd[kb] * spec.df);
+
+            const double expect_mm = 1000.0 * amps[ai] * 0.82;   /* LOS projection */
+            printf("    injected %.3f mm -> %.3f mm LOS expected, axis reads "
+                   "%.3f mm (%.2fx) at %.4f Hz\n",
+                   1000.0 * amps[ai], expect_mm, read_mm[ai],
+                   read_mm[ai] / expect_mm, spec.freq[kb]);
+            /* Within 20 percent: Hann scalloping alone costs up to 15 percent
+             * for a tone between bins, and 0.5 Hz lands at 0.504. */
+            RS_CHECK(read_mm[ai] > 0.8 * expect_mm);
+            RS_CHECK(read_mm[ai] < 1.2 * expect_mm);
+
+            rs_spectrum_free(&spec);
+            rs_microm_free(&m);
+            rs_subap_stack_free(&st);
+            rs_cphd_free(&c);
+        }
+
+        /* Linearity is the assertion a constant scaling error cannot satisfy. */
+        printf("    halving the injection scales the reading by %.3f\n",
+               read_mm[1] / read_mm[0]);
+        RS_CHECK_NEAR(read_mm[1] / read_mm[0], 0.5, 0.08);
+    }
+
     RS_CASE("phase recovery survives the high-overlap regime real data needs");
     {
         /* THE CONFIGURATION A REAL COLLECT HAS TO USE. rs_microm_estimator_t

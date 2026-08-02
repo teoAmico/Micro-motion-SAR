@@ -1919,6 +1919,52 @@ static int rs_cmd_mmotion(int argc, char **argv)
                                  spec.n_freq, path, plot_title,
                                  "FREQUENCY, HZ", y_label,
                                  spec.dominant_freq[best]);
+
+            /* THE SAME SPECTRUM IN MILLIMETRES, BESIDE IT AND NOT INSTEAD OF IT.
+             *
+             * A density in (m/s)^2/Hz is the quantity the selection ranks on --
+             * prominence is a ratio of powers -- so the power figure is the one
+             * that shows what the policy compared, and it stays. But nobody
+             * reads (m/s)^2/Hz, and the literature this project is measured
+             * against reports millimetres and mm/s throughout: Vattulainen et
+             * al. quote velocity errors of order 1 mm/s and displacements from
+             * 10.43 down to 0.10 mm. A reader cannot place a result against that
+             * envelope from a squared density.
+             *
+             * The conversion is exact for a bin-centred tone. A sinusoid of
+             * amplitude A in a Hann-windowed one-sided periodogram puts
+             *
+             *     PSD_peak = A^2 / (2 * ENBW),   ENBW = 1.5 * df
+             *
+             * for the Hann window's equivalent noise bandwidth of 1.5 bins
+             * (measured 1.5118 at n = 128, converging to 1.5), so
+             *
+             *     A = sqrt(2 * PSD * ENBW) = sqrt(3 * PSD * df)
+             *
+             * TWO THINGS THIS AXIS IS NOT. It is not calibrated: the header
+             * calls amplitude qualitative for measured reasons, and the
+             * independent assessment of this method reports time-domain errors
+             * of 40 to 76 percent of peak velocity while getting every dominant
+             * frequency right. And a tone between bins loses up to 1.42 dB to
+             * Hann scalloping, so a reading is a lower bound by up to 15 percent
+             * before any of that. The label says so; the number is for placing a
+             * result in an envelope, not for quoting. */
+            double *amp_mm = malloc(spec.n_freq * sizeof *amp_mm);
+            if (amp_mm) {
+                const double *psd_w = spec.psd + best * spec.n_freq;
+                for (size_t k = 0; k < spec.n_freq; k++) {
+                    const double a = 3.0 * psd_w[k] * spec.df;
+                    amp_mm[k] = 1000.0 * ((a > 0.0) ? sqrt(a) : 0.0);
+                }
+                snprintf(path, sizeof path, "%s_spectrum_mm.png", prefix);
+                rs_raster_write_plot(spec.freq, amp_mm, spec.n_freq, path,
+                                     plot_title, "FREQUENCY, HZ",
+                                     (src == RS_SPEC_DISPLACEMENT)
+                                       ? "AMPLITUDE, MM (QUALITATIVE)"
+                                       : "AMPLITUDE, MM/S (QUALITATIVE)",
+                                     spec.dominant_freq[best]);
+                free(amp_mm);
+            }
         }
 
         /* The per-window evidence the selection was made FROM, not just the
@@ -1994,8 +2040,8 @@ static int rs_cmd_mmotion(int argc, char **argv)
             fclose(wf);
         }
         printf("wrote %s_freq.png, %s_quality.png, %s_scene.png,"
-               " %s_spectrum.png and %s_windows.csv\n",
-               prefix, prefix, prefix, prefix, prefix);
+               " %s_spectrum.png, %s_spectrum_mm.png and %s_windows.csv\n",
+               prefix, prefix, prefix, prefix, prefix, prefix);
     }
 
     rs_spectrum_free(&spec);

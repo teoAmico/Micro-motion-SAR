@@ -2155,3 +2155,45 @@ quantisation of the Capella products against the simulator's floats; genuine
 scene content, if no real resolution cell in any of these scenes is dominated the
 way an isolated simulated scatterer is. The third would be the substantive answer
 and the first two must be excluded before it can be claimed.
+
+### 20a. The spectrum is written twice, and the millimetre axis is calibrated
+
+`PREFIX_spectrum.png` stays as a power density, because prominence is a ratio of
+powers and that figure shows what the selection actually compared. Beside it,
+`PREFIX_spectrum_mm.png` carries the same window as an amplitude in millimetres.
+
+The reason is legibility against the literature rather than taste. Nobody reads
+`(m/s)^2/Hz`, and every number this project is measured against is in millimetres:
+Vattulainen et al. report displacements from 10.43 down to 0.10 mm and velocity
+errors of order 1 mm/s. A squared density cannot be placed against that.
+
+For a bin-centred tone in a Hann-windowed one-sided periodogram,
+`PSD_peak = A^2/(2*ENBW)` with `ENBW = 1.5*df`, so `A = sqrt(3*PSD*df)`. The Hann
+ENBW was checked numerically at n = 128 and came to 1.5118, converging to the
+textbook 1.5.
+
+**Validated against ground truth rather than against the textbook:**
+
+```
+injected 2.442 mm vertical -> 2.002 mm line-of-sight   axis reads 1.880 mm  0.94x
+injected 1.221 mm vertical -> 1.001 mm line-of-sight   axis reads 0.898 mm  0.90x
+halving the injection scales the reading by 0.478
+```
+
+Linearity is the assertion a constant scaling error cannot satisfy, and it holds.
+The 6 to 10 percent shortfall is Hann scalloping: the injection is at 0.500 Hz and
+the bin at 0.5040, and scalloping alone costs up to 15 percent for a tone between
+bins. `test_tracking.c` asserts both the ratio and the linearity.
+
+**The axis is still labelled QUALITATIVE, and that is not hedging.** The
+arithmetic is right to within scalloping on synthetic data; the caveat comes from
+the independent assessment, which reports time-domain RMSE of 40 to 76 percent of
+peak velocity on real collects while getting every dominant frequency correct.
+Frequencies survive real data and amplitudes do not, so the number is for placing
+a result in an envelope rather than for quoting.
+
+**Read at the right window.** The figure plots the most PROMINENT window, and on
+the fixture used above that is a noise window at the lowest bin while the
+dispersion selector names the one holding the injection. The calibration test
+therefore reads the selector's window. Which window the figure should plot, now
+that a better selector exists, is an open question this did not settle.

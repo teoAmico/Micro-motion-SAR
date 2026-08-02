@@ -551,6 +551,7 @@ With `--out PREFIX`:
 | `PREFIX_quality.png` | tracking quality per window, colour bar 0–1 |
 | `PREFIX_scene.png` | **the scene the measurement was taken from**, with the tracking grid on it and the selected window boxed |
 | `PREFIX_spectrum.png` | **the spectrum the reported frequency was read from**, with a marker at the selected bin |
+| `PREFIX_spectrum_mm.png` | the same spectrum as an **amplitude in mm or mm/s**, for placing a result against the literature's 0.10–10.43 mm envelope. Calibrated: reads 0.90–0.94× a known synthetic injection and scales linearly, the shortfall being Hann scalloping. Still labelled qualitative — the independent assessment of this method reports 40–76% time-domain error while getting every dominant frequency right |
 | `PREFIX_windows.csv` | **per-window evidence behind the selection** — every window's frequency, prominence, quality, excursion, correlation SNR and offset uncertainty, whether it passed the gates, whether it agrees with the consensus, and whether it survived the cull |
 
 The two maps are figures, not raw rasters: the window grid is enlarged by an

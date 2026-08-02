@@ -215,10 +215,23 @@ resonarsat_status_t rs_subaperture_split(const rs_slc_t *img,
 
     const size_t n_az = img->n_az, n_rg = img->n_rg, n_looks = params->n_looks;
 
-    /* Doppler centroid: prefer the annotated polynomial when present, and
-     * cross-check it against the data-driven estimate. A large disagreement is
-     * reported rather than silently averaged, since it usually means the region
-     * of interest straddles a burst boundary. */
+    /* Doppler centroid, ESTIMATED FROM THE DATA, always.
+     *
+     * This comment used to say the annotated polynomial was preferred when
+     * present and cross-checked against the estimate, with a large disagreement
+     * reported rather than averaged. None of that happens: rs_slc_t.doppler is
+     * never read here or anywhere else, no reader fills it, and there is no
+     * cross-check to disagree. The comment described a design that was never
+     * built, in the place a reader would look to find out whether an annotation
+     * error would be caught. See docs/CODE-REVIEW.md.
+     *
+     * Estimating is the right primary path rather than a fallback: it measures
+     * the centroid of the samples actually being decomposed, so it stays correct
+     * when a product's annotation is stale, when the region of interest sits off
+     * the annotated reference, and for the simulator's own container, which
+     * carries no annotation at all. What it cannot do is notice that it has
+     * landed on the wrong side of a burst boundary, which is what an annotated
+     * polynomial would be worth having for. */
     double fdc_est = 0.0;
     resonarsat_status_t st = rs_estimate_doppler_centroid(img, &fdc_est);
     if (st != RS_OK) return st;

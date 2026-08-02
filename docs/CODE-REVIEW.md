@@ -15,6 +15,7 @@ because several of these are patterns rather than incidents.
 
 | date | commit | scope | outcome |
 |---|---|---|---|
+| 2026-08-02 | `893d9d2` | Follow-up: the two items the sweep left open, checked | Both were wrong as written. The orbit/Doppler fields are superseded rather than unfinished; two of the four "exposed but non-recovering" modes have no test at all, and `--lag` was unvalidated with platform-dependent undefined behaviour. Details below. |
 | 2026-08-02 | `6d42f29` | Full sweep: `docs/FOLLOW-UPS.md` against the source; every `.c` and `.h` under `src/`, `include/`, `tools/`, `tests/`; CLI flags against `USER_GUIDE.md`; committed run artefacts under `runs/` | 21/21 tests pass. Two pre-existing compiler warnings found (see the correction below). Eleven findings, all fixed in the same change; two new test cases pin the substantive one. |
 
 What that review did **not** cover, so nobody reads more into it than was done:
@@ -338,14 +339,109 @@ Recorded so a later reviewer knows what not to redo.
   `RS_COREG_SIGMA_MAX` and `RS_COREG_MAX_SURFACE` all match the values their
   headers and the `FOLLOW-UPS` sweeps quote.
 
-## Open, deliberately
+## The open items, checked (2026-08-02)
 
-Not defects, but decisions a later reader should know were made rather than
-missed.
+Both entries this file left open turned out to be wrong as written. Recorded in
+full because in both cases the *reason* they were wrong is more useful than the
+correction.
 
-- **The orbit and Doppler parse does not exist.** Finding 5 removed the dead
-  consumers; nothing fills the fields. That is a gap in the readers, not
-  something the deletion resolved.
-- **`--reference pair`, `adjacent` and `lag`, and `--estimator splitband`,
-  recover nothing** and are exposed because the sources describe them. Unchanged
-  by this review.
+### The orbit and Doppler fields are superseded, not unfinished
+
+This file said "the orbit and Doppler parse does not exist -- a gap in the
+readers". It is not a gap. Every format either carries something better or
+carries nothing to put there:
+
+| | what it has | where it goes today |
+|---|---|---|
+| CPHD | `rs_cphd_t.pos`, **three doubles per pulse** -- the exact recorded trajectory | read directly by `rs_focus_backproject()` |
+| SICD | `ARPPos` / `ARPVel` at aperture centre | **parsed already**, into `plane.sensor` / `plane.sensor_vel`, consumed by `rs_geo_slant_to_ground()` on the live `info` path |
+| UAVSAR | no state vectors at all | nothing to parse |
+
+A 64-entry `rs_orbit_t` interpolated with a cubic would be strictly worse than
+the per-pulse samples CPHD already provides, and SICD's single state vector is
+parsed -- just into a better home. So `rs_slc_t.orbit` is a third place for a
+quantity with two, and `rs_slc_t.doppler` likewise: `rs_subaperture_split()`
+estimates the centroid from the samples on every call, by design rather than as
+a fallback, which is what lets the simulator's annotation-free container run
+through identical code.
+
+**"Unfilled field" and "field nothing should fill" look identical from the
+field.** That is why this was recorded as a reader gap for two commits. The
+distinction is only visible by asking what would fill it and finding the answer
+is already stored elsewhere. `slc.h` now says so, and says the fields are
+removable rather than reserved.
+
+**A false comment found while checking.** `src/core/subaperture.c` read: *"Doppler
+centroid: prefer the annotated polynomial when present, and cross-check it
+against the data-driven estimate. A large disagreement is reported rather than
+silently averaged."* None of it happens -- `rs_slc_t.doppler` is never read
+anywhere, there is no cross-check, and nothing is reported. The comment described
+a design that was never built, at the exact place a reader would look to find out
+whether an annotation error would be caught. **Fixed**, and it now states what
+estimation can and cannot do: it stays correct when an annotation is stale, and
+it cannot notice that it has landed on the wrong side of a burst boundary, which
+is the one thing an annotated polynomial would be worth having for.
+
+### "Recover nothing" was too strong, and two of the four modes are untested
+
+*Untested, measured rather than assumed:*
+
+| mode | branch in `rs_microm_track()` | covered by |
+|---|---|---|
+| `RS_MICROM_REF_PAIR` | yes | `test_tracking.c`, `test_subaperture.c` |
+| `RS_MICROM_REF_ADJACENT` | yes | `test_tracking.c` |
+| `RS_MICROM_REF_LAG` | **no test anywhere** | -- |
+| `RS_MICROM_EST_SPLITBAND` | **estimator branch untested** | only the primitive `rs_splitband_shift()`, in `test_phaselink.c` |
+
+`FOLLOW-UPS.md` item 8 argued `LAG` should be kept because it is "documented,
+tested and harmless". It is not tested: the lag clamp, the `k < lag` skip and the
+moving-reference extraction have never been executed by `ctest`, and every
+measurement in item 7 was made through the CLI. Corrected there.
+
+*And "recovers nothing" understates `lag`.* Item 7 measured it at slope +1.120,
+rms 0.3461 Hz pooled over three seeds -- failing `rs_track_fit()` by fourteen
+times the bound, but the only non-zero slope this project had produced before
+item 14. The accurate statement is that none of the four passes the bar, not that
+none responds.
+
+**A defect that untested path was hiding: `--lag` was unvalidated.** It went
+straight into `(size_t)rs_opt_double(...)`, so:
+
+- `--lag -1` is undefined behaviour and **platform-dependent**. arm64 saturates
+  to 0, whereupon `rs_microm_track()`'s `ref_lag > 0` guard silently substitutes
+  1 and the run looks normal -- confirmed, it returned bit-identical output to
+  `--lag 1`. x86-64's `cvttsd2si` gives `SIZE_MAX`, which skips every look. Same
+  source, two behaviours, neither one asked for.
+- `--lag 999` on 32 looks skipped every look and produced an all-zero series. The
+  chain did refuse -- the quantisation floor caught it, which is the design
+  working -- but the message blamed the scene and the upsample factor and never
+  mentioned the lag. A misdiagnosis of a configuration error.
+
+**Fixed:** `--lag` is validated as a double before the cast, rejecting
+non-positive and non-integral values, and checked against the look count once it
+is known. Refused rather than clamped, because a clamp would hide the mistake.
+
+```
+--lag 1    -> strongest peak in window 17: 0.359 Hz ...
+--lag 999  -> --lag 999 needs at least 1000 sub-looks to leave any sample,
+              but this configuration has 32. Lower --lag or raise --n.
+--lag -1   -> --lag must be a positive whole number of looks (got -1)
+--lag 2.5  -> --lag must be a positive whole number of looks (got 2.5)
+```
+
+### Still open after the check
+
+- **`RS_MICROM_REF_LAG` and the `SPLITBAND` estimator branch have no test.**
+  Naming them here is not a fix. Both are reachable from the CLI and both were
+  used to produce recorded measurements.
+- **`rs_slc_t.doppler` and `.orbit` are removable** and are not removed, because
+  deleting a field from that struct is wider than the review that found it.
+- **On a `--reference lag` run the `phase` column is taken against look 0** while
+  `disp_az` is taken against look `k - lag` (`src/core/microm.c`, the phase
+  refinement block, whose comment says "between this look and the reference").
+  `lag` is deliberately a differencing observable with no accumulation, so its
+  phase should difference too. It does not affect a reported frequency on the
+  correlation route, which reads `vel_los` from `disp_az` -- it affects `--shifts`
+  dumps and anything reading `disp_los`, on the mode item 7 spent the most effort
+  dumping. Not fixed: the path has no test, and changing a diagnostic output
+  blind is how the two controls in items 27 and 28 came to be wrong.

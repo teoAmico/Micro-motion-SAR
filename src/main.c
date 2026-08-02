@@ -1481,7 +1481,39 @@ static int rs_cmd_mmotion(int argc, char **argv)
     rs_microm_params_t mp;
     rs_microm_params_default(&mp);
     mp.reference = (rs_microm_ref_t)ref_mode;
-    mp.ref_lag   = (size_t)rs_opt_double(argc, argv, "--lag", 1.0);
+    /* --lag, validated as a double BEFORE the cast to size_t.
+     *
+     * `--lag -1` went straight into (size_t)(-1.0), which is undefined and
+     * PLATFORM-DEPENDENT: arm64 saturates to 0, so the `ref_lag > 0` guard in
+     * rs_microm_track() silently substituted 1 and the run looked normal, while
+     * x86-64's cvttsd2si gives SIZE_MAX, which skips every look and yields an
+     * all-zero series. The same binary source, two different behaviours, neither
+     * of them what was asked for. See docs/CODE-REVIEW.md.
+     *
+     * The upper bound is checked against the look count below, once it is known. */
+    {
+        const double lag_arg = rs_opt_double(argc, argv, "--lag", 1.0);
+        if (!(lag_arg >= 1.0) || lag_arg != (double)(size_t)lag_arg) {
+            fprintf(stderr, "--lag must be a positive whole number of looks "
+                            "(got %g)\n", lag_arg);
+            rs_subap_stack_free(&stack); rs_cphd_free(&c);
+            return 1;
+        }
+        mp.ref_lag = (size_t)lag_arg;
+    }
+    if (mp.reference == RS_MICROM_REF_LAG && mp.ref_lag >= stack.n_looks) {
+        /* Refused rather than clamped. Every look would be skipped, leaving a
+         * complete, well-formed, entirely zero result -- and the refusal it
+         * eventually draws downstream blames the quantisation floor and the
+         * scene, which is a misdiagnosis of a configuration error. Warning
+         * rather than silently degrading is what this project is organised
+         * around. */
+        fprintf(stderr, "--lag %zu needs at least %zu sub-looks to leave any "
+                        "sample, but this configuration has %zu. Lower --lag or "
+                        "raise --n.\n", mp.ref_lag, mp.ref_lag + 1, stack.n_looks);
+        rs_subap_stack_free(&stack); rs_cphd_free(&c);
+        return 1;
+    }
     mp.no_optimize = no_optimize;
     {
         /* --estimator selects WHAT is measured, not merely how well. Phase and

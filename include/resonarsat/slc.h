@@ -172,24 +172,40 @@ resonarsat_status_t rs_slc_crop(const rs_slc_t *src, size_t az0, size_t rg0,
  * good. Returns RS_OK when every check passes. */
 resonarsat_status_t rs_slc_validate(const rs_slc_t *img);
 
-/* THE 'doppler' AND 'orbit' FIELDS ABOVE ARE CARRIED, NOT USED.
+/* THE 'doppler' AND 'orbit' FIELDS ABOVE ARE CARRIED, NOT USED -- AND THEY ARE
+ * SUPERSEDED RATHER THAN UNFINISHED.
  *
- * No reader populates either: neither the CPHD, SICD nor UAVSAR path writes a
- * Doppler coefficient or a state vector, so both structures are zero on every
- * product this software has ever read. rs_subaperture_split() copies them into
- * each sub-look's metadata, which propagates zero to zero.
+ * No reader populates either, and rs_subaperture_split() copies them into each
+ * sub-look's metadata, propagating zero to zero. A Lagrange orbit interpolator
+ * and a Horner Doppler evaluator lived here to consume them; both were deleted
+ * in the 2026-08-02 review as the only readers of fields nothing writes.
  *
- * A Lagrange orbit interpolator and a Horner Doppler evaluator lived here to
- * consume them. Both were deleted in the 2026-08-02 review (docs/CODE-REVIEW.md
- * finding 5): they were the only readers of the only fields nothing writes, so
- * the whole chain was unreachable and untested, and this project has twice found
- * that a documented, unexercised function does not do what its comment claims
- * (FOLLOW-UPS.md items 27 and 28). Restore them from git when a reader actually
- * fills the fields, and give them a fixture at the same time.
+ * AN EARLIER VERSION OF THIS NOTE CALLED THAT A GAP IN THE READERS. It is not,
+ * and the check that settled it is worth recording, because "unfilled field"
+ * and "field nothing should fill" look identical from the field:
  *
- * The fields stay because the parse that would fill them is a real gap rather
- * than a rejected idea, and because rs_slc_t is what a future reader writes into.
- * Read them as reserved, not as available metadata. */
+ *   ORBIT. The CPHD path carries rs_cphd_t.pos -- THREE DOUBLES PER PULSE, the
+ *   exact recorded trajectory -- and rs_focus_backproject() reads it directly.
+ *   A 64-entry table interpolated with a cubic would be strictly worse than the
+ *   samples it was interpolating. The SICD path parses ARPPos and ARPVel and
+ *   already stores them, in 'plane.sensor' and 'plane.sensor_vel', where
+ *   rs_geo_slant_to_ground() consumes them on the live `info` path. UAVSAR
+ *   annotations carry no state vectors at all. So every format either has
+ *   something better than this table or has nothing to put in it.
+ *
+ *   DOPPLER. rs_subaperture_split() estimates the centroid from the samples on
+ *   every call and never consults an annotation. That is the primary path by
+ *   design, not a fallback -- it measures the data actually being decomposed --
+ *   and it is what makes the simulator's own container, which carries no
+ *   annotation, work through the identical code.
+ *
+ * So these are two spare homes for quantities that already have better ones.
+ * They are kept only because deleting a field from rs_slc_t is a wider change
+ * than the review that found this was scoped for. Do not read them as metadata
+ * awaiting a parse: read them as removable. The one thing an annotated Doppler
+ * polynomial would buy that estimation cannot is noticing a burst boundary, and
+ * that is a reason to add the parse WITH a consumer, not to keep the field
+ * against the day someone does. */
 
 /* Return a pointer to the first sample of azimuth line 'az'. No bounds check;
  * callers iterate over known dimensions. */

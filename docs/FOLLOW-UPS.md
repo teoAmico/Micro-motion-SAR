@@ -1003,10 +1003,18 @@ through a selection policy that cannot express disagreement. The policy should
 have been fixed first. It is the cheapest thing in this file and it has been open
 the longest.
 
-**`LAG` should not be removed** -- it is documented, tested and harmless, and the
+**`LAG` should not be removed** -- it is documented and harmless, and the
 coherence reasoning behind it stands on its own -- but it should not be presented
 as a fix for anything until it beats `FIRST` on a consensus measure, which it
 currently does not.
+
+*(CORRECTED 2026-08-02: this said "documented, tested and harmless". It is not
+tested. `RS_MICROM_REF_LAG` appears in no test in the suite, so the lag branch of
+`rs_microm_track()` -- the lag clamp, the `k < lag` skip and the moving reference
+extraction -- has never been executed by `ctest`. The measurements in this item
+were made through the CLI. `RS_MICROM_EST_SPLITBAND` is in the same position: the
+primitive `rs_splitband_shift()` is covered by `test_phaselink.c`, but the
+estimator branch that calls it is not. See `docs/CODE-REVIEW.md`.)*
 
 ---
 

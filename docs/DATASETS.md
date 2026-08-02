@@ -96,3 +96,66 @@ curl -s -r 1024-12341 "$U" > meta.xml               # the XML block it points at
 
 About 12 KB against a 17 GB download. `validate --xml` also accepts a whole CPHD
 file and seeks the block itself, which screens the 36 GB Giza collect in 0.3 s.
+
+### Keep the metadata block beside the collect
+
+Once a collect is on disk, extract the header and the XML block **once** and keep
+them next to it. Both local bundles are already arranged that way:
+
+```text
+CAPELLA_C09_SP_CPHD_HH_20230321101754_20230321101819/
+  ....cphd                17,312,033,344 bytes    the collect
+  ....cphd-header.txt                432 bytes    the plain-text header
+  ....xml                         11,318 bytes    the XML block, extracted verbatim
+  SHA256SUMS
+```
+
+Screening then costs nothing and needs no range requests:
+
+```sh
+./build/micromotion validate --xml "$D/$P.xml" --frequency 2.0 --amplitude 3.0 \
+    --estimator phase --alpha 0.0067 --overlap 0.0
+```
+
+**0.006 seconds**, reproducing item 18's *WARN with no failures* exactly.
+
+Pointing `--xml` at the `.cphd` works too and is also fast — the seek is two
+reads, and it measured 0.005 s warm here against the 0.3 s item 18 recorded on a
+cold read. The reason to keep the extracted block is not speed: it is that an
+11 KB file can be committed, mailed, or read when the collect is on a drive that
+is not plugged in, and that the screen then cannot be confused by a truncated
+download. The header file is worth keeping for the same reason — it carries the
+block offsets and sizes, so a short file can be diagnosed without opening it.
+
+### There are no STAC or extended-JSON sidecars, and it was worth checking
+
+Capella's *SAR Products Format Specification* documents a three-file TIFF+JSON
+bundle — image, STAC catalog metadata, and an extended metadata JSON — carrying
+`view:incidence_angle`, `capella:squint_angle`, `locale:datetime`,
+`sar:resolution_azimuth`, `center_pixel`, `state.state_vectors` and more. That
+bundle is the **imagery** product family: SLC, GEC, GEO, SICD and CSI. `"CPHD"`
+appears in the spec only as an admissible value of `sar:product_type`, not as a
+delivery that ships those files.
+
+**Checked against both collects on disk: the open-data CPHD deliveries are the
+`.cphd` and nothing else.** No `.json`, no `_extended.json`. The re-fetch URL in
+each bundle's `README.md` is a single object. So the sidecar route does not
+exist for phase history, and the extracted `.xml` above is what replaces it —
+better for this purpose, since it is the same document the full reader parses
+rather than a summary that could drift from it.
+
+Three things the imagery metadata would have supplied and the CPHD XML does not,
+recorded so nobody goes looking twice:
+
+- **`locale:datetime` / `locale:time`** — local time of acquisition. The Istanbul
+  argument above turns on 13:18 local against 01:39 local, and that was derived
+  by hand from the UTC timestamp and the longitude.
+- **`capella:squint_angle`**, stated directly rather than inferred.
+- **`radar.time_varying_parameters`** — `{start_timestamps, prf, pulse_bandwidth,
+  pulse_duration}`, which is Capella declaring the PRF as *piecewise constant
+  with switch times*. That is exactly what `RS_VALIDATE_PRF_STABILITY` reports
+  UNKNOWN for on a metadata-only screen, and it explains the shape of what
+  `rs_subap_stack_t` records measuring on the Giza collect: a PRI spread of 1.1%
+  that is systematic rather than jitter. For CPHD the per-pulse transmit times in
+  the PVP block are strictly better than a step list — but they are 70 MB in, so
+  the screen still cannot answer that check and the UNKNOWN stands.

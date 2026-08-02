@@ -1141,6 +1141,67 @@ resonarsat_status_t rs_spectrum_ampcor_window_opts(const rs_spectrum_t *spec,
                                                    size_t min_neighbours,
                                                    rs_spectrum_cull_t *out);
 
+/* What selecting on amplitude dispersion found. See rs_spectrum_ps_window(). */
+typedef struct {
+    size_t window;        /* lowest-dispersion window at the reported frequency */
+    double freq_hz;       /* what the selected persistent scatterers agree on */
+    double d_a;           /* the selected window's amplitude dispersion */
+    double da_gate;       /* the criterion applied, for the record */
+    size_t n_input;       /* windows passing the shared gates */
+    size_t n_candidate;   /* of those, meeting the dispersion criterion */
+    size_t n_agree;       /* of those, sharing the reported bin */
+} rs_spectrum_ps_t;
+
+/* Which windows hold a persistent scatterer, and what they say.
+ *
+ * WHY THIS IS A SELECTOR AND NOT A GATE. rs_microm_t.d_a reports amplitude
+ * dispersion because the phase route needs a dominant scatterer per resolution
+ * cell, and mmotion warns when no window has one. That warning is the wrong
+ * shape for a real scene: Biondi et al. (Mosul Dam) -- the origin of the
+ * sub-aperture tracking this project implements -- do not gate on D_A, they
+ * SELECT on it, measuring displacement only at the candidate persistent
+ * scatterers and ignoring the rest of the image. On a bridge over water that
+ * distinction decides the result, because two hundred windows of water will
+ * drown any scene-wide summary while the handful on the deck are the entire
+ * measurement.
+ *
+ * THE THRESHOLD IS MEASURED HERE RATHER THAN BORROWED. Ferretti et al. give
+ * D_A <= 0.25 for persistent scatterers over independent PASSES; sub-looks of
+ * one aperture share their scatterers and are not independent, so the
+ * calibration had to be checked. Measured over 1800 windows -- four fixtures
+ * spanning the recovery boundary, six injected frequencies, three seeds, phase
+ * estimator -- by whether each window's own dominant bin matched its injection:
+ *
+ *     D_A <= t    windows   correct    rate
+ *        0.20         234       230   98.3%
+ *        0.25         318       302   95.0%
+ *        0.30         387       354   91.5%
+ *        0.40         627       478   76.2%
+ *        0.50        1374       560   40.8%
+ *        all         1800       600   33.3%
+ *
+ * The knee is at 0.25 and the multi-pass constant survives contact with
+ * sub-looks: selecting on it takes a 33 percent window-level hit rate to 95.
+ * That is the whole case for this function, and it is why the number is the same
+ * as the literature's while no longer being taken on faith.
+ *
+ * 'out' receives the reported frequency, the selected window and the counts at
+ * each stage. Returns RS_ERR_RANGE when no window meets the criterion -- which
+ * is a result rather than an error, and is what a scene with no persistent
+ * scatterer looks like. RS_ERR_ARG on a NULL or empty spectrum. */
+resonarsat_status_t rs_spectrum_ps_window(const rs_spectrum_t *spec,
+                                          rs_spectrum_ps_t *out);
+
+/* As rs_spectrum_ps_window(), with the dispersion criterion explicit.
+ *
+ * Exposed for the same reason the cull's factors are: the constant above is
+ * measured on synthetic fixtures at one look count, and a caller re-measuring it
+ * on other data should not have to edit the source. A non-positive value selects
+ * every window that passed the shared gates, which is the no-criterion control. */
+resonarsat_status_t rs_spectrum_ps_window_opts(const rs_spectrum_t *spec,
+                                               double da_max,
+                                               rs_spectrum_ps_t *out);
+
 /* Return the observation ratio implied by a sub-aperture duration and a measured
  * frequency: t_sap divided by that frequency's period, i.e. how many cycles of
  * the motion each sub-look integrates over.

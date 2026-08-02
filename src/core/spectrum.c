@@ -758,6 +758,101 @@ resonarsat_status_t rs_spectrum_ampcor_window_opts(const rs_spectrum_t *spec,
 }
 
 
+/* Select the persistent scatterers and report what they agree on. See microm.h. */
+resonarsat_status_t rs_spectrum_ps_window(const rs_spectrum_t *spec,
+                                          rs_spectrum_ps_t *out)
+{
+    return rs_spectrum_ps_window_opts(spec, RS_PS_DA_MAX, out);
+}
+
+/* Select on amplitude dispersion, with the criterion supplied. See microm.h. */
+resonarsat_status_t rs_spectrum_ps_window_opts(const rs_spectrum_t *spec,
+                                               double da_max,
+                                               rs_spectrum_ps_t *out)
+{
+    if (!out) return RS_ERR_ARG;
+    memset(out, 0, sizeof *out);
+    if (!spec || !spec->dominant_freq || !spec->quality || !spec->d_a ||
+        spec->n_win == 0)
+        return RS_ERR_ARG;
+    out->window = spec->n_win;
+    out->da_gate = da_max;
+
+    /* The same shared gates the other three policies apply, so the counts
+     * describe one population. Duplicated for the reason stated on
+     * rs_spectrum_consensus(): the gates are the contract, not an
+     * implementation detail. */
+    double q_max = 0.0;
+    for (size_t w = 0; w < spec->n_win; w++)
+        if (spec->quality[w] > q_max) q_max = spec->quality[w];
+    const double q_min = 0.5 * q_max;
+    const double floor_px = (spec->quant_px > 0.0) ? 2.449 * spec->quant_px : 0.0;
+    const double tol = (spec->df > 0.0) ? 0.5 * spec->df : 1e-9;
+
+    unsigned char *cand = calloc(spec->n_win, 1);
+    if (!cand) return RS_ERR_ALLOC;
+
+    for (size_t w = 0; w < spec->n_win; w++) {
+        if (spec->quality[w] < q_min) continue;
+        if (floor_px > 0.0 && spec->excursion_px &&
+            spec->excursion_px[w] < floor_px) continue;
+        out->n_input++;
+        /* A non-positive criterion selects everything that entered, which is
+         * the control a caller needs to see what the selection is worth. */
+        if (da_max > 0.0 && spec->d_a[w] > da_max) continue;
+        cand[w] = 1;
+        out->n_candidate++;
+    }
+
+    if (out->n_candidate == 0) {
+        free(cand);
+        rs_set_error("spectrum: no window meets the amplitude-dispersion "
+                     "criterion D_A <= %.3g, so the scene holds no persistent "
+                     "scatterer for the phase route to read; %zu windows passed "
+                     "the shared gates", da_max, out->n_input);
+        return RS_ERR_RANGE;
+    }
+
+    /* What the candidates agree on. The mode rather than the argmax of any
+     * statistic over them: the selection has already decided which windows are
+     * believed, and the remaining question is what they say. Ties to the lower
+     * frequency, matching the other policies so they cannot disagree by
+     * convention alone. */
+    size_t best_count = 0;
+    double best_freq = 0.0;
+    for (size_t w = 0; w < spec->n_win; w++) {
+        if (!cand[w]) continue;
+        size_t count = 0;
+        for (size_t v = 0; v < spec->n_win; v++) {
+            if (!cand[v]) continue;
+            if (fabs(spec->dominant_freq[v] - spec->dominant_freq[w]) <= tol) count++;
+        }
+        if (count > best_count ||
+            (count == best_count && best_count > 0 &&
+             spec->dominant_freq[w] < best_freq)) {
+            best_count = count;
+            best_freq = spec->dominant_freq[w];
+        }
+    }
+
+    /* Name the most persistent scatterer among those at the reported frequency:
+     * lowest dispersion is the one the criterion likes best, and is the window a
+     * reader should look at first. */
+    size_t pick = spec->n_win;
+    for (size_t w = 0; w < spec->n_win; w++) {
+        if (!cand[w]) continue;
+        if (fabs(spec->dominant_freq[w] - best_freq) > tol) continue;
+        if (pick == spec->n_win || spec->d_a[w] < spec->d_a[pick]) pick = w;
+    }
+
+    out->window  = pick;
+    out->freq_hz = best_freq;
+    out->n_agree = best_count;
+    out->d_a     = (pick < spec->n_win) ? spec->d_a[pick] : RS_DA_MAX;
+    free(cand);
+    return RS_OK;
+}
+
 /* Observation ratio for a measured frequency. See the header on why this is a
  * diagnostic quantity and not a validity threshold. */
 double rs_spectrum_observation_ratio(double t_sap, double freq)

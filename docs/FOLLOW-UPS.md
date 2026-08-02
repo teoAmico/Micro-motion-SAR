@@ -2062,3 +2062,96 @@ measured gap here is 0.084 against 0.381, wide enough that the question does not
 change any of the readings above -- but the number should be read as a scale
 rather than a bright line, and the separating threshold for sub-looks has not
 been measured.
+
+---
+
+## 20. Amplitude dispersion becomes a selector, its threshold is measured, and a reader bug turns up under it
+
+Item 19 added `D_A` as a scene-wide warning. That is the wrong shape, and the
+source literature says so: Biondi et al. (Mosul Dam, arXiv 2007.05326), the
+origin of the sub-aperture tracking this project implements, do not gate on
+amplitude dispersion -- they **select** on it. "Measurement points are chosen
+based on the amplitude dispersion index... the displacements are estimated on
+these points." On a bridge over water the distinction is the whole result: two
+hundred windows of water drown any scene-wide summary while the handful on the
+deck are the measurement.
+
+That paper also says the threshold is "experimentally found", which settles item
+19's open caveat about whether Ferretti's multi-pass 0.25 transfers to sub-looks
+of one aperture. It had to be measured.
+
+**MEASURED.** 1800 windows -- four fixtures spanning the recovery boundary
+established in item 15, six injected frequencies, three seeds, phase estimator --
+scored by whether each window's OWN dominant bin matched its injection:
+
+```
+D_A <= t    windows   correct    rate
+   0.20         234       230   98.3%
+   0.25         318       302   95.0%
+   0.30         387       354   91.5%
+   0.40         627       478   76.2%
+   0.50        1374       560   40.8%
+   all         1800       600   33.3%
+```
+
+The knee is at 0.25 and **the borrowed constant survives contact with sub-looks**:
+selecting on it lifts a 33 percent window-level hit rate to 95. Item 19's caveat
+is retired -- not by argument but because the number was checked.
+
+`rs_spectrum_ps_window()` is the selector, reported beside prominence, consensus
+and the cull, gating nothing. `test_tracking.c` pins the case that motivates it:
+a scene where four low-dispersion windows carry the injection and twenty-one
+high-dispersion ones carry something else. Prominence and consensus follow the
+21-window majority to the wrong answer; the selector does not. With the criterion
+disabled it falls back to the crowd, which is what shows the selection rather
+than the spectrum did the work.
+
+### The bridge, correctly placed, still has no persistent scatterers
+
+Item 18's Istanbul runs measured water: the coordinate lookup put the grid 183 m
+off the M2 deck, and a 256 m grid has no margin for that. Re-placed on the deck,
+verified by focusing candidates until the bright double line of a bridge over
+water sat centred:
+
+```
+                          D_A best / median   windows <= 0.25   agreement
+Giza (desert)                0.381 / 0.583           0            16%
+Istanbul, water, ov 0.90     0.402 / 0.601           0            18%
+Istanbul, water, ov 0.40     0.472 / 0.621           0             6%
+Istanbul, BRIDGE, ov 0.90    0.391 / 0.893           0            20%
+Istanbul, BRIDGE, ov 0.40    0.516 / 0.847           0            10%
+```
+
+**Four real scenes, best-window D_A between 0.38 and 0.52, never below.** The
+synthetic fixtures reach 0.079. That gap is now the central open question: it is
+too consistent across a desert, a waterway and a bridge deck to be scene content.
+
+### A reader bug found while chasing it, which explains part of the gap
+
+Both Capella products declare `AmpSF` in their PVP -- the per-vector amplitude
+scale factor the CPHD standard requires be applied to the signal samples --
+and `rs_read_cphd()` never reads it. Measured on the Istanbul collect:
+
+```
+AmpSF over 249424 vectors: min 0.00266  max 0.1329  mean 0.00442
+  dispersion sigma/mu = 0.7108        max/min = 50x
+  mean per sub-look (128 non-overlapping): sigma/mu = 0.0864
+```
+
+So every sub-look carries about 8.6 percent of unapplied gain variation, plus
+rare 30x spikes. **It cannot affect phase** -- `AmpSF` is real and positive -- so
+no reported frequency changes. It perturbs every amplitude-derived statistic,
+which is now what the selection depends on.
+
+**It is not the whole explanation.** Combining in quadrature, an 8.6 percent gain
+dispersion takes a true 0.37 to 0.38 -- it accounts for the last hundredth of the
+observed floor and not the gap from 0.079 to 0.38. Applying it is correct and
+required by the standard; expecting it to unlock the real-data measurement would
+be wishful.
+
+**What remains to explain the gap.** Candidates, none measured: an aperture
+amplitude taper the synthetic scenes do not have; the 16-bit integer sample
+quantisation of the Capella products against the simulator's floats; genuine
+scene content, if no real resolution cell in any of these scenes is dominated the
+way an isolated simulated scatterer is. The third would be the substantive answer
+and the first two must be excluded before it can be claimed.

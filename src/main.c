@@ -1543,6 +1543,26 @@ static int rs_cmd_mmotion(int argc, char **argv)
     }
     printf("  amplitude dispersion: best %.3f, median %.3f; %zu of %zu windows "
            "meet D_A <= %.2f\n", da_lo, da_med, n_ps, spec.n_win, RS_PS_DA_MAX);
+    /* The persistent-scatterer selection, reported beside the other three and
+     * gating nothing. It is the one that asks what the windows holding a
+     * dominant scatterer say, rather than what the whole scene says -- see
+     * rs_spectrum_ps_window(). On a scene that is mostly water or desert the
+     * difference is the entire result. */
+    {
+        rs_spectrum_ps_t ps;
+        const resonarsat_status_t pst = rs_spectrum_ps_window(&spec, &ps);
+        if (pst == RS_OK) {
+            printf("  persistent scatterers: %.3f Hz from %zu of %zu candidates "
+                   "(D_A <= %.2f), best window %zu at D_A %.3f\n",
+                   ps.freq_hz, ps.n_agree, ps.n_candidate, ps.da_gate,
+                   ps.window, ps.d_a);
+        } else {
+            printf("  persistent scatterers: none -- %zu windows passed the "
+                   "shared gates, %zu met D_A <= %.2f\n",
+                   ps.n_input, ps.n_candidate, ps.da_gate);
+        }
+    }
+
     if (n_ps == 0) {
         printf("  %s: NO window holds a dominant scatterer by the "
                "persistent-scatterer\n"

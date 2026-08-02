@@ -1454,6 +1454,88 @@ int main(void)
         RS_CHECK(best_da[1] > 1.4 * RS_PS_DA_MAX);
     }
 
+    RS_CASE("selecting on dispersion beats reading the whole scene");
+    {
+        /* THE POINT OF A SELECTOR RATHER THAN A GATE. A scene where most windows
+         * hold no dominant scatterer -- water, desert, or here a fixture whose
+         * cells contain several equal scatterers -- drowns any scene-wide
+         * summary. Biondi et al. select the candidate persistent scatterers and
+         * measure only those; this asserts that doing so recovers an injection
+         * the whole-scene policies get wrong.
+         *
+         * Built by hand so the two populations are exactly controlled: four
+         * windows carry the injection at low dispersion, twenty-one carry a
+         * different frequency at high dispersion. Prominence and consensus see
+         * a 21-to-4 majority and must lose; the selector must not. */
+        const size_t k = 64, n_az = 5, n_rg = 5, n_win = n_az * n_rg;
+        rs_microm_t m;
+        memset(&m, 0, sizeof m);
+        m.n_looks = k; m.n_win = n_win; m.n_win_az = n_az; m.n_win_rg = n_rg;
+        m.win_az = m.win_rg = 32; m.stride_az = m.stride_rg = 16;
+        m.dt = 0.1; m.az_spacing_m = m.rg_spacing_m = 1.0;
+        m.quant_px = 0.0;
+
+        m.disp_az  = calloc(n_win * k, sizeof *m.disp_az);
+        m.disp_rg  = calloc(n_win * k, sizeof *m.disp_rg);
+        m.disp_los = calloc(n_win * k, sizeof *m.disp_los);
+        m.vel_los  = calloc(n_win * k, sizeof *m.vel_los);
+        m.quality  = calloc(n_win, sizeof *m.quality);
+        m.d_a      = calloc(n_win, sizeof *m.d_a);
+        RS_CHECK(m.disp_az && m.disp_rg && m.disp_los && m.vel_los &&
+                 m.quality && m.d_a);
+
+        const double f_true = 1.25, f_crowd = 0.625;
+        for (size_t w = 0; w < n_win; w++) {
+            m.quality[w] = 1.0;
+            const int is_ps = (w == 6 || w == 7 || w == 11 || w == 12);
+            m.d_a[w] = is_ps ? 0.12 : 0.55;
+            const double f = is_ps ? f_true : f_crowd;
+            for (size_t i = 0; i < k; i++) {
+                const double v = sin(2.0 * M_PI * f * m.dt * (double)i);
+                m.disp_az[w * k + i] = v;
+                m.vel_los[w * k + i] = v;
+            }
+        }
+
+        rs_spectrum_t sp;
+        RS_CHECK_OK(rs_spectrum_compute(&m, RS_SPEC_VELOCITY, &sp));
+
+        /* The majority policies follow the crowd, which is the premise. */
+        size_t bw = 0; double prom = 0.0;
+        RS_CHECK_OK(rs_spectrum_best_window(&sp, &bw, &prom, NULL));
+        double cf = 0.0; size_t a1,a2,a3,a4;
+        RS_CHECK_OK(rs_spectrum_consensus(&sp, &cf, &a1,&a2,&a3,&a4));
+        RS_CHECK_NEAR(cf, f_crowd, 0.5 * sp.df);
+
+        /* And the selector does not. */
+        rs_spectrum_ps_t ps;
+        RS_CHECK_OK(rs_spectrum_ps_window(&sp, &ps));
+        printf("    consensus %.3f Hz (the 21-window crowd); "
+               "persistent scatterers %.3f Hz from %zu of %zu candidates\n",
+               cf, ps.freq_hz, ps.n_agree, ps.n_candidate);
+        RS_CHECK_NEAR(ps.freq_hz, f_true, 0.5 * sp.df);
+        RS_CHECK(ps.n_candidate == 4);
+        RS_CHECK(ps.n_agree == 4);
+        RS_CHECK_NEAR(ps.d_a, 0.12, 1e-9);
+
+        /* With the criterion disabled it must fall back to the crowd, which is
+         * what shows the selection rather than the spectrum did the work. */
+        rs_spectrum_ps_t none;
+        RS_CHECK_OK(rs_spectrum_ps_window_opts(&sp, 0.0, &none));
+        RS_CHECK_NEAR(none.freq_hz, f_crowd, 0.5 * sp.df);
+        RS_CHECK(none.n_candidate == n_win);
+
+        /* And a criterion nothing meets is a reported result, not a fallback. */
+        rs_spectrum_ps_t strict;
+        RS_CHECK_ERR(rs_spectrum_ps_window_opts(&sp, 0.05, &strict), RS_ERR_RANGE);
+        RS_CHECK(strict.n_candidate == 0);
+        RS_CHECK(strict.window == n_win);
+
+        rs_spectrum_free(&sp);
+        free(m.disp_az); free(m.disp_rg); free(m.disp_los);
+        free(m.vel_los); free(m.quality); free(m.d_a);
+    }
+
     RS_CASE("phase recovery survives the high-overlap regime real data needs");
     {
         /* THE CONFIGURATION A REAL COLLECT HAS TO USE. rs_microm_estimator_t

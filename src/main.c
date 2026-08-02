@@ -1220,6 +1220,7 @@ static int rs_cmd_mmotion(int argc, char **argv)
      * distinguish a still scene from a chain that cannot see motion in this
      * data; running once with this tells you which. See simulate.h. */
     const char *inject = rs_opt(argc, argv, "--inject-vib");
+    double inject_hz = 0.0;
     if (inject) {
         double f_inj = 0.0, amp_mm = 2.0, rel = 20.0;
         if (sscanf(inject, "%lf,%lf,%lf", &f_inj, &amp_mm, &rel) < 1) {
@@ -1255,6 +1256,7 @@ static int rs_cmd_mmotion(int argc, char **argv)
         printf("  THIS RUN IS ABOUT THE PIPELINE, NOT THE SCENE: if %.4f Hz does\n"
                "  not come back, a null anywhere in this collect is not evidence\n"
                "  that the ground is still.\n", f_inj);
+        inject_hz = f_inj;
     }
 
     /* Resolved before the sub-apertures are built, because that is the stage it
@@ -1280,6 +1282,31 @@ static int rs_cmd_mmotion(int argc, char **argv)
     rs_subap_stack_t stack;
     if ((st = rs_build_subaps(&c, &grid, &sp, subap_route, &stack)) != RS_OK) {
         rs_report_error("mmotion", st); rs_cphd_free(&c); return 1;
+    }
+
+    /* An injection above the sub-aperture response ceiling tests nothing: each
+     * sub-look integrates over more than a cycle and averages the motion away
+     * before the tracker sees it. Item 13 measured that recovery needs a
+     * response above ~0.5 with no exceptions, and the Nyquist limit printed
+     * above is NOT that ceiling -- they differ by 0.829/(1-overlap). Checked
+     * here rather than at injection time because t_sap is not known until the
+     * decomposition is built. */
+    if (inject_hz > 0.0) {
+        const double eta = rs_spectrum_observation_ratio(stack.t_sap, inject_hz);
+        const double resp = (eta > 0.0)
+            ? fabs(sin(M_PI * eta) / (M_PI * eta)) : 1.0;
+        printf("  injected %.4f Hz sits at sub-aperture response %.3f "
+               "(observation ratio %.2f)\n", inject_hz, resp, eta);
+        if (resp < 0.5) {
+            printf("  WARNING: THIS INJECTION CANNOT BE RECOVERED AT THIS "
+                   "OPERATING POINT.\n"
+                   "           Each sub-look integrates over %.2f cycles and "
+                   "averages the\n"
+                   "           motion away. A null below tests the settings, "
+                   "not the chain.\n"
+                   "           Lower the injected frequency or the overlap.\n",
+                   eta);
+        }
     }
 
     rs_microm_params_t mp;

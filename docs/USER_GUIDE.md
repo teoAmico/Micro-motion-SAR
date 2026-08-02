@@ -525,21 +525,34 @@ which itself vibrates at 0.5 Hz, injecting 1.2 Hz gives:
 ```
 POSITIVE CONTROL: injected a 1.2000 Hz scatterer at the grid origin,
   2.000 mm vertical displacement, 20.0x the scene's median non-zero
-  sample magnitude. THIS RUN IS ABOUT THE PIPELINE, NOT THE SCENE:
-  if 1.2000 Hz does not come back, a null anywhere in this collect is
-  not evidence that the ground is still.
+  sample magnitude (0.6925).
+  deposited into 8000 of 8000 pulses, range bins 128.0 to 128.0 of 256
+  THIS RUN IS ABOUT THE PIPELINE, NOT THE SCENE: if 1.2000 Hz does
+  not come back, a null anywhere in this collect is not evidence
+  that the ground is still.
+  injected 1.2000 Hz sits at sub-aperture response 0.944 (observation ratio 0.19)
 sub-apertures: 128 looks, dt 0.1550 s
   observable band  f_max 3.23 Hz   AT sub-look resolution 8.26 m
 sub-pixel refinement: 1/200 px (default 1/10 azimuth, 1/20 range)
 tracked 49 windows (7 x 7); 49 pass the 0.00 coherence mask
 spectrum taken of line-of-sight DISPLACEMENT, which is what the phase estimator measures directly
 spectra: 65 bins, 0.0504 Hz resolution
-  amplitude dispersion: best 0.070, median 0.502; 9 of 49 windows meet D_A <= 0.25
-  persistent scatterers: 1.210 Hz from 9 of 9 candidates (D_A <= 0.25), best window 30 at D_A 0.070
-strongest peak in window 30: 1.210 Hz, prominence 38.2, quality 0.930, peak-to-peak velocity 25.6 mm/s
-  consensus: 1.210 Hz, agreed by 11 of 30 voting windows (37%), 11 distinct answers, largest contiguous block 9
-  cull: 1.210 Hz from 9 of 30 windows surviving (SNR 0, sigma 0, neighbours 16 removed), surface gates N/A
+  amplitude dispersion: best 0.051, median 0.502; 9 of 49 windows meet D_A <= 0.25
+  persistent scatterers: 1.210 Hz from 9 of 9 candidates (D_A <= 0.25), best window 30 at D_A 0.051
+strongest peak in window 30: 1.210 Hz, prominence 38.3, quality 0.949, peak-to-peak velocity 25.1 mm/s
+  consensus: 1.210 Hz, agreed by 11 of 28 voting windows (39%), 10 distinct answers, largest contiguous block 9
+  cull: 1.210 Hz from 9 of 28 windows surviving (SNR 0, sigma 0, neighbours 14 removed), surface gates N/A
 ```
+
+**Read the two accounting lines before the answer.** `deposited into 8000 of
+8000 pulses` is the check that the injection happened at all — a target whose
+range falls outside the loaded window deposits nothing, and a null with no
+injection in it looks exactly like a null the chain could not see. And
+`sub-aperture response 0.944` is the check that this operating point can see the
+frequency you chose: below about 0.5 the sub-look averages the motion away and
+the tool says so. **The `f_max` line is the Nyquist limit, not that ceiling** —
+they differ by `0.829/(1-overlap)`, a factor of 8.3 at 90% overlap, which is how
+a 1.0 Hz injection was once made into a scene whose ceiling was 0.25 Hz.
 
 All four selection policies return 1.210 Hz against a 1.2 Hz injection, inside
 the 0.0252 Hz half-bin — and the scene's own 0.5 Hz is nowhere in the output,

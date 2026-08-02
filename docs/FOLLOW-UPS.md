@@ -2907,3 +2907,46 @@ the defect above, but it is a loose end.
 
 Re-run the Giza positive control, which is now the first time the question will
 actually have been asked.
+
+
+---
+
+## 29. The first positive control that asked the question, and what it found
+
+Two void attempts preceded this (item 28 for the first; the second injected 1.0
+Hz at a sub-aperture response of 0.128, which no operating point can recover and
+`mmotion` now warns about). The third injected 0.15 Hz at response 0.800 into the
+Giza collect, at the settings of the run that returned item 17's null.
+
+```
+  run                          strongest   consensus   cull    agreement
+  uninjected (item 17)           0.033       0.195     0.065      16%
+  injected 1.0 Hz (blind band)   0.033       0.065     0.261      19%
+  injected 0.15 Hz               0.163       0.163     0.163      24%
+```
+
+At 0.0326 Hz resolution the injected 0.15 Hz falls in the bin centred on 0.163,
+so **all three spectrum policies returned the injection**, having disagreed with
+each other in both controls. They read different evidence -- prominence,
+cross-window agreement, and the correlation surfaces' own statistics -- so their
+convergence on the injected bin, in the one run where there was something to
+converge on, is not readily explained as chance.
+
+**The tool reported NO FREQUENCY.** The gate fires on 24% window agreement, and
+`rs_spectrum_ps_window()` returned nothing because `D_A` reaches only 0.427
+anywhere in the scene. So the tracker extracted the injected motion and the
+selection policy discarded it -- items 7-9, reproduced on real data against a
+known truth rather than on a fixture, which is the first time that has been
+possible here.
+
+**This is one point and not a recovery.** The bar is a slope-and-rms fit across a
+sweep pooled over realisations, for the reason item 2 records. A sweep of injected
+frequencies on this collect is the measurement that would settle it and is now
+possible for the first time.
+
+**Unexplained, and flagged rather than smoothed over.** `D_A` best was 0.136 with
+2 qualifying windows when 1.0 Hz was injected and 0.427 with 0 windows at 0.15 Hz
+-- same amplitude, same relative brightness, same geometry, only the frequency
+differing. Amplitude dispersion should not depend on the injected frequency at
+all. Either sub-look amplitude does depend on it in a way nothing here accounts
+for, or one of those two numbers is not measuring what it appears to.

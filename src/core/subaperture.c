@@ -339,8 +339,8 @@ resonarsat_status_t rs_subaperture_split(const rs_slc_t *img,
     stack->pair_lag_s = (bw > 0.0 && img->t_dwell > 0.0)
                       ? stack->b_shift_hz * img->t_dwell / bw
                       : 0.0;
-    stack->az_resolution = (img->lambda > 0.0 && img->v_platform > 0.0 && img->r0 > 0.0)
-                         ? rs_azimuth_resolution(img->lambda, img->r0, img->v_platform, t_sap)
+    stack->az_resolution = (img->lambda > 0.0 && img->v_platform > 0.0 && img->r_scene_m > 0.0)
+                         ? rs_azimuth_resolution(img->lambda, img->r_scene_m, img->v_platform, t_sap)
                          : 0.0;
 
     /* Allocate the output images and their centre times. */
@@ -366,7 +366,7 @@ resonarsat_status_t rs_subaperture_split(const rs_slc_t *img,
                                      .fc = img->fc, .lambda = img->lambda,
                                      .rg_spacing_m = img->rg_spacing_m,
                                      .az_spacing_m = img->az_spacing_m,
-                                     .r0 = img->r0, .t0 = img->t0,
+                                     .r_scene_m = img->r_scene_m, .t0 = img->t0,
                                      .t_dwell = t_sap,
                                      .incidence = img->incidence,
                                      .v_platform = img->v_platform,
@@ -587,7 +587,7 @@ resonarsat_status_t rs_subaperture_from_cphd(const struct rs_cphd *cphd_in,
      * what rs_focus_backproject() measured off the recorded positions, not from
      * an assumed constant. */
     stack->az_resolution = rs_azimuth_resolution(cphd->lambda,
-                                                 stack->look[0].r0,
+                                                 stack->look[0].r_scene_m,
                                                  stack->look[0].v_platform,
                                                  stack->t_sap);
     stack->doppler_bandwidth = 0.0;   /* not measured on this path */
@@ -759,16 +759,16 @@ resonarsat_status_t rs_subaperture_from_cphd_stream(const char *path,
             const double flown = sqrt(dx * dx + dy * dy + dz * dz);
             if (dt_win > 0.0) stack->look[i].v_platform = flown / dt_win;
         }
-        stack->look[i].r0 = (geo.r_ref && geo.r_ref[p_mid] > 0.0)
+        stack->look[i].r_scene_m = (geo.r_ref && geo.r_ref[p_mid] > 0.0)
                               ? geo.r_ref[p_mid] : geo.r_near;
         const double pz = geo.pos[3 * p_mid + 2] - grid->origin[2];
-        if (stack->look[i].r0 > 0.0 && fabs(pz) <= stack->look[i].r0) {
-            stack->look[i].incidence = acos(fabs(pz) / stack->look[i].r0);
+        if (stack->look[i].r_scene_m > 0.0 && fabs(pz) <= stack->look[i].r_scene_m) {
+            stack->look[i].incidence = acos(fabs(pz) / stack->look[i].r_scene_m);
         }
     }
 
     stack->az_resolution = rs_azimuth_resolution(geo.lambda,
-                                                 stack->look[0].r0,
+                                                 stack->look[0].r_scene_m,
                                                  stack->look[0].v_platform,
                                                  stack->t_sap);
     stack->doppler_bandwidth = 0.0;

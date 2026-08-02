@@ -46,7 +46,7 @@ said, not better) and item 7's line numbers.
 | 2 | answered, negative | no distributed-texture fixture on which the chain works |
 | 3 | open, premise unestablished | the Capella SGN override is keyed on a vendor string |
 | 4 | open, untried | long dwells may need deliberate truncation |
-| 5 | open | `rs_slc_t.r0` means three different things in three readers |
+| 5 | resolved | `rs_slc_t.r0` meant three things; renamed to `r_scene_m` |
 | 6 | resolved | sub-look images are correct; the tracker does not read them |
 | 7 | resolved | `REF_LAG`, its frequency floor, and the selection policy discarding recoveries |
 | 8 | **withdrawn** | "the defect is the reference scheme" |
@@ -335,29 +335,55 @@ to keep.
 **Found by** writing `validate --sicd`. The first version added
 `0.5 * n_rg * rg_spacing_m` to reach the scene centre, which is right for the
 documented meaning and double-counts for what the SICD reader actually stores.
-The command now takes `r0` as-is with a comment saying why, so the defect is
-visible rather than compensated for in one caller.
 
-**Why it matters beyond that one call site.** Every consumer of an `rs_slc_t`
-has to guess which convention it is holding, and the guess is invisible when
+**Why it mattered beyond that one call site.** Every consumer of an `rs_slc_t`
+had to guess which convention it was holding, and the guess is invisible when
 wrong: a slant range off by half a swath still produces a complete image and a
 complete spectrum. `rs_geo_slant_to_ground()` and the sub-look resolution both
-take `r0`, so the error propagates into geolocation and into the ambiguity
-ceiling.
+take it, so the error propagates into geolocation and into the ambiguity ceiling.
 
-**What a fix has to do.** Not simply re-point the SICD reader at the first
-sample, because `SCPCOA/SlantRange` is the better-conditioned quantity and is
-what the product actually guarantees. Either:
+### Item 5, RESOLVED 2026-08-02: the field is renamed and means one thing
 
-- keep `r0` as the first-sample range everywhere and derive it in the SICD
-  reader from the SCP range, the SCP pixel row and the range spacing, which the
-  reader already parses; or
-- redefine the field as the scene-centre range, fix UAVSAR to match, and rename
-  it so no existing caller keeps its old assumption silently.
+Of the two options this entry proposed -- derive a first-sample range in every
+reader, or redefine the field as the scene-centre range and rename it -- the
+second is done, and the measurement that decided it is that **every producer was
+already writing the scene-centre range.** Only the comment said otherwise:
 
-The second is cleaner and the rename is what makes it safe. Neither is done.
-Until one is, `r0` should be read as "a slant range into this product, reader's
-choice which".
+```
+focus.c        r_ref[p_mid]              range to the SRP at mid-dwell
+subaperture.c  the same, per sub-look
+sicd.c         SCPCOA/SlantRange         range to the scene centre point
+uavsar.c       (alt - terrain)/cos(look) at the scene average look angle
+```
+
+So there was no first-sample convention to preserve, and deriving one would have
+meant four call sites adding half a swath back to reach what they wanted.
+`rs_azimuth_resolution()`, the shift-to-velocity conversion in
+`rs_microm_track()` and the incidence derivation `acos(|pz|/R)` all want the
+range to the patch being measured.
+
+**`r0` is now `r_scene_m`**, "slant range to the scene reference point at
+mid-dwell". The rename is the part that makes it safe, exactly as this entry
+argued: a stale `img->r0` no longer reads a quantity that moved underneath it,
+it fails to compile. It did -- `tests/test_readers.c` was the caller it caught.
+
+**ONE CALLER HELD THE OLD ASSUMPTION AND WAS WRONG.** `rs_crop()` in
+`tools/crop_slc.c` advanced the range by `rg0 * rg_spacing_m`, correct for a
+first-sample range and wrong for a scene-centre one -- on a stripmap swath, wrong
+by kilometres. The correct update is the change in CENTRE bin,
+`(rg0 + n_rg/2) - (n_rg_src/2)`, which differs from the old formula everywhere
+the crop is not centred and moves the range BACKWARDS for a crop at bin zero
+where the old formula moved it not at all.
+
+That defect survived because a static helper in a tool is unreachable from the
+suite. The function is now `rs_slc_crop()` in the library and
+`tests/test_readers.c` pins three cases chosen so the two formulas cannot agree
+on all of them, plus that `t0` still offsets from the first LINE -- the two
+conventions coexist in one struct and the crop must not treat them alike -- and
+that an unset range stays unset rather than acquiring an offset.
+
+The reasoning is retired into `rs_slc_t.r_scene_m`'s contract in `slc.h`, which
+is where it constrains anything.
 
 ---
 

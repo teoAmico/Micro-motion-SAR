@@ -18,7 +18,7 @@ static resonarsat_status_t make_image(rs_slc_t *img, size_t n, double t_dwell)
     img->azimuth_time_interval = t_dwell / (double)n;
     img->t_dwell = t_dwell;
     img->v_platform = 7500.0;
-    img->r0 = 500000.0;
+    img->r_scene_m = 500000.0;
     img->az_spacing_m = img->rg_spacing_m = 1.0;
     st = rs_slc_finalise_metadata(img);
     if (st != RS_OK) return st;
@@ -69,7 +69,7 @@ int main(void)
         }
 
         /* Sub-look resolution must be coarser than the full aperture's. */
-        const double full = rs_azimuth_resolution(img.lambda, img.r0,
+        const double full = rs_azimuth_resolution(img.lambda, img.r_scene_m,
                                                   img.v_platform, t_dwell);
         RS_CHECK(s.az_resolution > full);
 

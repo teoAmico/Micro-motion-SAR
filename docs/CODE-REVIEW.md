@@ -131,9 +131,19 @@ two proposed fixes both assumed the wrong baseline.
 code: it is the range at the scene's average look angle rather than to the first
 sample, and the look-for-incidence substitution is admissible only because this
 reader is airborne. If any field is missing, `r0` stays **zero** rather than
-guessed, and `img->source` says so. `FOLLOW-UPS.md` item 5 is corrected.
-`tests/test_readers.c` pins the derived value, the incidence, that the answer
+guessed, and `img->source` says so. `tests/test_readers.c` pins the derived value, the incidence, that the answer
 exceeds 1.2x the altitude, and that absent geometry leaves the field unset.
+
+**Followed by the rename that closes `FOLLOW-UPS.md` item 5.** With UAVSAR fixed,
+all four producers agreed -- and none of them wrote the first-sample range the
+field was documented as. `r0` is now `r_scene_m`, "slant range to the scene
+reference point at mid-dwell", so the field means one thing and a stale
+`img->r0` fails to compile rather than reading a quantity that moved. It caught
+one caller immediately: `rs_crop()` in `tools/crop_slc.c` advanced the range by
+`rg0 * rg_spacing_m`, right for a first-sample range and wrong by kilometres on
+a stripmap swath. That helper was static in a tool and so unreachable from the
+suite, which is how it survived; it is now `rs_slc_crop()` in the library with
+three cases chosen so the old and new formulas cannot agree on all of them.
 
 ### 4. The same reader parsed a terrain height into a variable named `inc`
 
@@ -318,11 +328,6 @@ Recorded so a later reviewer knows what not to redo.
 Not defects, but decisions a later reader should know were made rather than
 missed.
 
-- **`rs_slc_t.r0` still means two things.** SICD holds a scene-centre slant
-  range; UAVSAR now holds a look-angle-derived range to the reference surface,
-  which is the same convention. Neither is the first-sample range `slc.h`
-  documents. `FOLLOW-UPS.md` item 5's rename is still the fix and is still not
-  done.
 - **The orbit and Doppler parse does not exist.** Finding 5 removed the dead
   consumers; nothing fills the fields. That is a gap in the readers, not
   something the deletion resolved.

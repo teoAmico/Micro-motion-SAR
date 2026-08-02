@@ -266,7 +266,7 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
      * an assumed platform speed would be worse than none. */
     const double az_spacing = ref_img->az_spacing_m;
     const double v_plat     = ref_img->v_platform;
-    const double r_slant    = ref_img->r0;
+    const double r_slant    = ref_img->r_scene_m;
     const int    can_velocity = (az_spacing > 0.0 && v_plat > 0.0 && r_slant > 0.0);
 
     volatile resonarsat_status_t shared_st = RS_OK;

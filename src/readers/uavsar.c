@@ -229,13 +229,13 @@ resonarsat_status_t rs_read_uavsar(const char *slc_path, const char *ann_path, r
 
     /* SLANT RANGE, DERIVED -- AND NEVER THE PLATFORM ALTITUDE.
      *
-     * This assigned `Average Altitude` straight into r0 for two years.
-     * rs_slc_t.r0 is documented as a SLANT RANGE and an altitude is a HEIGHT:
+     * This assigned `Average Altitude` straight into this field for two years.
+     * rs_slc_t.r_scene_m is a SLANT RANGE and an altitude is a HEIGHT:
      * at UAVSAR's ~12.5 km flight altitude and look angles from about 20 to 65
      * degrees the near-range slant distance is 13 to 30 km, so the field was low
      * by a factor of one to two and the error grew across the swath. It reached
      * rs_geo_slant_to_ground() and the sub-look ambiguity ceiling, both of which
-     * consume r0 and neither of which can notice a plausible wrong value. See
+     * consume it and neither of which can notice a plausible wrong value. See
      * docs/CODE-REVIEW.md finding 3 and FOLLOW-UPS.md item 5.
      *
      * The geometry the annotation does support: the platform sits at
@@ -244,17 +244,19 @@ resonarsat_status_t rs_read_uavsar(const char *slc_path, const char *ann_path, r
      *
      *     R = (altitude - terrain) / cos(look)
      *
-     * TWO APPROXIMATIONS, BOTH STATED RATHER THAN BURIED. This is the range at
-     * the scene's average look angle, not to the first range sample -- so it
-     * carries the SICD reader's convention rather than the one slc.h documents,
-     * which is the open half of FOLLOW-UPS.md item 5 and is not resolved here.
-     * And it is flat-earth: for a platform at 12.5 km the look angle and the
-     * incidence angle differ by well under a tenth of a degree, where for an
-     * orbital sensor they differ by several, so the same substitution would be
-     * wrong for CPHD and is admissible only because this reader is airborne.
+     * The scene's AVERAGE look angle, so this is a range to the scene as a
+     * whole -- which is exactly what rs_slc_t.r_scene_m is defined to hold, and
+     * the same convention sicd.c and focus.c write. That agreement is the point
+     * of the rename in FOLLOW-UPS.md item 5.
      *
-     * If any of the three fields is missing, r0 stays ZERO rather than being
-     * guessed. Consumers already treat a non-positive r0 as absent, and the
+     * ONE APPROXIMATION, STATED RATHER THAN BURIED: the look angle is used where
+     * the incidence angle belongs. For a platform at 12.5 km the two differ by
+     * well under a tenth of a degree, where for an orbital sensor they differ by
+     * several -- so the same substitution would be wrong for CPHD and is
+     * admissible only because this reader is airborne.
+     *
+     * If any of the three fields is missing, the range stays ZERO rather than
+     * being guessed. Consumers treat a non-positive value as absent, and the
      * whole lesson of the defect above is that a plausible wrong geometry is
      * worse than a missing one. */
     static const char *const alt_keys[]  = { "Average Altitude", NULL };
@@ -280,7 +282,7 @@ resonarsat_status_t rs_read_uavsar(const char *slc_path, const char *ann_path, r
     img->az_spacing_m = az_spacing;
     img->rg_spacing_m = rg_spacing;
     img->v_platform = v_platform;
-    img->r0 = slant_m;
+    img->r_scene_m = slant_m;
     img->incidence = incidence_rad;
 
     /* Derive the azimuth line interval from spacing and speed. If the platform
@@ -303,7 +305,7 @@ resonarsat_status_t rs_read_uavsar(const char *slc_path, const char *ann_path, r
 
     /* Say what was assumed and what could not be derived, because both change
      * how far the geometry can be trusted and neither is visible in the numbers.
-     * A zero r0 in particular reads as "unset" only if something says so. */
+     * A zero range in particular reads as "unset" only if something says so. */
     snprintf(img->source, sizeof img->source, "UAVSAR%s%s",
              assumed_speed ? " (assumed platform speed)" : "",
              (slant_m > 0.0) ? " (slant range derived from look angle)"

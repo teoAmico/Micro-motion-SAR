@@ -150,12 +150,12 @@ int main(void)
         rs_slc_free(&img);
     }
 
-    /* r0 IS A SLANT RANGE AND MUST NEVER BE THE PLATFORM ALTITUDE.
+    /* r_scene_m IS A SLANT RANGE AND MUST NEVER BE THE PLATFORM ALTITUDE.
      *
      * The reader assigned `Average Altitude` straight into it, which is a height
-     * where the field is documented as a range -- low by a factor of one to two
-     * at UAVSAR geometry, and silently wrong in rs_geo_slant_to_ground() and in
-     * the sub-look ambiguity ceiling. See docs/CODE-REVIEW.md finding 3.
+     * where the field is a range -- low by a factor of one to two at UAVSAR
+     * geometry, and silently wrong in rs_geo_slant_to_ground() and in the
+     * sub-look ambiguity ceiling. See docs/CODE-REVIEW.md finding 3.
      *
      * Asserting the derived value rather than merely "not the altitude" is what
      * makes this catch a re-introduction: a fix that got the trigonometry
@@ -170,16 +170,16 @@ int main(void)
         const double want = (UAV_ALT_M - UAV_TERR_M) / cos(look);
         printf("    altitude %.0f m, terrain %.0f m, look %.0f deg"
                " -> slant %.1f m (want %.1f)\n",
-               UAV_ALT_M, UAV_TERR_M, UAV_LOOK_DEG, img.r0, want);
-        RS_CHECK_NEAR(img.r0, want, 1.0);
+               UAV_ALT_M, UAV_TERR_M, UAV_LOOK_DEG, img.r_scene_m, want);
+        RS_CHECK_NEAR(img.r_scene_m, want, 1.0);
         RS_CHECK_NEAR(img.incidence, look, 1e-9);
         /* The margin that makes the old defect impossible to reintroduce
          * quietly: the right answer is 1.4x the altitude, not equal to it. */
-        RS_CHECK(img.r0 > 1.2 * UAV_ALT_M);
+        RS_CHECK(img.r_scene_m > 1.2 * UAV_ALT_M);
         rs_slc_free(&img);
     }
 
-    /* Absent geometry leaves r0 UNSET rather than guessed. The whole lesson of
+    /* Absent geometry leaves the range UNSET rather than guessed. The lesson of
      * the defect above is that a plausible wrong range is worse than a missing
      * one, and consumers already read a non-positive r0 as absent. */
     RS_CASE("UAVSAR without a geometry block leaves the slant range unset");
@@ -187,9 +187,66 @@ int main(void)
         RS_CHECK(write_uavsar(ann, slc, "no_geometry") == 0);
         rs_slc_t img;
         RS_CHECK_OK(rs_read_uavsar(slc, ann, &img));
-        RS_CHECK(img.r0 == 0.0);
+        RS_CHECK(img.r_scene_m == 0.0);
         RS_CHECK(img.incidence == 0.0);
         rs_slc_free(&img);
+    }
+
+    /* CROPPING MOVES THE SCENE-CENTRE RANGE BY THE CHANGE IN CENTRE BIN.
+     *
+     * This lived as a static helper in tools/crop_slc.c, where nothing could
+     * reach it, and added rg0 * rg_spacing -- correct for a first-sample range
+     * and wrong for the scene-centre range rs_slc_t.r_scene_m holds. On a
+     * stripmap swath that is kilometres. FOLLOW-UPS.md item 5.
+     *
+     * Three cases, because the two formulas AGREE on one of them and a single
+     * example would not separate them: a crop at the far edge, a crop at bin
+     * zero (where the old formula moved nothing and the right answer moves the
+     * centre backwards), and a centred crop (where both give zero). */
+    RS_CASE("cropping moves the scene range by the centre shift, not the origin");
+    {
+        rs_slc_t src;
+        RS_CHECK_OK(rs_slc_alloc(&src, 64, 100));
+        src.rg_spacing_m = 2.0;
+        src.azimuth_time_interval = 1e-3;
+        src.r_scene_m = 500000.0;      /* range to the centre bin, 50 */
+        src.t0 = 0.0;
+
+        const struct { size_t rg0, n_rg; double want_delta_m; const char *why; } cases[] = {
+            { 80, 10, (80.0 + 5.0 - 50.0) * 2.0, "far edge: centre 50 -> 85" },
+            {  0, 10, ( 0.0 + 5.0 - 50.0) * 2.0, "bin zero: centre moves BACK" },
+            { 45, 10, (45.0 + 5.0 - 50.0) * 2.0, "centred: no change at all" },
+        };
+        for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+            rs_slc_t dst;
+            RS_CHECK_OK(rs_slc_crop(&src, 0, cases[i].rg0, 32, cases[i].n_rg, &dst));
+            const double got = dst.r_scene_m - src.r_scene_m;
+            printf("    rg0=%3zu n_rg=%2zu -> delta %+8.1f m (want %+8.1f)  %s\n",
+                   cases[i].rg0, cases[i].n_rg, got, cases[i].want_delta_m,
+                   cases[i].why);
+            RS_CHECK_NEAR(got, cases[i].want_delta_m, 1e-9);
+            /* The old formula was rg0 * spacing. It must differ everywhere the
+             * crop is not centred, or this test proves nothing. */
+            if (cases[i].rg0 != 45) {
+                RS_CHECK(fabs(got - (double)cases[i].rg0 * 2.0) > 1.0);
+            }
+            rs_slc_free(&dst);
+        }
+
+        /* t0 IS a first-line quantity, so it does offset from zero -- the two
+         * conventions coexist in one struct and the crop must not treat them
+         * alike. */
+        rs_slc_t dst;
+        RS_CHECK_OK(rs_slc_crop(&src, 7, 0, 32, 10, &dst));
+        RS_CHECK_NEAR(dst.t0, 7.0 * 1e-3, 1e-12);
+        rs_slc_free(&dst);
+
+        /* An unset range stays unset rather than acquiring an offset. */
+        src.r_scene_m = 0.0;
+        RS_CHECK_OK(rs_slc_crop(&src, 0, 80, 32, 10, &dst));
+        RS_CHECK(dst.r_scene_m == 0.0);
+        rs_slc_free(&dst);
+        rs_slc_free(&src);
     }
 
     RS_CASE("malformed UAVSAR input is refused without crashing or leaking");

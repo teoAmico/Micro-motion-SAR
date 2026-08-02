@@ -62,7 +62,45 @@ typedef struct {
     double lambda;                 /* radar wavelength, m (derived from fc) */
     double rg_spacing_m;           /* slant-range sample spacing, m */
     double az_spacing_m;           /* azimuth sample spacing, m */
-    double r0;                     /* slant range of first range sample, m */
+
+    /* SLANT RANGE TO THE SCENE REFERENCE POINT AT MID-DWELL, m. Zero when the
+     * product does not support it; every consumer treats non-positive as absent.
+     *
+     * THIS FIELD WAS CALLED 'r0' AND DOCUMENTED AS THE FIRST RANGE SAMPLE'S
+     * RANGE, WHICH NO PRODUCER EVER WROTE. The rename is the fix for
+     * FOLLOW-UPS.md item 5 and is deliberate: renaming rather than
+     * re-documenting is what stops a caller keeping its old assumption silently,
+     * because a stale `img->r0` now fails to compile instead of reading a
+     * quantity that moved underneath it.
+     *
+     * The four producers, all of which already agreed with each other and not
+     * with the old comment:
+     *
+     *   focus.c        r_ref[p_mid] -- the CPHD's own reference range at the
+     *                  middle of the dwell, i.e. to the SRP
+     *   subaperture.c  the same, per sub-look
+     *   sicd.c         SCPCOA/SlantRange, the range to the scene centre point
+     *   uavsar.c       (altitude - terrain) / cos(look) at the scene's average
+     *                  look angle
+     *
+     * WHY SCENE CENTRE AND NOT FIRST SAMPLE. It is what the products actually
+     * guarantee -- SICD states the SCP range as a calibrated quantity, and a
+     * CPHD carries r_ref per pulse -- and it is what every consumer wants:
+     * rs_azimuth_resolution() and the shift-to-velocity conversion in
+     * rs_microm_track() both need the range to the patch being measured, and
+     * the incidence derivation acos(|pz|/R) is only meaningful about the point
+     * the geometry is referenced to. Deriving a first-sample range and then
+     * having four call sites add half a swath back would be arithmetic in
+     * service of a convention nothing needed.
+     *
+     * WHAT THIS COSTS. On a wide swath the scene centre and the first sample
+     * differ by half a swath -- tens of metres on a spotlight product,
+     * kilometres on a stripmap one -- so code that indexes range bins against
+     * this value must offset from the CENTRE bin, not from bin zero. That is one
+     * caller today: rs_crop() in tools/crop_slc.c, which moves the value by the
+     * change in centre bin. It previously added rg0 * rg_spacing_m, correct for
+     * the documented meaning and wrong for the real one. */
+    double r_scene_m;
     double t0;                     /* azimuth time of first line, s */
     double t_dwell;                /* target illumination time, s */
     double incidence;              /* incidence angle at scene centre, rad */
@@ -103,6 +141,18 @@ void rs_slc_free(rs_slc_t *img);
  * image with no azimuth timing or no carrier frequency cannot be processed and
  * failing here is far cheaper than discovering it three stages downstream. */
 resonarsat_status_t rs_slc_finalise_metadata(rs_slc_t *img);
+
+/* Copy a rectangular region of 'src' into 'dst', which the caller must free.
+ *
+ * Bounds are clamped to the source rather than rejected. The metadata is carried
+ * across with only what the window changes adjusted -- and 'r_scene_m' moves by
+ * the change in CENTRE bin, not by rg0, because it is a scene-centre range. See
+ * the implementation for the full list of what moves and what does not, and the
+ * field's contract above for why that distinction is not cosmetic.
+ *
+ * Returns RS_ERR_ARG for an origin outside the source or an empty size. */
+resonarsat_status_t rs_slc_crop(const rs_slc_t *src, size_t az0, size_t rg0,
+                                size_t n_az, size_t n_rg, rs_slc_t *dst);
 
 /* Check that an image's metadata is self-consistent and physically plausible,
  * writing a description of the first problem found via rs_set_error().

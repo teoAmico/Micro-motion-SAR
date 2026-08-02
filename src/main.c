@@ -406,7 +406,7 @@ static int rs_cmd_info(int argc, char **argv)
         printf("wavelength          %.4f m\n", img.lambda);
         printf("azimuth spacing     %.4f m\n", img.az_spacing_m);
         printf("range spacing       %.4f m\n", img.rg_spacing_m);
-        printf("slant range         %.1f km\n", img.r0 / 1000.0);
+        printf("slant range         %.1f km\n", img.r_scene_m / 1000.0);
         printf("incidence           %.2f deg\n", img.incidence * 180.0 / M_PI);
         printf("platform speed      %.1f m/s\n", img.v_platform);
         printf("collect duration    %.3f s\n", img.t_dwell);
@@ -2558,16 +2558,14 @@ static int rs_cmd_validate(int argc, char **argv)
         req.n_pulse  = img.n_az;
         req.n_rbin   = img.n_rg;
 
-        /* Taken as-is, and deliberately not re-centred.
+        /* Taken as-is, which is now simply correct rather than a workaround.
          *
-         * slc.h documents r0 as the slant range of the FIRST range sample, but
-         * the SICD reader fills it from SCPCOA/SlantRange, which is the range to
-         * the scene centre point. An earlier version of this code added half a
-         * swath to reach the scene centre and so double-counted it by tens of
-         * metres. The field's meaning differing by reader is a real defect and
-         * is recorded in docs/FOLLOW-UPS.md; papering over it here would hide it
-         * behind a command that looks correct. */
-        req.slant_range_m = img.r0;
+         * The first version of this added 0.5 * n_rg * rg_spacing to reach the
+         * scene centre, because slc.h then documented the field as the FIRST
+         * range sample's range -- so it double-counted by half a swath. The
+         * field is r_scene_m now and is the scene-centre range in every reader,
+         * which is exactly what rs_validate_req_t wants. FOLLOW-UPS.md item 5. */
+        req.slant_range_m = img.r_scene_m;
         req.v_platform_ms = img.v_platform;
         req.incidence_rad = img.incidence;
 

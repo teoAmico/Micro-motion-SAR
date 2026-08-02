@@ -930,10 +930,12 @@ here so the guide does not imply the set above is complete:
   sniff the file magic and accept both real CPHD and the simulator's internal
   format; `validate` accepts real CPHD only and fails with *"does not begin with
   a CPHD version line"*. Known gap, not a decision.
-- **`rs_slc_t.r0` means different things in different readers.** UAVSAR fills it
-  as the slant range of the first range sample, as documented; the SICD reader
-  sets it from `SCPCOA/SlantRange`, the range to scene centre. On a wide swath
-  those differ by half a swath. See `docs/FOLLOW-UPS.md` item 5.
+- **`rs_slc_t.r0` is now `rs_slc_t.r_scene_m`**, the slant range to the scene
+  reference point at mid-dwell, and every reader writes that one meaning. It
+  used to be documented as the first range sample's range, which no reader ever
+  wrote. If you have code holding an `img->r0`, it will fail to compile — that
+  is the point of the rename. Anything indexing range bins against it must
+  offset from the CENTRE bin. See `docs/FOLLOW-UPS.md` item 5.
 - **The amplitude field is qualitative.** Frequencies recover where relative
   amplitudes do not. Label it as such wherever it is presented.
 - **The frequency map's colour bar is autoscaled to that map**, so the same

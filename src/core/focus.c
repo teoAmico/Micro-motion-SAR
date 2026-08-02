@@ -289,14 +289,14 @@ resonarsat_status_t rs_focus_backproject_opts(const rs_cphd_t *cphd,
             if (dt_win > 0.0) img->v_platform = flown / dt_win;
         }
 
-        img->r0 = (cphd->r_ref && cphd->r_ref[p_mid] > 0.0) ? cphd->r_ref[p_mid]
+        img->r_scene_m = (cphd->r_ref && cphd->r_ref[p_mid] > 0.0) ? cphd->r_ref[p_mid]
                                                             : cphd->r_near;
 
         /* Incidence at the scene reference point: the angle between the
          * line of sight and the local vertical, from the platform height. */
         const double pz = cphd->pos[3 * p_mid + 2] - grid->origin[2];
-        if (img->r0 > 0.0 && fabs(pz) <= img->r0) {
-            img->incidence = acos(fabs(pz) / img->r0);
+        if (img->r_scene_m > 0.0 && fabs(pz) <= img->r_scene_m) {
+            img->incidence = acos(fabs(pz) / img->r_scene_m);
         }
     }
 

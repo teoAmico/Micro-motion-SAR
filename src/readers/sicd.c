@@ -447,7 +447,7 @@ static resonarsat_status_t rs_sicd_read(const char *path, rs_slc_t *img,
     img->fc = 0.5 * (fx_min + fx_max);
     img->rg_spacing_m = (ss_rg > 0.0) ? ss_rg : 1.0;
     img->az_spacing_m = (ss_az > 0.0) ? ss_az : 1.0;
-    img->r0 = slant;
+    img->r_scene_m = slant;
     img->incidence = inc_deg * M_PI / 180.0;
     img->v_platform = sqrt(vx * vx + vy * vy + vz * vz);
     img->t_dwell = dur;

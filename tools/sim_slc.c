@@ -70,7 +70,7 @@ int main(int argc, char **argv)
     img.azimuth_time_interval = 10.0 / (double)n;
     img.t_dwell = 10.0;
     img.v_platform = 7500.0;
-    img.r0 = 500000.0;
+    img.r_scene_m = 500000.0;
     img.az_spacing_m = img.rg_spacing_m = 1.0;
     rs_slc_finalise_metadata(&img);
 

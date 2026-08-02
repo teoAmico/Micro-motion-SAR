@@ -5,6 +5,7 @@
 #include "resonarsat/fft.h"
 #include "resonarsat/focus.h"
 #include "resonarsat/geom.h"
+#include "resonarsat/readers.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -585,4 +586,193 @@ resonarsat_status_t rs_subaperture_from_cphd(const struct rs_cphd *cphd_in,
     stack->doppler_centroid = 0.0;
 
     return RS_OK;
+}
+
+/* Sub-look stack built by walking the collect in pulse blocks. See
+ * subaperture.h for why this is one pass rather than one read per look. */
+resonarsat_status_t rs_subaperture_from_cphd_stream(const char *path,
+                                                    const void *ropts_in,
+                                                    const struct rs_grid *grid_in,
+                                                    const rs_subap_params_t *params,
+                                                    size_t block_pulses,
+                                                    rs_subap_stack_t *stack)
+{
+    if (!stack) return RS_ERR_ARG;
+    memset(stack, 0, sizeof *stack);
+
+    const rs_grid_t *grid = (const rs_grid_t *)grid_in;
+    const rs_cphd_read_opts_t *ro = (const rs_cphd_read_opts_t *)ropts_in;
+    if (!path || !grid || !params) return RS_ERR_ARG;
+    if (params->n_looks == 0) {
+        rs_set_error("subaperture: n_looks must be positive");
+        return RS_ERR_ARG;
+    }
+    if (params->mode == RS_SUBAP_PAPER) {
+        rs_set_error("subaperture: the paper's decomposition is defined on the "
+                     "Doppler spectrum and cannot be formed from pulse windows");
+        return RS_ERR_ARG;
+    }
+    if (!(params->overlap >= 0.0 && params->overlap < 1.0)) {
+        rs_set_error("subaperture: overlap %g outside [0,1)", params->overlap);
+        return RS_ERR_ARG;
+    }
+    if (block_pulses == 0) block_pulses = 16384;
+
+    /* Geometry pass: every pulse, two range bins. This costs about 5 MB on a
+     * large collect and buys the EXACT valid-pulse count, the pulse times and
+     * the carrier -- so the window layout below is computed from the same
+     * numbers the resident path uses, which is what makes the two agree to the
+     * bit rather than approximately. */
+    rs_cphd_read_opts_t go;
+    memset(&go, 0, sizeof go);
+    go.rbin_window = 2;
+    go.pulse_stride = ro ? ro->pulse_stride : 0;
+    rs_cphd_t geo;
+    resonarsat_status_t st = rs_read_cphd(path, &go, &geo);
+    if (st != RS_OK) return st;
+
+    const size_t n_looks = params->n_looks;
+    const size_t n_pulse = geo.n_pulse;
+    const double denom = 1.0 + (double)(n_looks - 1) * (1.0 - params->overlap);
+    const size_t per = (size_t)((double)n_pulse / denom);
+    const size_t step = (n_looks > 1)
+                      ? (size_t)((double)per * (1.0 - params->overlap))
+                      : 0;
+    if (per == 0 || (n_looks > 1 && step == 0)) {
+        rs_set_error("subaperture: %zu pulses cannot be divided into %zu looks "
+                     "at %.2f overlap (window %zu, step %zu)",
+                     n_pulse, n_looks, params->overlap, per, step);
+        rs_cphd_free(&geo);
+        return RS_ERR_ARG;
+    }
+
+    stack->params = *params;
+    stack->n_looks = n_looks;
+    stack->look = calloc(n_looks, sizeof *stack->look);
+    stack->centre_time = calloc(n_looks, sizeof *stack->centre_time);
+    size_t *start = calloc(n_looks, sizeof *start);
+    double *r0 = calloc(n_looks, sizeof *r0);
+    double *vp = calloc(n_looks, sizeof *vp);
+    /* One double accumulator per look, so the block sums stay exact. See
+     * rs_focus_opts_t.accum for why float accumulation is not good enough. */
+    const size_t n_cell = grid->n_x * grid->n_y;
+    double **acc = calloc(n_looks, sizeof *acc);
+    if (!stack->look || !stack->centre_time || !start || !r0 || !vp || !acc) {
+        free(start); free(r0); free(vp); free(acc);
+        rs_cphd_free(&geo);
+        rs_subap_stack_free(stack);
+        return RS_ERR_ALLOC;
+    }
+
+    const double prf = (geo.prf > 0.0) ? geo.prf : 1.0;
+    stack->t_sap = (double)per / prf;
+    stack->dt    = (n_looks > 1) ? (double)step / prf : 0.0;
+    stack->f_max = (stack->dt > 0.0) ? 1.0 / (2.0 * stack->dt) : 0.0;
+
+    for (size_t i = 0; i < n_looks; i++) {
+        start[i] = i * step;
+        if (start[i] + per > n_pulse) start[i] = n_pulse - per;
+        st = rs_slc_alloc(&stack->look[i], grid->n_x, grid->n_y);
+        if (st != RS_OK) goto fail;
+        acc[i] = calloc(2 * n_cell, sizeof *acc[i]);
+        if (!acc[i]) { st = RS_ERR_ALLOC; goto fail; }
+        stack->centre_time[i] = geo.t[start[i] + per / 2];
+        snprintf(stack->look[i].source, sizeof stack->look[i].source,
+                 "sublook%zu", i);
+    }
+
+    /* One pass over the collect. Each block is accumulated into every look whose
+     * pulse window intersects it. */
+    for (size_t b0 = 0; b0 < n_pulse; b0 += block_pulses) {
+        const size_t want = (b0 + block_pulses > n_pulse)
+                              ? n_pulse - b0 : block_pulses;
+        if (want < 2) break;
+
+        rs_cphd_read_opts_t bo;
+        memset(&bo, 0, sizeof bo);
+        bo.rbin_window = ro ? ro->rbin_window : 0;
+        bo.pulse_stride = ro ? ro->pulse_stride : 0;
+        bo.max_pulses = want;
+        bo.pulse_first = b0;
+
+        rs_cphd_t blk;
+        st = rs_read_cphd(path, &bo, &blk);
+        if (st != RS_OK) goto fail;
+        const size_t got = blk.n_pulse;
+
+        for (size_t i = 0; i < n_looks; i++) {
+            const size_t lo = (start[i] > b0) ? start[i] : b0;
+            const size_t hi_l = start[i] + per;
+            const size_t hi_b = b0 + got;
+            const size_t hi = (hi_l < hi_b) ? hi_l : hi_b;
+            if (lo >= hi) continue;
+
+            rs_focus_opts_t fo;
+            memset(&fo, 0, sizeof fo);
+            fo.single_thread = params->single_thread;
+            fo.range_taps = params->range_taps;
+            fo.accumulate = 1;
+            fo.accum = acc[i];
+            st = rs_focus_backproject_opts(&blk, grid, lo - b0, hi - lo, &fo,
+                                           &stack->look[i]);
+            if (st != RS_OK) { rs_cphd_free(&blk); goto fail; }
+
+        }
+        rs_cphd_free(&blk);
+        if (got < want) break;
+    }
+
+    /* One rounding to float, after the last block, which is what makes this
+     * agree with the resident path to the bit rather than to a few ULP. */
+    for (size_t i = 0; i < n_looks; i++) {
+        for (size_t k = 0; k < n_cell; k++) {
+            stack->look[i].data[k] =
+                (float)acc[i][2 * k] + (float)acc[i][2 * k + 1] * I;
+        }
+    }
+
+    /* Geometry belongs to each look's WHOLE window, and a block holds only part
+     * of one -- backprojection rewrites these fields on every accumulating call
+     * from whatever pulses that call saw, so taking them from a block gives the
+     * geometry of a fragment. Recomputed here from the geometry pass, by the
+     * same arithmetic rs_focus_backproject_opts() uses, which is what makes
+     * az_resolution agree with the resident path instead of missing it by a
+     * millimetre. */
+    for (size_t i = 0; i < n_looks; i++) {
+        const size_t p0 = start[i], p_end = start[i] + per - 1;
+        const size_t p_mid = start[i] + per / 2;
+        if (per >= 2) {
+            const double dt_win = geo.t[p_end] - geo.t[p0];
+            const double dx = geo.pos[3 * p_end + 0] - geo.pos[3 * p0 + 0];
+            const double dy = geo.pos[3 * p_end + 1] - geo.pos[3 * p0 + 1];
+            const double dz = geo.pos[3 * p_end + 2] - geo.pos[3 * p0 + 2];
+            const double flown = sqrt(dx * dx + dy * dy + dz * dz);
+            if (dt_win > 0.0) stack->look[i].v_platform = flown / dt_win;
+        }
+        stack->look[i].r0 = (geo.r_ref && geo.r_ref[p_mid] > 0.0)
+                              ? geo.r_ref[p_mid] : geo.r_near;
+        const double pz = geo.pos[3 * p_mid + 2] - grid->origin[2];
+        if (stack->look[i].r0 > 0.0 && fabs(pz) <= stack->look[i].r0) {
+            stack->look[i].incidence = acos(fabs(pz) / stack->look[i].r0);
+        }
+    }
+
+    stack->az_resolution = rs_azimuth_resolution(geo.lambda,
+                                                 stack->look[0].r0,
+                                                 stack->look[0].v_platform,
+                                                 stack->t_sap);
+    stack->doppler_bandwidth = 0.0;
+    stack->doppler_centroid = 0.0;
+
+    for (size_t i = 0; i < n_looks; i++) free(acc[i]);
+    free(acc); free(start); free(r0); free(vp);
+    rs_cphd_free(&geo);
+    return RS_OK;
+
+fail:
+    if (acc) { for (size_t i = 0; i < n_looks; i++) free(acc[i]); free(acc); }
+    free(start); free(r0); free(vp);
+    rs_cphd_free(&geo);
+    rs_subap_stack_free(stack);
+    return st;
 }

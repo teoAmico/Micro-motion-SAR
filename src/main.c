@@ -883,6 +883,16 @@ static int rs_cmd_focus(int argc, char **argv)
         }
         rs_focus_opts_t sopts = fopts;
         sopts.accumulate = 1;
+        /* Exact rather than nearly: summing blocks into the float image
+         * reassociates the sum and differs from the resident path by a few ULP.
+         * See rs_focus_opts_t.accum. */
+        double *sacc = calloc(2 * img.n_az * img.n_rg, sizeof *sacc);
+        if (!sacc) {
+            rs_report_error("focus", RS_ERR_ALLOC);
+            rs_slc_free(&img); rs_cphd_free(&c);
+            return 1;
+        }
+        sopts.accum = sacc;
         memset(img.data, 0, img.n_az * img.n_rg * sizeof *img.data);
         printf("streaming up to %zu pulses in blocks of %zu (%.2f GB resident "
                "instead of %.2f GB)\n",
@@ -917,6 +927,10 @@ static int rs_cmd_focus(int argc, char **argv)
             done += got;
             if (got < want) break;    /* last block: the screen removed some */
         }
+        for (size_t k = 0; k < img.n_az * img.n_rg; k++) {
+            img.data[k] = (float)sacc[2 * k] + (float)sacc[2 * k + 1] * I;
+        }
+        free(sacc);
         printf("  focused %zu pulses in %zu blocks\n", done,
                (done + stream_blk - 1) / stream_blk);
     } else {
@@ -1216,6 +1230,7 @@ static int rs_cmd_mmotion(int argc, char **argv)
                "                          [--subap pulse|uniform|paper]\n"
                "                          [--no-detrend] [--null-static N]\n"
                "                          [--inject-vib FREQ_HZ[,AMP_MM[,REL]]]\n"
+               "                          [--stream N]\n"
                "                          [--estimator correlation|phase|splitband]\n"
                "                          [--shuffle-looks SEED] [--null-trials N]\n"
                "                          [--fmin HZ]\n"
@@ -1296,7 +1311,16 @@ static int rs_cmd_mmotion(int argc, char **argv)
 
     rs_cphd_t c;
     const size_t rbin_window = (size_t)rs_opt_double(argc, argv, "--rbins", 0.0);
-    resonarsat_status_t st = rs_load_cphd(&c, in, rbin_window,
+    const size_t mm_stream = (size_t)rs_opt_double(argc, argv, "--stream", 0.0);
+
+    /* Streaming reads the signal a block at a time later, so the resident
+     * container here needs only the GEOMETRY -- every pulse at two range bins,
+     * about 5 MB on a large collect. That keeps n_pulse, the pulse times, the
+     * platform track and the image plane exact, which is what the sampling
+     * warning, --at and --null-static all read, while leaving the 11 GB of
+     * signal on disc where the point is to keep it. */
+    resonarsat_status_t st = rs_load_cphd(&c, in,
+                       mm_stream ? 2 : rbin_window,
                        (size_t)rs_opt_double(argc, argv, "--pulse-stride", 0.0),
                        (size_t)rs_opt_double(argc, argv, "--max-pulses", 0.0));
     if (st != RS_OK) { rs_report_error("mmotion", st); return 1; }
@@ -1377,7 +1401,40 @@ static int rs_cmd_mmotion(int argc, char **argv)
     /* Pair mode is defined by two Doppler filters and therefore selects the
      * paper route when the caller did not choose a route explicitly. */
     rs_subap_stack_t stack;
-    if ((st = rs_build_subaps(&c, &grid, &sp, subap_route, &stack)) != RS_OK) {
+    /* Streaming: build the stack by walking the collect in pulse blocks instead
+     * of holding it. Only the pulse route can do this -- the spectral routes
+     * need a full-aperture image first, which is the thing that does not fit. */
+    if (mm_stream > 0) {
+        if (subap_route && strcmp(subap_route, "pulse") != 0) {
+            fprintf(stderr, "mmotion: --stream works with --subap pulse only; "
+                            "%s needs the full aperture focused first\n",
+                    subap_route);
+            rs_cphd_free(&c); return 1;
+        }
+        if (inject) {
+            /* The injection is written into the resident phase history, so a
+             * streamed read would re-read the file and never see it. Refused
+             * rather than silently producing a control with no injection in
+             * it -- see FOLLOW-UPS.md item 28 for what that costs. */
+            fprintf(stderr, "mmotion: --inject-vib modifies the phase history in "
+                            "memory and --stream re-reads it from disc; the "
+                            "injection would be silently absent. Use one or the "
+                            "other.\n");
+            rs_cphd_free(&c); return 1;
+        }
+        const rs_cphd_read_opts_t ro = { .rbin_window = rbin_window,
+                                         .pulse_stride = 0,
+                                         .max_pulses = 0,
+                                         .pulse_first = 0 };
+        sp.mode = RS_SUBAP_UNIFORM;
+        printf("streaming the sub-aperture stage in blocks of %zu pulses\n",
+               mm_stream);
+        st = rs_subaperture_from_cphd_stream(in, &ro, &grid, &sp,
+                                             mm_stream, &stack);
+    } else {
+        st = rs_build_subaps(&c, &grid, &sp, subap_route, &stack);
+    }
+    if (st != RS_OK) {
         rs_report_error("mmotion", st); rs_cphd_free(&c); return 1;
     }
 

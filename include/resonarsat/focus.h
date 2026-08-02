@@ -245,6 +245,29 @@ typedef struct {
      * The caller must zero 'img' before the first block. Geometry fields are
      * written on every call, so the last block's mid-pulse supplies them. */
     int accumulate;
+
+    /* Where to accumulate, when accumulating must be EXACT.
+     *
+     * 'accumulate' alone sums into the float image, which rounds once per block
+     * and therefore reassociates the sum: a collect focused in blocks then
+     * differs from the same collect focused whole, by up to a few ULP. Measured
+     * on a 16-look stack over the Giza collect at 1024 range bins, 46747 of
+     * 65536 samples differed, worst 4.3e-05.
+     *
+     * That is small and it is still the wrong trade for this project.
+     * -ffast-math is banned here precisely because reassociation perturbs the
+     * sub-pixel correlation peaks and interferometric phase the measurement
+     * reads, and a streaming path that reassociates the sum is the same hazard
+     * arriving by another door. So when 'accum' is non-NULL the kernel sums
+     * into it -- 2 doubles per cell, real then imaginary, laid out cell-major --
+     * and the caller converts to the float image once at the end. The result is
+     * then bit-identical to the resident path.
+     *
+     * The caller owns and zeroes it. It costs 16 bytes per cell: 1 MB for a
+     * 256x256 grid, 134 MB for a 128-look stack of them, against the 11 GB the
+     * streaming is there to avoid. When 'accum' is set the image samples are
+     * left alone and only the geometry fields are written. */
+    double *accum;
 } rs_focus_opts_t;
 
 /* As rs_focus_backproject(), with execution options.

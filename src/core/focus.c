@@ -134,6 +134,7 @@ resonarsat_status_t rs_focus_backproject_opts(const rs_cphd_t *cphd,
      * the only thing that differs. */
     const int single_thread = opts && opts->single_thread;
     const int accumulate = opts && opts->accumulate;
+    double *const accum = opts ? opts->accum : NULL;
 
     /* Interpolator width. Anything below 4 is the historical two-tap linear
      * path; see rs_focus_opts_t for why the wider kernel exists. */
@@ -244,8 +245,16 @@ resonarsat_status_t rs_focus_backproject_opts(const rs_cphd_t *cphd,
             acc_im += sr * ci + si * cr;
         }
 
-        const float complex v = (float)acc_re + (float)acc_im * I;
-        img->data[(size_t)cell] = accumulate ? (img->data[(size_t)cell] + v) : v;
+        if (accum) {
+            /* Exact: the sum stays in double across blocks and is rounded to
+             * float once, by the caller, after the last one. */
+            accum[2 * (size_t)cell]     += acc_re;
+            accum[2 * (size_t)cell + 1] += acc_im;
+        } else {
+            const float complex v = (float)acc_re + (float)acc_im * I;
+            img->data[(size_t)cell] =
+                accumulate ? (img->data[(size_t)cell] + v) : v;
+        }
     }
 
     free(ktab);

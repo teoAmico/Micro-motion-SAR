@@ -401,4 +401,40 @@ resonarsat_status_t rs_estimate_doppler_centroid(const rs_slc_t *img, double *ou
  * it. */
 resonarsat_status_t rs_estimate_doppler_bandwidth(const rs_slc_t *img, double frac, double *out);
 
+/* As rs_subaperture_from_cphd(), reading the collect in blocks instead of
+ * holding it.
+ *
+ * WHY. The pulse route holds n_pulse * n_rbin complex floats for as long as the
+ * measurement runs -- 11 GB on the Giza collect at --rbins 4096, and the reason
+ * --rbins is a constraint on where a grid may be placed at all. focus --stream
+ * removed that for image formation (FOLLOW-UPS.md item 22); this removes it for
+ * the measurement, which is the path that actually holds the memory for half an
+ * hour.
+ *
+ * WHY IT IS ONE PASS AND NOT ONE READ PER LOOK. The obvious shape -- read each
+ * sub-look's pulse range, focus it, free it -- re-reads the file once per look's
+ * worth of overlap, about ten times at 0.90 overlap, which on a 36 GB collect
+ * over USB is slower than the memory it saves is worth. Instead the collect is
+ * walked ONCE in blocks, and each block is accumulated into every sub-look whose
+ * pulse window intersects it. Backprojection is a sum over pulses, so that is
+ * exact.
+ *
+ * Peak memory becomes one block plus the whole stack of sub-look images, and the
+ * stack is small: 128 looks of 256x256 complex is 67 MB.
+ *
+ * 'path' must be a CPHD product; 'ropts' supplies the range window and any pulse
+ * striding, and its pulse_first and max_pulses fields are ignored because this
+ * function sets them per block. 'block_pulses' of 0 selects a default.
+ *
+ * The geometry is read once up front at two range bins -- about 5 MB for a large
+ * collect -- so the pulse layout, the pulse times and the exact valid-pulse
+ * count are identical to what the resident path computes. That is what makes the
+ * two produce bit-identical sub-looks rather than merely similar ones. */
+resonarsat_status_t rs_subaperture_from_cphd_stream(const char *path,
+                                                    const void *ropts,
+                                                    const struct rs_grid *grid,
+                                                    const rs_subap_params_t *params,
+                                                    size_t block_pulses,
+                                                    rs_subap_stack_t *stack);
+
 #endif /* RESONARSAT_SUBAPERTURE_H */

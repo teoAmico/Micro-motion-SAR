@@ -2369,13 +2369,48 @@ One defect found and fixed while doing it: the block count derived from
 rejects, so the loop could ask the reader for pulses past the end. It now ends on
 the first short block instead.
 
-**STAGE 2, NOT DONE, is where the practical win is.** `mmotion` is what holds
-11-16 GB for half an hour, not `focus`. The sub-aperture stage is streamable the
-same way but needs more care: reading each sub-look's pulse range separately would
-re-read the file about ten times at 0.90 overlap, so the right shape is a SINGLE
-pass over pulse blocks, accumulating each block into every sub-look whose pulse
-range intersects it. Memory would be one block plus the whole stack of sub-look
-images -- 128 looks of 256x256 is only 67 MB -- so about 0.3 GB against 11 GB.
+**STAGE 2 IS DONE (2026-08-02): `mmotion --stream N`.**
+`rs_subaperture_from_cphd_stream()` walks the collect ONCE in pulse blocks and
+accumulates each block into every sub-look whose pulse window intersects it. The
+obvious alternative -- read each sub-look's range, focus it, free it -- re-reads
+the file about ten times at 0.90 overlap, which over USB costs more than the
+memory it saves.
+
+Measured on the Giza collect, `--rbins 4096`, 16 looks over a 64 m grid:
+
+```
+  resident   6.07 GB   strongest 0.063 Hz prom 3.4, consensus 0.063 Hz 23/49
+  streamed   0.92 GB   strongest 0.063 Hz prom 3.4, consensus 0.063 Hz 23/49
+```
+
+Identical output, 6.6x less memory. Two things were needed to make the resident
+container that small: the sub-aperture stage streams the signal, and `mmotion`
+now loads the geometry at TWO range bins rather than the full window, since
+`--at`, the sampling warning and `--null-static` read the pulse track and not the
+samples.
+
+**A CORRECTION TO STAGE 1'S VERIFICATION.** Stage 1 claimed the streamed image was
+bit-identical because the PNGs matched. That proved agreement to 8-BIT DISPLAY
+PRECISION and nothing more. Comparing the actual samples showed the streamed
+sub-look stack differed from the resident one in 46747 of 65536 samples, worst
+4.3e-05 -- float rounding, because summing blocks into the float image
+reassociates the sum.
+
+Small, and still the wrong trade here: `-ffast-math` is banned in this project
+precisely because reassociation perturbs the sub-pixel correlation peaks and
+interferometric phase the measurement reads, and a streaming path that
+reassociates is that hazard arriving by another door. So `rs_focus_opts_t` gained
+`accum`, a double buffer the kernel sums into and the caller rounds to float once
+after the last block. With it the streamed stack is bit-identical to the resident
+one -- 0 of 65536 samples differ, at block sizes 8192 and 16384 -- and so is
+`az_resolution`, which required computing each look's geometry from its whole
+pulse window rather than from whichever block happened to contain its centre.
+
+`--stream` is refused with `--inject-vib`, because the injection is written into
+the resident phase history and a streamed read would never see it: a positive
+control silently missing its injection is exactly what item 28 cost half a day to
+find. It is also refused for the spectral routes, which need a full-aperture image
+first -- the thing that does not fit.
 
 **Nothing worth taking on safety.** GDAL's NITF truncation guard fires only above
 a million blocks and is self-described as "really a very safe bound"; this

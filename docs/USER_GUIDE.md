@@ -237,10 +237,21 @@ for about 6% more runtime spent re-reading the header and PVP block per block.
 16384 is a reasonable default; smaller blocks save more memory and cost more
 re-parsing.
 
-**It applies to `focus` only.** `mmotion` still loads the whole collect, and that
-is where the 11–16 GB actually goes — see `FOLLOW-UPS.md` item 22 for why the
-sub-aperture stage needs a different shape (one pass over blocks, accumulating
-into every sub-look that overlaps each block) and has not been done yet.
+**`mmotion --stream N` does the same for the measurement**, which is where the
+11–16 GB actually goes. On the Giza collect at `--rbins 4096`, 16 looks over a
+64 m grid: **0.92 GB streamed against 6.07 GB resident, identical output** — same
+peak, same prominence, same consensus, same window count.
+
+```sh
+./build/micromotion mmotion --cphd scene.cphd --at LAT,LON --stream 16384 ...
+```
+
+Two restrictions, both refusals rather than silent fallbacks. It needs `--subap
+pulse` (the default); the spectral routes focus the full aperture first, which is
+the thing that does not fit. And it cannot be combined with `--inject-vib`,
+because the injection is written into the phase history in memory and a streamed
+read would never see it — a positive control silently missing its injection is
+the failure `FOLLOW-UPS.md` item 28 records.
 
 ### Match the aperture to the cell
 

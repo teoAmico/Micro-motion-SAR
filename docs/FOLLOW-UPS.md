@@ -64,7 +64,7 @@ said, not better) and item 7's line numbers.
 | 20 | done | `D_A` becomes a selector; its threshold measured; `AmpSF` found unapplied |
 | 21 | **retraction** | `AmpSF` applied, and it does NOT explain the `D_A` gap |
 | 22 | done | notes from NGA's six-library; streaming stages 1 and 2 |
-| 23 | negative | neither density nor selection bias explains the `D_A` gap |
+| 23 | negative | neither density, selection bias nor the antenna taper explains the `D_A` gap |
 | 24 | mechanism found | aspect-dependent scattering, and the first fixture that refuses |
 | 25 | bounds item 14 | item 14's recovery does not survive aspect dependence; the PS selector does |
 | 26 | open | the correlation route against aspect dependence |
@@ -2688,9 +2688,62 @@ at the target list. It is a hypothesis, not a result: the test is to give
 into the 0.4-0.9 band real scenes occupy, and whether the window-size response
 appears with it.
 
+### 23e. The antenna gain taper is excluded, by four orders of magnitude
+
+Item 21's candidate list opened with "an aperture amplitude taper the synthetic
+scenes do not have". It is a good candidate on its face: a gain that varies
+across the dwell gives each sub-look a different amplitude, which is exactly
+what raises `sigma_A/mu_A`, and `rs_sim_scene()` has no such taper by
+construction.
+
+**The data to test it has been in the file all along and nothing reads it.**
+Capella's own notebook (`CPHD_by_Example.ipynb`) spends four cells on
+`Antenna/AntPattern`, and the Giza XML carries it populated: `GainZero` 49.58
+dBi, a 2x2 `Array/GainPoly` in direction cosines, and an `AntCoordFrame` giving
+the antenna axes as 5th-order polynomials in time. The polynomial implies a 3 dB
+beamwidth of **0.676 deg** in azimuth and 0.680 in elevation, which matches the
+notebook's stated "nominal beamwidth is 0.7 deg" -- the check that says the
+coefficients are being read correctly.
+
+**MEASURED, on the Giza collect.** The line of sight from the antenna phase
+centre to each target was put into the antenna frame per pulse and the gain
+polynomial evaluated there. 335141 of 335149 vectors pass the validity screen,
+which is the same count `rs_read_cphd()` reports, so the PVP parse agrees with
+the project's own.
+
+```
+  off-boresight at the SRP   |dcx| max 0.007 deg, |dcy| max 0.002 deg
+  one-way gain across the whole 32.87 s dwell        span 0.001 dB
+
+  offset from SRP    gain span across dwell    D_A from the taper alone
+        0 m               0.001068 dB               0.000029
+      128 m               0.002190 dB               0.000049
+      500 m               0.008743 dB               0.000064
+     2500 m               0.160751 dB               0.001024
+```
+
+Against an observed real-scene floor of **0.38**. At the edge of the 256 m
+patches the Giza runs actually used the taper contributes 0.00005, and even
+2500 m off the reference point -- ten times any grid this project has placed --
+it reaches 0.001, still 380 times too small.
+
+**The reason is that the spacecraft tracks the target almost exactly.** The
+antenna frame rotates 18.04 deg across the dwell at 0.549 deg/s while the target
+stays within 0.007 deg of boresight, so a 0.676 deg beam never presents the
+scene with anything but its flat top. The taper is real, it is simply four
+orders of magnitude below what would matter.
+
+*What this does not cover:* the ELEVATION pattern across the swath is a static
+per-pixel gain, not a per-look one, so it cannot move `D_A` whatever its size --
+`D_A` is a variation across sub-looks at a fixed pixel. And this is one collect;
+a squinted or poorly-tracked acquisition would not behave this way, which is an
+argument for reading the pattern rather than assuming it is always negligible.
+
 RULED OUT SO FAR, for the record: 16-bit sample quantisation (item 21, no
 effect), per-vector AmpSF (item 21, measured, no effect), scatterer density
-(23a), and the brightest-pixel selection bias (23b).
+(23a), the brightest-pixel selection bias (23b), and the aperture amplitude
+taper (23e). **Aspect-dependent scattering (23d) is what remains**, and it is now
+the leading explanation by elimination as well as by the window-size evidence.
 
 
 ---

@@ -15,6 +15,7 @@ because several of these are patterns rather than incidents.
 
 | date | commit | scope | outcome |
 |---|---|---|---|
+| 2026-08-03 | `0c717d9` | Capella's `CPHD_by_Example.ipynb` read against this reader | Three conventions confirmed from the primary source (SGN inverse, SRP phase referencing, near-range arithmetic); no gap found. It surfaced the unread `Antenna/AntPattern`, which `FOLLOW-UPS` 23e then excluded as a `D_A` explanation. |
 | 2026-08-03 | `55c4aa5` | Full ASAN + UBSAN pass over the whole suite | Clean: 17/17 binaries, **zero** sanitizer diagnostics. Sanitizers verified armed. See below. |
 | 2026-08-02 | `cda093f` | Removing the two dead `rs_slc_t` fields | `sizeof(rs_slc_t)` falls 3976 -> 320 bytes, 92 percent of it, saving 7.3 MB on a 2048-look stack. Pipeline output bit-identical. |
 | 2026-08-02 | `2e0e1fc` | Closing the check's own open items: tests for the two uncovered branches, and the phase-reference fix they made safe | Both branches now covered. The lag test failed before the fix and passes after; the split-band test found a second defect, an unclamped coherence. Details below. |

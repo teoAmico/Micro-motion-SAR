@@ -1238,7 +1238,7 @@ static int rs_cmd_mmotion(int argc, char **argv)
                "                          [--offset X,Y | --at LAT,LON]\n"
                "                          [--subap pulse|uniform|paper]\n"
                "                          [--no-detrend] [--null-static N]\n"
-               "                          [--null-scatterers N]\n"
+               "                          [--null-scatterers N] [--null-alpha F]\n"
                "                          [--inject-vib FREQ_HZ[,AMP_MM[,REL]]]\n"
                "                          [--stream N]\n"
                "                          [--estimator correlation|phase|splitband|argmax]\n"
@@ -2011,7 +2011,39 @@ static int rs_cmd_mmotion(int argc, char **argv)
      * block size gets 0 of 5 on the same data: the desert produces a 12-window
      * block at 0.065 Hz in every run including the control. It is reported
      * because it is informative, not because it discriminates. */
-    const int refused = (null_ran && nge > 0);
+    /* THE VERDICT IS A p-VALUE AGAINST AN EXPLICIT ALPHA, NOT A COUNT.
+     *
+     * This read `nge > 0` -- refuse if any motionless realisation reached the
+     * measurement -- while printing the conformal p-value beside it and never
+     * using it. The consequence is that the gate's strictness was an accident of
+     * how many trials the operator happened to run:
+     *
+     *     M = 1   nge = 0  ->  p = 0.500   "adjudicated"
+     *     M = 5   nge = 0  ->  p = 0.167   "adjudicated"
+     *     M = 30  nge = 0  ->  p = 0.032   "adjudicated"
+     *
+     * All three passed identically, and the first stamped a verdict on evidence
+     * whose p-value cannot go below one half however clean the result. A single
+     * null answers "did this realisation reach it"; it cannot establish a
+     * false-alarm probability, and the tool said otherwise.
+     *
+     * p = (1 + #{null >= measurement}) / (M + 1) is the finite-sample conformal
+     * form: no Gaussian assumption, and it is calibrated for the whole search
+     * because rs_null_static() takes each trial's own best window, so both sides
+     * are a maximum over the same window and frequency grid. The look-elsewhere
+     * effect is therefore already in it.
+     *
+     * AND THE TOOL REFUSES TO ADJUDICATE WHEN M CANNOT REACH ALPHA. The smallest
+     * attainable p is 1/(M+1), so alpha needs M >= 1/alpha - 1 trials: nineteen
+     * at 0.05, ninety-nine at 0.01. Running five and reporting a verdict at 0.05
+     * would be arithmetic theatre. That case is now named as its own outcome
+     * rather than folded into a pass, and the message says how many trials the
+     * requested alpha costs. */
+    const double null_alpha = rs_opt_double(argc, argv, "--null-alpha", 0.05);
+    const double p_emp = null_ran ? (double)(nge + 1) / (double)(s_trials + 1) : 1.0;
+    const double p_min = null_ran ? 1.0 / (double)(s_trials + 1) : 1.0;
+    const int null_decides = null_ran && (p_min <= null_alpha);
+    const int refused = null_decides && (p_emp > null_alpha);
 
     /* The localised counterpart of the agreement fraction: how many windows
      * back the frequency actually being reported, and whether they touch. */
@@ -2019,23 +2051,37 @@ static int rs_cmd_mmotion(int argc, char **argv)
     (void)rs_spectrum_block_at(&spec, spec.dominant_freq[best], &rep_agree, &rep_block);
 
     if (refused) {
-        printf("NO FREQUENCY REPORTED: %zu of %zu motionless realisations reached "
-               "prominence %.1f\n"
-               "  through the identical chain, so the peak is not evidence of "
-               "motion. Diagnostics\n"
-               "  only: window %zu, %.3f Hz, quality %.3f, peak-to-peak velocity "
-               "%.1f mm/s\n",
-               nge, s_trials, prom, best, spec.dominant_freq[best],
-               spec.quality[best], pp * 1e3);
+        printf("NO FREQUENCY REPORTED: p = %.4f against alpha %.3g -- %zu of %zu "
+               "motionless\n"
+               "  realisations reached prominence %.1f through the identical "
+               "chain, so the peak\n"
+               "  is not evidence of motion. Diagnostics only: window %zu, "
+               "%.3f Hz, quality %.3f,\n"
+               "  peak-to-peak velocity %.1f mm/s\n",
+               p_emp, null_alpha, nge, s_trials, prom, best,
+               spec.dominant_freq[best], spec.quality[best], pp * 1e3);
     } else {
         printf("strongest peak in window %zu: %.3f Hz, prominence %.1f, "
                "quality %.3f, peak-to-peak velocity %.1f mm/s\n",
                best, spec.dominant_freq[best], prom, spec.quality[best], pp * 1e3);
         printf("  backed by %zu windows, largest touching block %zu\n",
                rep_agree, rep_block);
-        if (null_ran) {
-            printf("  ADJUDICATED: no motionless realisation of %zu reached it.\n",
-                   s_trials);
+        if (null_decides) {
+            printf("  ADJUDICATED: p = %.4f <= alpha %.3g, from %zu of %zu "
+                   "motionless realisations\n"
+                   "  reaching prominence %.1f through the identical chain.\n",
+                   p_emp, null_alpha, nge, s_trials, prom);
+        } else if (null_ran) {
+            /* A null ran and could not decide: too few trials for the alpha
+             * asked for. Distinguished from having no null at all, because the
+             * remedy is different and is a number. */
+            printf("  NOT ADJUDICATED -- %zu null trials give a smallest possible "
+                   "p of %.3f, and\n"
+                   "  --null-alpha %.3g needs p <= %.3g. Run at least %zu trials, "
+                   "or raise --null-alpha.\n"
+                   "  (observed p = %.3f from %zu of %zu realisations reaching it)\n",
+                   s_trials, p_min, null_alpha, null_alpha,
+                   (size_t)ceil(1.0 / null_alpha - 1.0), p_emp, nge, s_trials);
         } else {
             printf("  NOT ADJUDICATED -- nothing here distinguishes this from an "
                    "artefact of the\n"

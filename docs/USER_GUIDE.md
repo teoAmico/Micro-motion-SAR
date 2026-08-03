@@ -526,6 +526,25 @@ A scene known to hold nothing produced the same measurement. Only `--null-static
 can say this, and it is the only refusal in the tool that means "not motion"
 rather than "not resolvable".
 
+**The verdict is a p-value against an explicit alpha.** `p = (1 + #{null ≥
+measurement}) / (M + 1)` — the finite-sample conformal form, no Gaussian
+assumption, and calibrated for the whole search because each null trial
+contributes its own best window, so both sides are a maximum over the same
+window and frequency grid.
+
+`--null-alpha F` sets the bar, default **0.05**. The smallest p that `M` trials
+can produce is `1/(M+1)`, so alpha needs `M ≥ 1/alpha − 1` trials: **19 at 0.05,
+99 at 0.01**. Below that the tool says so and reports nothing, rather than
+stamping a verdict on evidence that cannot reach the threshold:
+
+```
+NOT ADJUDICATED -- 5 null trials give a smallest possible p of 0.167, and
+--null-alpha 0.05 needs p <= 0.05. Run at least 19 trials, or raise --null-alpha.
+```
+
+That is deliberate. A single null answers "did this realisation reach it"; it
+cannot establish a false-alarm probability, and the gate used to pass it anyway.
+
 **This gate used to be a scene-wide agreement fraction and no longer is.** It
 refused whenever fewer than a third of windows shared the consensus frequency,
 which is what a *global* signal produces — the fixtures it was calibrated on make

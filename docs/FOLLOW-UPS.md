@@ -3716,9 +3716,18 @@ compare is always the same: the null's prominence distribution against that
 collect's own uninjected value.
 
 *Five trials cannot support a false-alarm probability.* p = 0.17 is the smallest
-value five nulls can produce. Item 31's open question about gating on an explicit
-alpha stands, and NOW is the time to look at it, since the instrument it reads is
-no longer biased.
+value five nulls can produce.
+
+**DONE, once the instrument was trustworthy.** The gate read `nge > 0` while
+printing the conformal p-value beside it and never using it, so its strictness
+was an accident of trial count: M = 1, 5 and 30 with no null reaching the
+measurement all passed identically, at p of 0.500, 0.167 and 0.032. The first
+stamped a verdict on evidence whose p cannot go below one half however clean the
+result. It now gates on `p <= --null-alpha`, default 0.05, and REFUSES TO
+ADJUDICATE when M cannot reach that -- `p_min = 1/(M+1)`, so 0.05 needs nineteen
+trials and 0.01 needs ninety-nine. Four outcomes, all exercised before commit: no
+null; a null too small to decide, which names the trial count required; an
+adjudicated pass; and an adjudicated refusal.
 
 *The mechanism is inferred, not isolated.* Density is shown to move prominence
 onto the real value. That the remaining difference is speckle development,

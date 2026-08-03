@@ -305,6 +305,17 @@ The third is the one the null tests already suggest, and this is a cheaper way
 to reach it than another full-dwell run. Scoring must use `rs_track_fit()` over
 an injected sweep, not a single reported value, and must be pooled over seeds.
 
+**AND IT CANNOT CURRENTLY BE DONE FROM THE CLI.** `mmotion` hard-codes
+`max_pulses = 0` and `pulse_first = 0` in its read options; `--max-pulses` and
+`--pulse-start` are parsed by `focus` only. `rs_cphd_read_opts_t` already carries
+both fields, so this is an exposure gap rather than a missing capability -- but
+until it is closed, "never have been" understates it: the experiment this item
+asks for is not reachable. Found while screening a Los Angeles collect against
+the published operating point (`runs/screens/`), where the literature's 3.6
+percent aperture fraction on a 25.4 s dwell gives a 0.91 s sub-look and an
+averaging ceiling of 0.547 Hz -- a FAIL that is an artefact of the untruncated
+dwell rather than of the collect.
+
 **Where it bites first.** The Istanbul 25 s collect is eight such spans. Deciding
 before the run whether to process it whole or in spans is a configuration choice
 that belongs in the `RUN.md` question, not a post-hoc reinterpretation.

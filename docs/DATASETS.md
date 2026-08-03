@@ -113,8 +113,23 @@ What Istanbul still has is a bridge in the footprint with a masonry aqueduct
 beside it at the same range, which is an in-scene static reference nothing else
 on this list offers.
 
-The Los Angeles cluster is the one worth screening next: 14.2 degrees, 26
-collects, urban infrastructure, and twelve of them in daylight.
+**The timezone grouping conflates sites, and that matters.**
+`America/Los_Angeles` spans the whole US Pacific coast: of its 26 collects, one
+is near Los Angeles and the rest are Eugene, Las Vegas, Fresno and the Mojave.
+Read the column as "how many collects share a clock", not "how many cover a city".
+
+**The best of them is screened and was not downloaded**
+(`runs/screens/`). `CAPELLA_C11_SP_CPHD_HH_20250112202415_20250112202441` is the
+finest geometry in the archive -- incidence 14.2 degrees, squint 0.1, 12:24 local,
+25.4 s, 16.0 GB -- and returns WARN with no failures. Its footprint is a 7 km
+square over the Santa Monica Mountains above Pacific Palisades, collected five
+days into the January 2025 fire: a fire-response acquisition over terrain, with
+nothing resembling a bridge deck in it. Excellent geometry over the wrong scene
+is not a candidate.
+
+That is the general lesson for this table: **geometry and clock are screenable
+from metadata, scene content is not.** The footprint corners have to be checked
+against a map before a collect is worth 16 GB, and the survey cannot do it.
 
 ## Long-dwell candidates over built infrastructure
 

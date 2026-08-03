@@ -1,0 +1,24 @@
+########## --null-scatterers 400
+  null scene: 400 scatterers over 9216 m^2, 0.1760 m^2 sub-look cell -> 0.0076 per cell
+  static trial 1/3: prominence 31.4 at 1.172 Hz
+  static trial 2/3: prominence 33.5 at 1.238 Hz
+  static trial 3/3: prominence 38.7 at 1.075 Hz
+  mean 34.6, sd 3.1, worst 38.7
+  detection 16.6 is 0.48x the mean and 0.43x the worst
+  3 of 3 reached it -- empirical p = 1.0000
+########## --null-scatterers 4000
+  null scene: 4000 scatterers over 9216 m^2, 0.1760 m^2 sub-look cell -> 0.0764 per cell
+  static trial 1/3: prominence 20.0 at 1.466 Hz
+  static trial 2/3: prominence 31.2 at 0.944 Hz
+  static trial 3/3: prominence 25.9 at 0.293 Hz
+  mean 25.7, sd 4.6, worst 31.2
+  detection 16.6 is 0.64x the mean and 0.53x the worst
+  3 of 3 reached it -- empirical p = 1.0000
+########## --null-scatterers 20000
+  null scene: 20000 scatterers over 9216 m^2, 0.1760 m^2 sub-look cell -> 0.3819 per cell
+  static trial 1/3: prominence 11.8 at 0.293 Hz
+  static trial 2/3: prominence 10.8 at 0.684 Hz
+  static trial 3/3: prominence 17.3 at 0.586 Hz
+  mean 13.3, sd 2.8, worst 17.3
+  detection 16.6 is 1.25x the mean and 0.96x the worst
+  1 of 3 reached it -- empirical p = 0.5000

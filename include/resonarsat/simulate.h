@@ -133,6 +133,40 @@ resonarsat_status_t rs_simulate_static_like(const rs_cphd_t *ref, unsigned seed,
  * pulse geometry, or a non-finite or non-positive frequency, and RS_ERR_RANGE
  * if NO pulse deposited -- an injection that lands nowhere is an error, not a
  * quiet no-op. */
+/* Scatterers per SUB-LOOK RESOLUTION CELL a static null needs to resemble real
+ * distributed clutter, rather than a field of isolated bright points.
+ *
+ * WHY THERE IS A NUMBER HERE AT ALL. rs_simulate_static_like() defaulted to 400
+ * scatterers whatever the scene covered. At the Giza operating point that is
+ * 0.0076 per cell -- ninety-nine percent of resolution cells EMPTY -- so every
+ * tracking window held a handful of isolated bright points, each giving a far
+ * sharper spectral peak than distributed desert does. Measured consequence: the
+ * null's per-run prominence ran 24-39 where the real motionless scene gives
+ * 16.6, so it refused every one of item 30's five known true positives. A null
+ * that cannot be reached by the scene it stands in for adjudicates nothing.
+ * FOLLOW-UPS.md item 33.
+ *
+ * MEASURED, NOT DERIVED. Swept on the real Giza collect at three densities,
+ * three trials each, everything else held (FOLLOW-UPS.md item 34):
+ *
+ *     scatterers   per cell   null mean prominence
+ *            400     0.0076          34.6
+ *           4000     0.0764          25.7
+ *          20000     0.3819          13.3      real scene: 16.6
+ *
+ * The null crosses the real scene at about 0.25 per cell, and that is where this
+ * constant sits. It is NOT the density at which speckle is fully developed --
+ * that needs of order ten per cell, which costs forty times more -- because what
+ * decides prominence is only that no single scatterer dominates a window, and a
+ * 32-metre window holds some fifteen hundred scatterers at this density.
+ *
+ * IT IS CALIBRATED ON ONE SCENE. Giza is desert. Whether the same density
+ * matches a bridge deck, a waterway or an urban scene is untested, and the
+ * quantity to compare is always the same one: the null's prominence distribution
+ * against the real collect's own uninjected value. Use --null-scatterers to
+ * override, and read the per-cell figure mmotion prints beside it. */
+#define RS_NULL_SCATTERERS_PER_CELL 0.25
+
 typedef struct {
     size_t n_pulse;       /* pulses in the collect */
     size_t n_deposited;   /* of those, pulses whose target fell in the window */

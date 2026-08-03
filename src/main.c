@@ -1150,6 +1150,7 @@ static resonarsat_status_t rs_null_static(const rs_cphd_t *ref, const rs_grid_t 
                                           const rs_microm_params_t *mp,
                                           size_t trials, double real, double f_min,
                                           size_t sim_rbin, double extent_m,
+                                          size_t n_scat,
                                           double *mean, double *sd, double *max_out,
                                           size_t *n_ge)
 {
@@ -1161,7 +1162,7 @@ static resonarsat_status_t rs_null_static(const rs_cphd_t *ref, const rs_grid_t 
     for (size_t i = 0; i < trials; i++) {
         rs_cphd_t sim;
         const double centre[2] = { grid->origin[0], grid->origin[1] };
-        if (rs_simulate_static_like(ref, (unsigned)(i + 1), 0, centre, extent_m,
+        if (rs_simulate_static_like(ref, (unsigned)(i + 1), n_scat, centre, extent_m,
                                     sim_rbin, &sim) != RS_OK) {
             continue;
         }
@@ -1237,6 +1238,7 @@ static int rs_cmd_mmotion(int argc, char **argv)
                "                          [--offset X,Y | --at LAT,LON]\n"
                "                          [--subap pulse|uniform|paper]\n"
                "                          [--no-detrend] [--null-static N]\n"
+               "                          [--null-scatterers N]\n"
                "                          [--inject-vib FREQ_HZ[,AMP_MM[,REL]]]\n"
                "                          [--stream N]\n"
                "                          [--estimator correlation|phase|splitband|argmax]\n"
@@ -1916,8 +1918,42 @@ static int rs_cmd_mmotion(int argc, char **argv)
         printf("\nSTATIC-SCENE NULL FLOOR from %zu simulated motionless collects\n"
                "with this collect's own geometry, through the identical chain:\n",
                s_trials);
+        size_t n_scat = (size_t)rs_opt_double(argc, argv, "--null-scatterers", 0.0);
+        {
+            /* Scatterers per SUB-LOOK RESOLUTION CELL, which is the density that
+             * decides whether the null is clutter or a field of isolated points.
+             * Reported rather than assumed: at the Giza settings the historical
+             * default of 400 works out at 0.008 per cell, so 99 percent of cells
+             * were empty and the null's spectral peaks were far sharper than the
+             * real scene's. See FOLLOW-UPS.md item 33. */
+            /* Derived from THIS collect's geometry rather than fixed, because
+             * a constant count is a different density on every scene. See
+             * RS_NULL_SCATTERERS_PER_CELL for what the number is and what it is
+             * calibrated on. */
+            const double n_area = 4.0 * extent * extent;
+            const double n_cell = (stack.az_resolution > 0.0 ? stack.az_resolution : 1.0)
+                                * (c.dr > 0.0 ? c.dr : 1.0);
+            if (n_scat == 0 && n_cell > 0.0 && n_area > 0.0) {
+                n_scat = (size_t)(RS_NULL_SCATTERERS_PER_CELL * n_area / n_cell);
+                if (n_scat < 400) n_scat = 400;
+            }
+            printf("  null scene: %zu scatterers over %.0f m^2, %.4f m^2 sub-look "
+                   "cell -> %.3f per cell%s\n", n_scat, n_area, n_cell,
+                   n_area > 0.0 ? (double)n_scat * n_cell / n_area : 0.0,
+                   rs_opt(argc, argv, "--null-scatterers") ? " (from --null-scatterers)"
+                                                          : " (derived)");
+            if (n_area > 0.0 && n_cell > 0.0 &&
+                (double)n_scat * n_cell / n_area < 0.5 * RS_NULL_SCATTERERS_PER_CELL) {
+                printf("  WARNING: that is well below the %.2f per cell a null needs to\n"
+                       "           resemble distributed clutter. A sparse null is a field "
+                       "of isolated\n           bright points, and its spectral peaks are "
+                       "sharper than any real\n           scene's -- it will refuse "
+                       "measurements the ground never could.\n",
+                       RS_NULL_SCATTERERS_PER_CELL);
+            }
+        }
         if (rs_null_static(&c, &grid, &sp, rs_opt(argc, argv, "--subap"), &mp,
-                           s_trials, prom, f_min, 1024, extent,
+                           s_trials, prom, f_min, 1024, extent, n_scat,
                            &nm, &nsd, &nmax, &nge) == RS_OK) {
             null_ran = 1;
             printf("  mean %.1f, sd %.1f, worst %.1f\n", nm, nsd, nmax);
@@ -2304,33 +2340,85 @@ static int rs_cmd_mmotion(int argc, char **argv)
              * Hann scalloping, so a reading is a lower bound by up to 15 percent
              * before any of that. The label says so; the number is for placing a
              * result in an envelope, not for quoting. */
-            double *amp_mm = malloc(spec.n_freq * sizeof *amp_mm);
-            if (amp_mm) {
+            /* BOTH PHYSICAL QUANTITIES, EACH LABELLED FOR WHAT IT IS.
+             *
+             * This wrote one figure, always labelled "VELOCITY, MM/S", and on
+             * the phase route it reached that by multiplying the DISPLACEMENT
+             * spectrum by 2*pi*f. The arithmetic is right -- velocity is the
+             * time derivative, so in amplitude that is exactly the factor -- but
+             * the figure then plotted a TILTED curve while marking the bin the
+             * UNTILTED one selected. The two coincide only when a tone dominates.
+             * On a scene with no tone the tilt is all there is, the curve rises
+             * with frequency, and the marker sits somewhere off the visual peak
+             * with nothing saying why. Reported by a reader looking at exactly
+             * that, against literature figures that show a clean peak because
+             * their scenes hold a shaker-driven corner reflector.
+             *
+             * So write both, convert each correctly from whichever observable
+             * was measured, and let the axis say which is which:
+             *
+             *   phase route measures displacement D  ->  disp = D, vel = 2*pi*f*D
+             *   correlation measures velocity     V  ->  vel  = V, disp = V/(2*pi*f)
+             *
+             * The OBSERVABLE's own figure carries the marker at the reported bin
+             * and that bin is its own peak, because the selection reads the same
+             * spectrum. The DERIVED figure says so in its title, since a tilt can
+             * move its maximum elsewhere and that is a property of the quantity
+             * rather than a disagreement to hide. */
+            double *amp_disp = malloc(spec.n_freq * sizeof *amp_disp);
+            double *amp_vel  = malloc(spec.n_freq * sizeof *amp_vel);
+            if (amp_disp && amp_vel) {
                 const double *psd_w = spec.psd + best * spec.n_freq;
+                const int measured_disp = (src == RS_SPEC_DISPLACEMENT);
                 for (size_t k = 0; k < spec.n_freq; k++) {
                     const double a = 3.0 * psd_w[k] * spec.df;
-                    double v = 1000.0 * ((a > 0.0) ? sqrt(a) : 0.0);
-                    /* ALWAYS A VELOCITY AXIS, whatever the estimator measured.
-                     * The phase route's observable is DISPLACEMENT, so its
-                     * amplitude is millimetres and labelling it mm/s would be a
-                     * lie; but this figure exists to be read in mm/s beside the
-                     * power one, so the displacement is converted rather than
-                     * relabelled. For a sinusoid at f, peak velocity is
-                     * 2*pi*f*A, which is exact for a tone and is what the bin
-                     * holds. The correlation route already measures velocity
-                     * and passes through untouched. */
-                    if (src == RS_SPEC_DISPLACEMENT) {
-                        v *= 2.0 * M_PI * spec.freq[k];
+                    const double amp = 1000.0 * ((a > 0.0) ? sqrt(a) : 0.0);
+                    const double w = 2.0 * M_PI * spec.freq[k];
+                    if (measured_disp) {
+                        amp_disp[k] = amp;
+                        amp_vel[k]  = amp * w;
+                    } else {
+                        amp_vel[k]  = amp;
+                        /* Dividing by 2*pi*f is unbounded as f -> 0, and bin 0 is
+                         * excluded from selection anyway, so it is left at zero
+                         * rather than allowed to dominate the axis. */
+                        amp_disp[k] = (w > 0.0) ? amp / w : 0.0;
                     }
-                    amp_mm[k] = v;
                 }
+
+                char t2[256];
                 snprintf(path, sizeof path, "%s_spectrum_mm.png", prefix);
-                rs_raster_write_plot(spec.freq, amp_mm, spec.n_freq, path,
-                                     plot_title, "FREQUENCY, HZ",
-                                     "VELOCITY, MM/S (QUALITATIVE)",
-                                     spec.dominant_freq[best]);
-                free(amp_mm);
+                if (measured_disp) {
+                    rs_raster_write_plot(spec.freq, amp_disp, spec.n_freq, path,
+                                         plot_title, "FREQUENCY, HZ",
+                                         "DISPLACEMENT, MM (QUALITATIVE)",
+                                         spec.dominant_freq[best]);
+                } else {
+                    snprintf(t2, sizeof t2, "%s | derived from velocity, tilt "
+                             "may move its peak", plot_title);
+                    rs_raster_write_plot(spec.freq, amp_disp, spec.n_freq, path,
+                                         t2, "FREQUENCY, HZ",
+                                         "DISPLACEMENT, MM (DERIVED, QUALITATIVE)",
+                                         spec.dominant_freq[best]);
+                }
+
+                snprintf(path, sizeof path, "%s_spectrum_mms.png", prefix);
+                if (measured_disp) {
+                    snprintf(t2, sizeof t2, "%s | derived from displacement, tilt "
+                             "may move its peak", plot_title);
+                    rs_raster_write_plot(spec.freq, amp_vel, spec.n_freq, path,
+                                         t2, "FREQUENCY, HZ",
+                                         "VELOCITY, MM/S (DERIVED, QUALITATIVE)",
+                                         spec.dominant_freq[best]);
+                } else {
+                    rs_raster_write_plot(spec.freq, amp_vel, spec.n_freq, path,
+                                         plot_title, "FREQUENCY, HZ",
+                                         "VELOCITY, MM/S (QUALITATIVE)",
+                                         spec.dominant_freq[best]);
+                }
             }
+            free(amp_disp);
+            free(amp_vel);
         }
 
         /* The per-window evidence the selection was made FROM, not just the
@@ -2449,9 +2537,10 @@ static int rs_cmd_mmotion(int argc, char **argv)
             }
             fclose(wf);
         }
-        printf("wrote %s_freq.png, %s_quality.png, %s_scene.png,"
-               " %s_spectrum.png, %s_spectrum_mm.png and %s_windows.csv\n",
-               prefix, prefix, prefix, prefix, prefix, prefix);
+        printf("wrote %s_freq.png, %s_quality.png, %s_scene.png,\n"
+               "      %s_spectrum.png (power), %s_spectrum_mm.png (displacement),\n"
+               "      %s_spectrum_mms.png (velocity) and %s_windows.csv\n",
+               prefix, prefix, prefix, prefix, prefix, prefix, prefix);
     }
 
     free(cull_state);

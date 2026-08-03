@@ -74,7 +74,8 @@ said, not better) and item 7's line numbers.
 | 30 | bounded by 31 | the bar met on real data by the tracker, not by anything that reports |
 | 31 | bounded by 32 | the reported policy had the right frequency; the scene-wide GATE discarded it |
 | 32 | closed | the published estimator is brightest-pixel argmax; item 6 measured it and it was never built |
-| 33 | **the current state** | the static null is not comparable to Giza; item 31's gate cannot adjudicate it |
+| 33 | fixed by 34 | the static null is not comparable to Giza; item 31's gate cannot adjudicate it |
+| 34 | **the current state** | null density derived from geometry; it now separates signal from nothing on real data |
 
 ---
 
@@ -3631,3 +3632,111 @@ sharper, that is the sparse-scatterer explanation confirmed, and
 matched to the scene rather than a plausible-looking one. `rs_sim_scene_aspect()`
 already exists for the fixtures (item 24) and has no counterpart in the null
 generator.
+
+---
+
+## 34. The null generator matched to real clutter: density derived, and it inverts item 33
+
+Item 33 measured `rs_simulate_static_like()` producing prominences twice the real
+Giza desert's, refusing every known true positive. The cause is quantitative and
+was hiding in a magic number: **the default was 400 scatterers whatever the scene
+covered**, which at the Giza operating point is
+
+```
+  scene 9216 m^2, sub-look cell 0.176 m^2 -> 52,700 resolution cells
+  400 scatterers  =  0.0076 per cell  -> 99.2 percent of cells EMPTY
+```
+
+A field of isolated bright points, not clutter. Each tracking window held a
+handful of them, and an isolated point gives a far sharper spectral peak than
+distributed desert does.
+
+### Swept on the real collect
+
+Three densities, three trials each, everything else held
+(`runs/giza/2026-08-03-null-density/`):
+
+```
+  scatterers   per cell   null mean prominence
+         400     0.0076          34.6
+        4000     0.0764          25.7
+       20000     0.3819          13.3        real scene: 16.6
+```
+
+Monotone, and it brackets the real scene between the last two. Log-interpolating
+puts the crossing at about 13,000 scatterers, **0.25 per resolution cell**, which
+is where `RS_NULL_SCATTERERS_PER_CELL` now sits. `mmotion` derives the count from
+each collect's own geometry, prints the achieved per-cell density every run, and
+warns below half of it -- a check that would have caught item 33 automatically.
+
+**It is not the fully-developed-speckle density.** That needs of order ten per
+cell and forty times the cost. What decides prominence is only that no single
+scatterer dominates a window, and at 0.25 per cell a 32 m window holds some
+fifteen hundred scatterers, which is already enough.
+
+### Verified at the derived default, and it inverts item 33's verdict
+
+Five trials at 13,091 scatterers:
+
+```
+  17.1  13.2  23.8  20.7  13.9      mean 17.7, sd 4.0
+  real motionless scene 16.6        the null is now 1.07x it, was 1.95x
+```
+
+The null sits **on** the scene it stands in for rather than a factor of two above
+it. Three of five reach the real motionless scene, p = 0.67, and the tool refuses
+-- which is the right answer for a scene with nothing in it.
+
+**And item 30's five known true positives now pass.** Against this null
+distribution, none of the five realisations reaches any of them:
+
+```
+  injected   before (0.008/cell)        after (0.25/cell)
+    28.71    6/8 reach it  p=0.78 REFUSED    0/5  p=0.17  adjudicated
+    31.25    5/8           p=0.67 REFUSED    0/5  p=0.17  adjudicated
+    31.37    5/8           p=0.67 REFUSED    0/5  p=0.17  adjudicated
+    29.88    6/8           p=0.78 REFUSED    0/5  p=0.17  adjudicated
+    25.60    6/8           p=0.78 REFUSED    0/5  p=0.17  adjudicated
+```
+
+Every true positive refused before, every one adjudicated after, with the
+motionless scene still correctly refused. That is the first time this project's
+null control has separated signal from nothing on real data.
+
+### Four things this does not establish
+
+*The grids differ.* The null distribution above is measured on a 96 m grid; item
+30's injected runs were on a 256 m one. The real scene's own prominence is stable
+across the two -- 16.6 and 17.48 -- but the null's grid dependence is untested,
+so the comparison in that table is indicative rather than a measurement.
+
+*One scene.* 0.25 per cell is calibrated on Giza desert. Whether it matches a
+bridge deck, a waterway or an urban scene is untested, and the quantity to
+compare is always the same: the null's prominence distribution against that
+collect's own uninjected value.
+
+*Five trials cannot support a false-alarm probability.* p = 0.17 is the smallest
+value five nulls can produce. Item 31's open question about gating on an explicit
+alpha stands, and NOW is the time to look at it, since the instrument it reads is
+no longer biased.
+
+*The mechanism is inferred, not isolated.* Density is shown to move prominence
+onto the real value. That the remaining difference is speckle development,
+aspect dependence (item 23d) or something else is not separated here.
+
+### A figure defect found while reading the same runs
+
+`PREFIX_spectrum_mm.png` was always labelled "VELOCITY, MM/S", and on the phase
+route reached it by multiplying the DISPLACEMENT spectrum by `2*pi*f`. The
+arithmetic is right -- velocity is the derivative, so that is exactly the factor
+in amplitude -- but the figure then plotted a TILTED curve while marking the bin
+the UNTILTED spectrum selected. They coincide only when a tone dominates; on a
+scene without one the tilt is all there is, the curve rises with frequency, and
+the marker sits off the visual peak with nothing saying why.
+
+Both quantities are now written, each converted correctly from whichever
+observable was measured and each labelled for what it is:
+`PREFIX_spectrum_mm.png` in millimetres and `PREFIX_spectrum_mms.png` in
+millimetres per second. The observable's own figure carries the marker at its own
+peak, because the selection reads that same spectrum; the derived one says in its
+title that a tilt can move its maximum.

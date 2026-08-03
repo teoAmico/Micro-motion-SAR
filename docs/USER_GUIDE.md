@@ -847,7 +847,7 @@ collects stay out. See [`runs/README.md`](../runs/README.md).
 Two orthogonal choices. **One estimator setting is now known to work on synthetic
 data**; nothing works on real data. The honest summary is below.
 
-`--estimator correlation|phase|splitband`
+`--estimator correlation|phase|splitband|argmax`
 
 - `phase` — phase of a single dominant pixel, with the geometric carrier removed.
   **The one setting that has passed the bar** (`FOLLOW-UPS.md` item 14): slope
@@ -884,6 +884,17 @@ data**; nothing works on real data. The honest summary is below.
   degrades differently from `phase`: it keeps a slope near 1 and misses on
   scatter, rms 0.13-0.25 Hz, where `phase` loses the relationship outright. Still the right choice for
   motion too large for phase, since it has no ambiguity at all.
+- `argmax` — the azimuth position of the window's **brightest pixel**, tracked
+  across sub-looks. No correlation, no phase, no reference look. This is the
+  published method — Suppi et al. (IWSHM 2025) track "the azimuthal displacement
+  of the brightest pixel in each sub-aperture" against a shaker-driven corner
+  reflector with an LVDT, reaching Pearson 0.98 — and it is what `FOLLOW-UPS.md`
+  item 6 measured carrying 93% of its variance at the injected frequency where
+  the correlator on the *same stack* carried 4.1%. Passes the bar on an isolated
+  dominant target: slope 1.008, rms 0.0061 Hz against a 0.0252 bound over five
+  frequencies. **Quantised at one cell** by construction, so `quant_px` is 1.0
+  and an excursion under 2.449 cells is refused as rounding. Untested against
+  clutter, aspect dependence, or real data.
 - `splitband` — split-band phase linking over all N² interferograms. Returned one
   fixed frequency at every configuration swept.
 

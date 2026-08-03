@@ -1,1 +1,53 @@
-script: tcgetattr/ioctl: Operation not supported on socket
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+--at 29.979175,31.134186 resolves to --offset -152,-552 in this product's image plane
+warning: grid cell 1.000 m is coarser than the 0.051 m azimuth
+         resolution this collect supports. The image will alias:
+         each scatterer gains ghost peaks that resemble real
+         targets. Use --cell 0.051 or finer, or treat the result
+         as deliberately multi-looked.
+sub-apertures: 128 looks, dt 0.2399 s
+  observable band  f_max 2.08 Hz   AT sub-look resolution 0.70 m
+tracked 25 windows (5 x 5); 25 pass the 0.00 coherence mask
+spectrum taken of line-of-sight DISPLACEMENT, which is what the phase estimator measures directly
+spectra: 65 bins, 0.0326 Hz resolution
+  amplitude dispersion: best 0.495, median 0.566; 0 of 25 windows meet D_A <= 0.25
+  persistent scatterers: none -- 25 windows passed the shared gates, 0 met D_A <= 0.25
+  WARNING: NO window holds a dominant scatterer by the persistent-scatterer
+           criterion, so the phase estimator's precondition is unmet across
+           this whole scene. A null below is what that guarantees, and is
+           NOT evidence about whether the ground moved.
+           The 0.25 criterion is calibrated over independent passes, not
+           sub-looks; read it as a scale. See rs_microm_t.d_a.
+
+STATIC-SCENE NULL FLOOR from 8 simulated motionless collects
+with this collect's own geometry, through the identical chain:
+  static trial 1/8: prominence 31.4 at 1.172 Hz
+  static trial 2/8: prominence 33.5 at 1.238 Hz
+  static trial 3/8: prominence 38.7 at 1.075 Hz
+  static trial 4/8: prominence 24.0 at 0.814 Hz
+  static trial 5/8: prominence 36.0 at 1.140 Hz
+  static trial 6/8: prominence 31.1 at 1.954 Hz
+  static trial 7/8: prominence 38.8 at 0.716 Hz
+  static trial 8/8: prominence 25.1 at 0.879 Hz
+  mean 32.3, sd 5.3, worst 38.8
+  detection 16.6 is 0.51x the mean and 0.43x the worst
+  8 of 8 reached it -- empirical p = 1.0000
+  A MOTIONLESS SCENE REACHED THIS MEASUREMENT through the
+  same processing. Whatever the peak is, it is not
+  evidence of motion.
+NO FREQUENCY REPORTED: 8 of 8 motionless realisations reached prominence 16.6
+  through the identical chain, so the peak is not evidence of motion. Diagnostics
+  only: window 8, 0.130 Hz, quality 0.335, peak-to-peak velocity 90.0 mm/s
+  25 of 25 windows were eligible for selection (coherence gate; the floor does not apply to this estimator)
+  consensus: 0.065 Hz, agreed by 7 of 25 voting windows (28%), 6 distinct answers, largest contiguous block 5
+  cull: 0.228 Hz from 6 of 25 windows surviving (SNR 0, sigma 0, neighbours 12 removed), surface gates N/A
+  NOTE: the cull and the consensus disagree (0.228 vs 0.065 Hz).
+        They read different evidence, so this is not a tie to
+        break by preference: at most one of them is measuring.
+  sub-aperture response 0.8469 (-1.4 dB) at an observation ratio of 0.31
+  (amplitude is QUALITATIVE -- relative amplitudes do not validate
+   against ground truth even where frequencies do)
+wrote runs/giza/2026-08-03-null-distribution/nulldist_freq.png, runs/giza/2026-08-03-null-distribution/nulldist_quality.png, runs/giza/2026-08-03-null-distribution/nulldist_scene.png, runs/giza/2026-08-03-null-distribution/nulldist_spectrum.png, runs/giza/2026-08-03-null-distribution/nulldist_spectrum_mm.png and runs/giza/2026-08-03-null-distribution/nulldist_windows.csv

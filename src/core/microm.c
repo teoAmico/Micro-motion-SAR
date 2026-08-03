@@ -246,8 +246,10 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
      * series is rounding rather than motion. The phase estimator does not use
      * the correlation surface at all, so the concept does not apply and the
      * field stays zero -- see rs_microm_t.quant_px. */
-    out->quant_px = (params->estimator == RS_MICROM_EST_PHASE || params->upsample_az == 0)
-                  ? 0.0 : 1.0 / (double)params->upsample_az;
+    out->quant_px = (params->estimator == RS_MICROM_EST_PHASE) ? 0.0
+                  : (params->estimator == RS_MICROM_EST_ARGMAX) ? 1.0
+                  : (params->upsample_az == 0) ? 0.0
+                  : 1.0 / (double)params->upsample_az;
 
     /* What this window size scores on noise alone, for the SNR the correlation
      * branch fills in below. Left at zero for the estimators that form no
@@ -363,6 +365,84 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
                         }
                     }
                     out->d_a[(size_t)w] = da;
+                }
+
+                if (params->estimator == RS_MICROM_EST_ARGMAX) {
+                    /* Where the brightest sample sits in each sub-look.
+                     *
+                     * The whole estimator. A vibrating scatterer's paired echoes
+                     * walk along azimuth as the aperture sweeps, so the azimuth
+                     * index of the window's peak IS the displacement series --
+                     * no correlation surface, no phase, and no reference look,
+                     * which is why rs_microm_ref_t does not apply here.
+                     *
+                     * Integer, deliberately. See rs_microm_estimator_t: the
+                     * published validation and this project's own item 6
+                     * measurement are both for the plain argmax, and quant_px is
+                     * 1.0 so the quantisation floor tests that honestly rather
+                     * than a sub-cell refinement nothing has evidence for.
+                     *
+                     * The RANGE index is tracked too but not reported as a
+                     * shift: range walk over a dwell is dominated by the
+                     * platform's own geometry rather than by target motion, and
+                     * the observable this project measures is the azimuth one.
+                     * disp_rg stays zero rather than carrying something that
+                     * looks like a measurement and is not. */
+                    double q_sum = 0.0;
+                    size_t az0_peak = 0;
+                    int ok = 1;
+
+                    for (size_t k = 0; k < n_looks && ok; k++) {
+                        const rs_slc_t *im = &stack->look[k];
+                        if (az0 + win_az > im->n_az || rg0 + win_rg > im->n_rg) {
+                            ok = 0; break;
+                        }
+                        double best_a = -1.0, sum_a = 0.0;
+                        size_t best_ia = 0;
+                        for (size_t i = 0; i < win_az; i++) {
+                            const size_t row = (az0 + i) * im->n_rg + rg0;
+                            for (size_t j = 0; j < win_rg; j++) {
+                                const double a = (double)cabsf(im->data[row + j]);
+                                sum_a += a;
+                                if (a > best_a) { best_a = a; best_ia = i; }
+                            }
+                        }
+                        if (k == 0) az0_peak = best_ia;
+
+                        const size_t idx = (size_t)w * n_looks + k;
+                        /* Displacement from the first look, in cells, matching
+                         * what every other estimator puts in disp_az. */
+                        out->disp_az[idx] = (double)best_ia - (double)az0_peak;
+                        out->disp_rg[idx] = 0.0;
+                        if (can_velocity) {
+                            out->vel_los[idx] = out->disp_az[idx] * az_spacing
+                                              * v_plat / r_slant;
+                        }
+
+                        /* How distinguished the peak is, which is this
+                         * estimator's precondition. One minus the mean-to-peak
+                         * amplitude ratio: a lone bright scatterer drives the
+                         * mean far below the peak and scores near one, a flat
+                         * window scores near zero. Bounded in [0,1] by
+                         * construction, and NOT the amplitude stability the
+                         * phase branch reports -- see rs_microm_t.quality. */
+                        const double mean_a = sum_a / (double)(win_az * win_rg);
+                        q_sum += (best_a > 0.0) ? (1.0 - mean_a / best_a) : 0.0;
+                    }
+
+                    if (!ok) goto next_window;
+
+                    out->quality[w] = q_sum / (double)n_looks;
+
+                    if (params->coherence_min > 0.0 &&
+                        out->quality[w] < params->coherence_min) {
+                        for (size_t k = 0; k < n_looks; k++) {
+                            const size_t idx = (size_t)w * n_looks + k;
+                            out->disp_az[idx] = out->disp_rg[idx] = 0.0;
+                            out->vel_los[idx] = out->disp_los[idx] = 0.0;
+                        }
+                    }
+                    goto next_window;
                 }
 
                 if (params->estimator == RS_MICROM_EST_PHASE) {

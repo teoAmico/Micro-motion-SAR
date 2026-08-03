@@ -1239,7 +1239,7 @@ static int rs_cmd_mmotion(int argc, char **argv)
                "                          [--no-detrend] [--null-static N]\n"
                "                          [--inject-vib FREQ_HZ[,AMP_MM[,REL]]]\n"
                "                          [--stream N]\n"
-               "                          [--estimator correlation|phase|splitband]\n"
+               "                          [--estimator correlation|phase|splitband|argmax]\n"
                "                          [--shuffle-looks SEED] [--null-trials N]\n"
                "                          [--fmin HZ]\n"
                "                          [--reference first|adjacent|pair|lag]\n"
@@ -1524,7 +1524,8 @@ static int rs_cmd_mmotion(int argc, char **argv)
          * belongs beside the notice rather than several screens later. */
         const char *est = rs_opt(argc, argv, "--estimator");
         if (est) {
-            if (strcmp(est, "phase") == 0)            mp.estimator = RS_MICROM_EST_PHASE;
+            if (strcmp(est, "argmax") == 0)           mp.estimator = RS_MICROM_EST_ARGMAX;
+            else if (strcmp(est, "phase") == 0)       mp.estimator = RS_MICROM_EST_PHASE;
             else if (strcmp(est, "correlation") == 0) mp.estimator = RS_MICROM_EST_CORRELATION;
             else if (strcmp(est, "splitband") == 0)   mp.estimator = RS_MICROM_EST_SPLITBAND;
             else fprintf(stderr, "warning: unknown --estimator '%s'; "

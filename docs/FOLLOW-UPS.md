@@ -72,7 +72,9 @@ said, not better) and item 7's line numbers.
 | 28 | fixed | the Giza positive control was invalid: the injected target did not focus |
 | 29 | superseded by 30 | the first positive control that asked the question |
 | 30 | bounded by 31 | the bar met on real data by the tracker, not by anything that reports |
-| 31 | **the current state** | the reported policy had the right frequency; the scene-wide GATE discarded it |
+| 31 | bounded by 32 | the reported policy had the right frequency; the scene-wide GATE discarded it |
+| 32 | closed | the published estimator is brightest-pixel argmax; item 6 measured it and it was never built |
+| 33 | **the current state** | the static null is not comparable to Giza; item 31's gate cannot adjudicate it |
 
 ---
 
@@ -3449,3 +3451,183 @@ ranking on it gets 0 of 5.
 All three paths were exercised before this was committed -- adjudicated pass,
 adjudicated refusal (2 of 30 motionless realisations reaching the measurement),
 and the unadjudicated report.
+
+---
+
+## 32. The published estimator was the one item 6 measured working, and it was not implemented
+
+Found by searching the literature rather than by a measurement, which is the
+point: this file had reasoned for months from a set of papers that had gone
+stale, and one search changed three of its beliefs.
+
+**Suppi, Lotti, Vattulainen, Diaz Riofrio, Rollo, Ilioudis, Tonelli, Tubaldi,
+Clemente, Zonta and Milillo, "Vibrational Monitoring of Isolated Targets Using
+Single-Pass SAR Images", IWSHM 2025.** Umbra X-band spotlight, a corner reflector
+on an electromechanical shaker, an LVDT recording true displacement, synchronised
+with satellite overpasses, at Trento and Glasgow.
+
+### Their estimator is the brightest pixel, tracked
+
+Their step 5, quoted: *"Pixel tracking: The azimuthal displacement of the
+brightest pixel in each sub-aperture is identified and tracked over time."* No
+correlation surface, no phase, no reference look.
+
+**Item 6 measured exactly that on this project's own stacks and then it was not
+built.** That item recorded a plain integer argmax carrying 93 percent of its
+variance at the injected frequency while the correlator, on the identical stack,
+carried 4.1 percent -- and the project went on to build correlation, phase and
+split-band estimators over the following months. `RS_MICROM_EST_ARGMAX` now
+exists. On an isolated dominant target at 128 looks and zero overlap it passes
+this project's bar first time:
+
+```
+  0.30 Hz -> 0.3024      0.90 Hz -> 0.9073
+  0.50 Hz -> 0.5040      1.10 Hz -> 1.1089
+  0.70 Hz -> 0.7056
+  slope +1.0081, rms 0.0061 Hz against a half-bin bound of 0.0252
+```
+
+Comparable to item 14's phase result (slope 1.008, rms 0.0070) on the same
+fixture family, with a weaker precondition -- the peak has only to be FINDABLE,
+not coherent -- and no lambda/4 wrap. It is quantised at one cell by
+construction, so `quant_px` is 1.0 and the quantisation floor refuses an
+excursion under 2.449 cells rather than a sub-cell refinement nothing has
+evidence for.
+
+**Untested against clutter, aspect dependence, or real data.** Items 12f, 24 and
+25 apply unchanged, and item 25 is the specific warning: item 14's recovery on
+this same fixture family did not survive aspect dependence.
+
+### Their operating point is nothing like this project's
+
+```
+Test  t_obs(s)  AP(%)  OL(%)  NSA   rho   sigma(m/s)  SNR(dB)
+1     5.21      1.80    0      54   0.98    0.031     13.80
+2     6.04      3.60   30.16   39   0.98    0.015     12.86
+3     6.11      3.40   64.21   80   0.95    0.009      9.99
+4     5.41      4.90   65.05   52   0.70    0.015      2.95
+```
+
+**Item 4 is answered by measurement.** "Long dwells may need to be deliberately
+truncated, and never have been" -- their observation time is 5.2 to 6.1 seconds,
+not 33. Item 4 derived T = 2.1-4.7 s from the published aperture fractions; this
+lands just above that range, from the other direction.
+
+**ITEM 13'S CLAIM ABOUT THE LITERATURE IS TOO BROAD.** It states "The published
+campaigns use ~99% overlap because they read pixel phase". This campaign uses 0
+to 65 percent and reads pixel POSITION. That does not withdraw item 13's
+arithmetic, which is about this project's own correlation estimator and stands;
+it withdraws the generalisation about what "the published campaigns" do.
+
+**`validate`'s aperture-fraction warning is mis-set.** It warns below 4.5 percent
+on the grounds that "published validation sits at 4.5-7.6%". Their best result,
+rho = 0.98, is at **1.8 percent**. Not changed here, because the right lower
+bound is a separate question from the fact that the current one is wrong.
+
+### What they do NOT establish, and it is this project's open problem
+
+They never adjudicate. The targets are corner reflectors in *"open and low-clutter
+environments... to minimize interference"*, so the position is known and no
+detection decision is required; performance is reported as Pearson correlation,
+standard deviation of the difference and SNR against the ground sensor.
+
+So the accept/reject rule item 31 is stuck on is not solved in this paper, and a
+CFAR formulation of it -- which is the obvious next idea -- is a proposal for this
+project rather than established practice in this field.
+
+### And the ground truth this project calls non-existent does exist
+
+`DATASETS.md` states that no collect with synchronous ground truth is in any open
+archive, and every null in this file is built on that. This campaign has a corner
+reflector on a shaker with an LVDT, on **Umbra** data -- a provider already listed
+as open CPHD and SICD. Whether these particular acquisitions are obtainable is
+unknown and worth asking; it is a request to make rather than a dead end to
+assume.
+
+---
+
+## 33. The static null is not comparable to the scene it stands in for, so item 31's gate cannot adjudicate Giza
+
+Item 31 made `--null-static` the verdict. This is the first time it has been run
+on the Giza collect, and it says the instrument is miscalibrated rather than the
+threshold. `runs/giza/2026-08-03-null-distribution/`.
+
+Uninjected Giza, 96 m grid, otherwise item 30's settings, with eight simulated
+motionless realisations through the identical chain:
+
+```
+  static trial 1/8: prominence 31.4      5/8: 36.0
+              2/8: 33.5                  6/8: 31.1
+              3/8: 38.7                  7/8: 38.8
+              4/8: 24.0                  8/8: 25.1
+  mean 32.3, sd 5.3, worst 38.8
+  detection 16.6 is 0.51x the mean and 0.43x the worst
+  8 of 8 reached it -- empirical p = 1.0000
+```
+
+**The real scene scores 16.6 and every simulated motionless scene beats it, most
+by a factor of two.** The same figure on the 256 m grid is 17.48 (item 31), so
+the real value is stable across grid size and it is the null that is displaced.
+
+### It would refuse every known true positive
+
+Item 30's five injected runs measured 25.60 to 31.37. Against this null
+distribution:
+
+```
+  injected run   nulls reaching it   empirical p
+     0.098            6 of 8            0.78
+     0.130            5 of 8            0.67
+     0.163            5 of 8            0.67
+     0.196            6 of 8            0.78
+     0.228            6 of 8            0.78
+```
+
+Every one refused, at p far from any usable alpha. The injected measurements sit
+INSIDE the null's range, while the real motionless scene sits BELOW it. A gate
+reading this null does not separate signal from nothing; it separates the
+simulator from reality.
+
+### The cause is the one items 21 and 23d already identified
+
+`rs_simulate_static_like()` scatters point targets over the real geometry. Item
+21 records that "the real scenes are behaving exactly as speckle should, and the
+synthetic fixtures are sparse in a way no real scene is", and item 23d that the
+simulator's scatterers are isotropic where real bright returns are
+aspect-selective. A sparse scene of isolated bright scatterers gives each window
+a sharper spectral peak than distributed desert clutter does, so its prominence
+runs high. The null inherits the modelling gap the fixtures have, which is the
+same root cause as the `D_A` gap rather than a separate defect.
+
+**Item 27 fixed this function so its output FOCUSES. Nothing checked that its
+statistics match a real scene, and they do not.**
+
+### What this changes
+
+*Item 31's implementation is not withdrawn, its instrument is bounded.* Gating on
+a null is right -- item 11's argument is untouched, and no scene-wide fraction
+would do better. What fails is this particular null on this collect.
+
+*The real uninjected run is a usable null and the simulated one is not, here.*
+At 16.6-17.5 against injected runs at 25.60-31.37, the real control separates
+every one of the five. Item 30's sweep already produced it. That is n = 1 and
+cannot support a false-alarm probability -- a single null's smallest attainable
+p-value is 1/2 -- but it is the right n = 1, and repeated uninjected runs over
+different patches of the same collect would build a distribution from real
+clutter at a cost the simulator was supposed to avoid.
+
+*Do not tune alpha against this.* The obvious next move after item 31 was to gate
+on the conformal p-value at an explicit alpha instead of on `nge > 0`. That is
+still the right shape, and doing it now would refine a decision rule reading a
+biased instrument. Fix the null first, or change which null is used.
+
+### What would settle the mechanism
+
+Compare the two directly rather than inferring: the per-window prominence
+DISTRIBUTION of a simulated static scene against that of the real uninjected
+collect, at one operating point. If the simulated windows are systematically
+sharper, that is the sparse-scatterer explanation confirmed, and
+`rs_simulate_static_like()` needs a scatterer density and an aspect response
+matched to the scene rather than a plausible-looking one. `rs_sim_scene_aspect()`
+already exists for the fixtures (item 24) and has no counterpart in the null
+generator.

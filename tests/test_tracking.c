@@ -2177,5 +2177,84 @@ int main(void)
         rs_microm_free(&m);
     }
 
+    /* THE ARGMAX ESTIMATOR, PUT TO THE PROJECT'S OWN BAR.
+     *
+     * This is the published method -- Suppi et al. (IWSHM 2025) track "the
+     * azimuthal displacement of the brightest pixel in each sub-aperture"
+     * against a shaker-driven corner reflector -- and it is also what
+     * FOLLOW-UPS.md item 6 measured carrying 93 percent of its variance at the
+     * injected frequency where the correlator on the SAME stack carried 4.1.
+     * It went into this codebase years after both. So it gets the bar rather
+     * than a contract check: slope near one and rms under half a bin across a
+     * swept range, which is what item 2 exists to insist on.
+     *
+     * A single dominant target on an empty scene, which is the condition both
+     * the paper and item 6 measured. Nothing here claims it survives clutter,
+     * aspect dependence, or this project's own 128-look operating point. */
+    RS_CASE("the argmax estimator tracks a swept frequency");
+    {
+        const double am_freqs[] = { 0.3, 0.5, 0.7, 0.9, 1.1 };
+        const size_t nf = sizeof am_freqs / sizeof am_freqs[0];
+        double inj[8], got[8];
+        double df = 0.0;
+        size_t n = 0;
+
+        for (size_t i = 0; i < nf; i++) {
+            const rs_sim_tgt_t tg[] = {
+                { .x = 0.0, .y = 0.0, .z = 0.0, .rcs = 1.0,
+                  .vib_freq = am_freqs[i], .vib_amp = 0.020 }
+            };
+            rs_cphd_t c;
+            RS_CHECK_OK(rs_sim_scene(&c, tg, 1, 20.0, 400.0, 256, 0.5));
+            rs_grid_t g = { .origin = {0,0,0}, .n_x = 48, .n_y = 48,
+                            .dx = 1.0, .dy = 1.0, .height = 0.0 };
+            rs_subap_params_t sp;
+            rs_subap_params_default(&sp);
+            sp.n_looks = 128; sp.overlap = 0.0;
+
+            rs_subap_stack_t st;
+            RS_CHECK_OK(rs_subaperture_from_cphd(&c, &g, &sp, &st));
+
+            rs_microm_params_t mp;
+            rs_microm_params_default(&mp);
+            mp.estimator = RS_MICROM_EST_ARGMAX;
+            mp.win_az = mp.win_rg = 24;
+            mp.stride_az = mp.stride_rg = 8;
+            mp.coherence_min = 0.0;
+
+            rs_microm_t m;
+            RS_CHECK_OK(rs_microm_track(&st, &mp, &m));
+            /* One cell, because the argmax resolves to one cell. The
+             * quantisation floor downstream depends on this being honest. */
+            RS_CHECK_NEAR(m.quant_px, 1.0, 1e-12);
+
+            rs_spectrum_t sp2;
+            RS_CHECK_OK(rs_spectrum_compute(&m, RS_SPEC_VELOCITY, &sp2));
+            size_t best = 0; double prom = 0.0;
+            const resonarsat_status_t bst =
+                rs_spectrum_best_window(&sp2, &best, &prom, NULL);
+            if (bst == RS_OK) {
+                df = sp2.df;
+                inj[n] = am_freqs[i]; got[n] = sp2.dominant_freq[best]; n++;
+                printf("    %.2f Hz -> %.4f Hz (window %zu, prominence %.1f, "
+                       "quality %.3f)\n",
+                       am_freqs[i], sp2.dominant_freq[best], best, prom,
+                       sp2.quality[best]);
+            } else {
+                printf("    %.2f Hz -> no window cleared the floor\n", am_freqs[i]);
+            }
+            rs_spectrum_free(&sp2); rs_microm_free(&m);
+            rs_subap_stack_free(&st); rs_cphd_free(&c);
+        }
+
+        RS_CHECK(n == nf);
+        double slope = 0.0, rms = 0.0;
+        RS_CHECK(rs_track_fit(inj, got, n, &slope, &rms));
+        printf("    slope %+.4f, rms %.4f Hz against a half-bin bound of %.4f\n",
+               slope, rms, 0.5 * df);
+        RS_CHECK(fabs(slope - 1.0) < 0.15);
+        RS_CHECK(rms < 0.5 * df);
+    }
+
     RS_TEST_END();
 }

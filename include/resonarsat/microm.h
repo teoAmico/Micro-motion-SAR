@@ -228,6 +228,56 @@ typedef enum {
  *                              Requires interferometric coherence between looks;
  *                              it has nothing to track if that is absent.
  *
+ *   RS_MICROM_EST_ARGMAX       The azimuth position of the window's BRIGHTEST
+ *                              PIXEL, read off each sub-look and tracked. No
+ *                              correlation, no phase, no reference look: a
+ *                              vibrating scatterer's paired echoes walk along
+ *                              azimuth, and this follows where the brightest
+ *                              sample sits.
+ *
+ *                              THIS IS THE PUBLISHED METHOD, AND THIS PROJECT
+ *                              MEASURED IT WORKING BEFORE IT HAD IT. Suppi et
+ *                              al., "Vibrational Monitoring of Isolated Targets
+ *                              Using Single-Pass SAR Images" (IWSHM 2025), state
+ *                              their step 5 as tracking "the azimuthal
+ *                              displacement of the brightest pixel in each
+ *                              sub-aperture", validated against a corner
+ *                              reflector on an electromechanical shaker with an
+ *                              LVDT, reaching Pearson correlation 0.98 against
+ *                              ground truth. FOLLOW-UPS.md item 6 measured the
+ *                              same thing on this project's own stacks: a plain
+ *                              integer argmax carried 93 percent of its variance
+ *                              at the injected frequency where the correlator on
+ *                              the identical stack carried 4.1 percent.
+ *
+ *                              IT IS QUANTISED AT ONE CELL, which is not a
+ *                              defect to be refined away. The published result
+ *                              is for the integer argmax, and rs_microm_t.quant_px
+ *                              is set to 1.0 so the quantisation floor tests it
+ *                              honestly: an excursion under 2.449 cells is
+ *                              rounding, and the selection policies refuse it.
+ *                              A parabolic fit through the peak's neighbours
+ *                              would buy sub-cell resolution and is deliberately
+ *                              NOT done here, because what has evidence behind
+ *                              it is the integer form.
+ *
+ *                              ITS PRECONDITION IS A DISTINGUISHED BRIGHTEST
+ *                              PIXEL, which is weaker than the phase route's one
+ *                              dominant scatterer per resolution cell -- the
+ *                              peak has only to be findable, not coherent -- and
+ *                              stronger than the correlator's, which needs no
+ *                              individual scatterer at all. 'quality' reports it
+ *                              directly as one minus the window's mean-to-peak
+ *                              amplitude ratio.
+ *
+ *                              THE OPERATING POINT IS NOT THIS PROJECT'S. Suppi
+ *                              et al. use 39-80 sub-apertures over a 5.2-6.1 s
+ *                              observation at 0-65 percent overlap and aperture
+ *                              fractions of 1.8-4.9 percent. This project has
+ *                              run 128-2048 looks over a 33 s dwell. Nothing
+ *                              here is validated at the settings the rest of
+ *                              this file uses.
+ *
  *   RS_MICROM_EST_PHASE        The phase of a single dominant pixel, read
  *                              directly from each sub-look, with the geometric
  *                              carrier removed. This is the observable of
@@ -391,7 +441,8 @@ typedef enum {
 typedef enum {
     RS_MICROM_EST_CORRELATION = 0,
     RS_MICROM_EST_SPLITBAND = 1,
-    RS_MICROM_EST_PHASE = 2
+    RS_MICROM_EST_PHASE = 2,
+    RS_MICROM_EST_ARGMAX = 3
 } rs_microm_estimator_t;
 
 typedef struct {

@@ -117,6 +117,19 @@ because this code is full of dimensionally interchangeable quantities that are
 physically different — Hz against rad/s, slant against ground range, azimuth line rate
 against transmit PRF — and the comment must state units and conventions.
 
+**Search the literature online before concluding something is unsolved, and
+before designing a method this field already has.** This project reasons from a
+small set of papers it has read, and that set goes stale. Two of its standing
+beliefs were wrong for want of one search: `RS_MICROM_EST_ARGMAX` -- brightest-pixel
+tracking, validated in the literature against a shaker-driven corner reflector --
+was absent for years while `FOLLOW-UPS.md` item 6 recorded this project measuring
+the same estimator outperforming the correlator on its own data; and item 13's
+"the published campaigns use ~99% overlap" is contradicted by a campaign using
+0-65%. Prefer the primary source over a summary, quote figures with their
+operating point attached, and record what the paper does NOT establish -- the
+detection threshold is usually the part nobody publishes, because the published
+experiments know where the target is.
+
 **The headers are the documentation of record.** `microm.h` is 1343 lines for 17
 declarations; `subaperture.h` and `validate.h` are similar. They carry derivations,
 measured tables, and the reasoning behind each constant, and resolved `FOLLOW-UPS`

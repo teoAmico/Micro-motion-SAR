@@ -1,7 +1,7 @@
 # Micromotion
 
 <p align="center">
-  <img src="assets/logo.png" alt="Micro-Motion SAR logo" width="420">
+  <img src="assets/logo-1.png" alt="Micro-Motion SAR logo" width="420">
 </p>
 
 **Measuring vibration of the ground and of structures from a single satellite pass.**

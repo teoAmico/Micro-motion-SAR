@@ -1,0 +1,39 @@
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+--at 29.979175,31.134186 resolves to --offset -152,-552 in this product's image plane
+warning: grid cell 1.000 m is coarser than the 0.051 m azimuth
+         resolution this collect supports. The image will alias:
+         each scatterer gains ghost peaks that resemble real
+         targets. Use --cell 0.051 or finer, or treat the result
+         as deliberately multi-looked.
+POSITIVE CONTROL: injected a 0.1630 Hz scatterer at the grid origin,
+  2.000 mm vertical displacement, 20.0x the scene's median non-zero
+  sample magnitude (0.1293).
+  deposited into 335141 of 335141 pulses, range bins 3316.6 to 3507.4 of 4096
+  THIS RUN IS ABOUT THE PIPELINE, NOT THE SCENE: if 0.1630 Hz does
+  not come back, a null anywhere in this collect is not evidence
+  that the ground is still.
+  injected 0.1630 Hz sits at sub-aperture response 0.767 (observation ratio 0.39)
+sub-apertures: 128 looks, dt 0.2399 s
+  observable band  f_max 2.08 Hz   AT sub-look resolution 0.70 m
+tracked 25 windows (5 x 5); 25 pass the 0.00 coherence mask
+spectrum taken of line-of-sight DISPLACEMENT, which is what the phase estimator measures directly
+spectra: 65 bins, 0.0326 Hz resolution
+  amplitude dispersion: best 0.500, median 0.566; 0 of 25 windows meet D_A <= 0.25
+  persistent scatterers: none -- 20 windows passed the shared gates, 0 met D_A <= 0.25
+  WARNING: NO window holds a dominant scatterer by the persistent-scatterer
+           criterion, so the phase estimator's precondition is unmet across
+           this whole scene. A null below is what that guarantees, and is
+           NOT evidence about whether the ground moved.
+           The 0.25 criterion is calibrated over independent passes, not
+           sub-looks; read it as a scale. See rs_microm_t.d_a.
+
+STATIC-SCENE NULL FLOOR from 19 simulated motionless collects
+with this collect's own geometry, through the identical chain:
+  null scene: 13091 scatterers over 9216 m^2, 0.1760 m^2 sub-look cell -> 0.250 per cell (derived)
+  static trial 1/19: prominence 17.1 at 0.358 Hz
+  static trial 2/19: prominence 13.2 at 0.293 Hz
+  static trial 3/19: prominence 23.8 at 0.195 Hz
+  static trial 4/19: prominence 20.7 at 1.172 Hz

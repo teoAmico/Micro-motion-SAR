@@ -38,6 +38,32 @@ roughly 39 GB. Use resumable downloads for files of this size.
 | [Sentinel-1](https://search.asf.alaska.edu/) | C-band SLC | Multi-pass comparison; its short IW target illumination is unsuitable for this single-pass micro-motion method |
 | [UAVSAR](https://uavsar.jpl.nasa.gov/) | L-band airborne SLC and repeat-pass stacks | Reader development, geometry checks and comparison experiments |
 
+### "No collect with known motion" is about KNOWLEDGE, not about motion
+
+This file's ground-truth note, and `validate`'s `RS_VALIDATE_GROUND_TRUTH`, say
+that no open collect carries motion *known* to be there. That is a statement
+about verification, and it must not be read as "these scenes are still". A bridge
+under traffic vibrates whether or not anyone recorded it; the M2 deck at 13:18
+local almost certainly does. What is missing is the synchronous displacement
+sensor, not the displacement.
+
+**The distinction has an operational edge: it decides what may be used as a
+null.** Item 34 calibrates the simulated null against the uninjected Giza run,
+which is defensible because desert and masonry are plausibly static over 33
+seconds. Doing the same against an uninjected *Istanbul bridge* run would not be:
+that scene may well contain exactly the signal the tool is trying to detect, and
+using it as a null would calibrate the detector to ignore its own target. Pick a
+null scene for a positive reason, not merely because nothing was injected into it.
+
+**The campaign data behind the published validation is NOT in the open archive.**
+Suppi et al. (IWSHM 2025) fly a corner reflector on an electromechanical shaker
+with an LVDT, on Umbra data, at Villa Gherta (Trento) and Glasgow Green. Umbra's
+open STAC catalogue was scanned in full for 2024 and 2025 — 1558 items — and
+nothing falls within 0.3 degrees of either site; the scan was checked against
+Rotterdam and the Panama Canal, which it finds. Those were ESA-funded tasked
+acquisitions, not open-data releases. Obtaining them is a request to the authors
+or to Umbra, not a download.
+
 Before downloading a large scene, check its mode, dwell, incidence angle,
 polarization and complex product type. Run `micromotion validate` before the
 full processing chain: a file being open and readable does not mean its

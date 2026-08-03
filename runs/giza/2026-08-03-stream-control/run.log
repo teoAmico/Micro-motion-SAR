@@ -1,0 +1,144 @@
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+warning: grid cell 1.000 m is coarser than the 0.051 m azimuth
+         resolution this collect supports. The image will alias:
+         each scatterer gains ghost peaks that resemble real
+         targets. Use --cell 0.051 or finer, or treat the result
+         as deliberately multi-looked.
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 8 vector(s) flagged invalid and 0 with non-finite geometry, of 335149
+--at 29.979175,31.134186 resolves to --offset -152,-552 in this product's image plane
+streaming the sub-aperture stage in blocks of 16384 pulses
+sub-apertures: 128 looks, dt 0.2399 s
+  observable band  f_max 2.08 Hz   AT sub-look resolution 0.70 m
+tracked 225 windows (15 x 15); 225 pass the 0.00 coherence mask
+spectrum taken of line-of-sight DISPLACEMENT, which is what the phase estimator measures directly
+spectra: 65 bins, 0.0326 Hz resolution
+  amplitude dispersion: best 0.427, median 0.620; 0 of 225 windows meet D_A <= 0.25
+  persistent scatterers: none -- 171 windows passed the shared gates, 0 met D_A <= 0.25
+  WARNING: NO window holds a dominant scatterer by the persistent-scatterer
+           criterion, so the phase estimator's precondition is unmet across
+           this whole scene. A null below is what that guarantees, and is
+           NOT evidence about whether the ground moved.
+           The 0.25 criterion is calibrated over independent passes, not
+           sub-looks; read it as a scale. See rs_microm_t.d_a.
+strongest peak in window 182: 0.130 Hz, prominence 17.5, quality 0.519, peak-to-peak velocity 128.0 mm/s
+  backed by 31 windows, largest touching block 8
+  NOT ADJUDICATED -- nothing here distinguishes this from an artefact of the
+  processing. Cross-window agreement cannot: it is blind to anything common to
+  every window (item 11), and it is diluted by background to 19-24% even for a
+  known true positive (item 31). Run --null-static N, or --inject-vib to check
+  the chain can see a known signal here at all.
+  171 of 225 windows were eligible for selection (coherence gate; the floor does not apply to this estimator)
+  consensus: 0.065 Hz, agreed by 32 of 171 voting windows (19%), 11 distinct answers, largest contiguous block 12
+  cull: 0.065 Hz from 21 of 171 windows surviving (SNR 0, sigma 0, neighbours 106 removed), surface gates N/A
+  sub-aperture response 0.8469 (-1.4 dB) at an observation ratio of 0.31
+  (amplitude is QUALITATIVE -- relative amplitudes do not validate
+   against ground truth even where frequencies do)
+wrote runs/giza/2026-08-03-stream-control/control_freq.png, runs/giza/2026-08-03-stream-control/control_quality.png, runs/giza/2026-08-03-stream-control/control_scene.png, runs/giza/2026-08-03-stream-control/control_spectrum.png, runs/giza/2026-08-03-stream-control/control_spectrum_mm.png and runs/giza/2026-08-03-stream-control/control_windows.csv
+    14415.46 real      9626.11 user        32.90 sys
+          1122467840  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+               68692  page reclaims
+                   7  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+                 385  voluntary context switches
+             3356207  involuntary context switches
+      31511890925538  instructions retired
+      27433041952979  cycles elapsed
+          1122010288  peak memory footprint

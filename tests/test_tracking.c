@@ -2081,5 +2081,101 @@ int main(void)
         rs_subap_stack_free(&st);
     }
 
+    /* rs_spectrum_block_at() -- ADDED WITH THE GATE AND, AT FIRST, UNTESTED.
+     *
+     * It decides what `mmotion` prints beside every reported frequency, and its
+     * whole point is that it asks about a NOMINATED frequency where
+     * rs_spectrum_consensus() asks about the plurality's. This pins exactly that
+     * difference, on a scene built so the two disagree: a contiguous 3x3 block
+     * agreeing on one frequency, and a LARGER but scattered population agreeing
+     * on another. The plurality belongs to the scattered set; the block belongs
+     * to the signal. That is item 31's Giza situation in miniature, where a
+     * 12-window desert artefact outvotes a 9-window real target.
+     *
+     * The artefact windows are placed on cells of one parity of (row+col). Four
+     * neighbours always flip that parity, so no two can touch -- the scattering
+     * is a property of the construction rather than something to eyeball. */
+    RS_CASE("block_at answers about the frequency it is given, not the plurality");
+    {
+        const size_t naz = 7, nrg = 7, nw = naz * nrg, nlk = 16;
+        rs_microm_t m;
+        memset(&m, 0, sizeof m);
+        m.n_looks = nlk; m.n_win = nw; m.n_win_az = naz; m.n_win_rg = nrg;
+        m.win_az = m.win_rg = 8; m.stride_az = m.stride_rg = 8;
+        m.dt = 0.5; m.az_spacing_m = m.rg_spacing_m = 1.0;
+        m.disp_az  = calloc(nw * nlk, sizeof *m.disp_az);
+        m.disp_rg  = calloc(nw * nlk, sizeof *m.disp_rg);
+        m.disp_los = calloc(nw * nlk, sizeof *m.disp_los);
+        m.vel_los  = calloc(nw * nlk, sizeof *m.vel_los);
+        m.quality  = calloc(nw, sizeof *m.quality);
+        m.d_a      = calloc(nw, sizeof *m.d_a);
+        RS_CHECK(m.disp_az && m.disp_rg && m.disp_los && m.vel_los && m.quality && m.d_a);
+
+        const size_t sig_bin = 5, art_bin = 2;
+        size_t n_art_placed = 0;
+        for (size_t w = 0; w < nw; w++) {
+            const size_t a = w / nrg, r = w % nrg;
+            const int in_sig = (a >= 2 && a <= 4 && r >= 2 && r <= 4);
+            size_t bin;
+            if (in_sig) {
+                bin = sig_bin;
+            } else if ((a + r) % 2 == 0 && n_art_placed < 12) {
+                bin = art_bin; n_art_placed++;
+            } else {
+                /* Filler, spread over several bins so no third population forms
+                 * a plurality or a block of its own. */
+                bin = 6 + (a + 2 * r) % 3;
+            }
+            m.quality[w] = 1.0;
+            for (size_t k = 0; k < nlk; k++) {
+                const double v = sin(2.0 * M_PI * (double)bin * (double)k / (double)nlk);
+                m.vel_los[w * nlk + k] = v;
+                m.disp_los[w * nlk + k] = v;
+            }
+        }
+        RS_CHECK(n_art_placed == 12);
+
+        rs_spectrum_t sp;
+        RS_CHECK_OK(rs_spectrum_compute(&m, RS_SPEC_VELOCITY, &sp));
+        const double f_sig = sp.freq[sig_bin], f_art = sp.freq[art_bin];
+
+        size_t n_sig = 0, b_sig = 0, n_art = 0, b_art = 0;
+        RS_CHECK_OK(rs_spectrum_block_at(&sp, f_sig, &n_sig, &b_sig));
+        RS_CHECK_OK(rs_spectrum_block_at(&sp, f_art, &n_art, &b_art));
+        printf("    signal   %.3f Hz: %2zu windows, largest block %zu\n", f_sig, n_sig, b_sig);
+        printf("    artefact %.3f Hz: %2zu windows, largest block %zu\n", f_art, n_art, b_art);
+
+        /* Both halves of the premise, asserted: the artefact is the MORE
+         * numerous population and the signal is the CONTIGUOUS one. If the
+         * fixture stopped having that shape this case would no longer be
+         * testing what it claims. */
+        RS_CHECK(n_art > n_sig);
+        RS_CHECK(n_sig == 9 && b_sig == 9);
+        RS_CHECK(n_art == 12 && b_art == 1);
+
+        /* And the plurality really does go to the artefact, which is what makes
+         * asking about a nominated frequency a different question. */
+        double cons = 0.0;
+        RS_CHECK_OK(rs_spectrum_consensus(&sp, &cons, NULL, NULL, NULL, NULL));
+        printf("    consensus picks %.3f Hz (the artefact)\n", cons);
+        RS_CHECK_NEAR(cons, f_art, 1e-9);
+
+        /* A frequency nobody reports has no windows and no block. Bin 3 is
+         * unused by construction -- the fixture places 2, 5 and 6..8 -- where
+         * the top bin is NOT free, which is what the first version of this
+         * assertion got wrong. */
+        size_t n_none = 99, b_none = 99;
+        RS_CHECK_OK(rs_spectrum_block_at(&sp, sp.freq[3], &n_none, &b_none));
+        RS_CHECK(n_none == 0 && b_none == 0);
+
+        /* Optional outputs, and a rejected spectrum clears them. */
+        RS_CHECK_OK(rs_spectrum_block_at(&sp, f_sig, NULL, NULL));
+        RS_CHECK_ERR(rs_spectrum_block_at(NULL, f_sig, &n_sig, &b_sig), RS_ERR_ARG);
+        RS_CHECK(n_sig == 0 && b_sig == 0);
+
+        rs_spectrum_free(&sp);
+        rs_microm_free(&m);
+    }
+
     RS_TEST_END();
 }

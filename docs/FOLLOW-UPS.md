@@ -2562,6 +2562,37 @@ control silently missing its injection is exactly what item 28 cost half a day t
 find. It is also refused for the spectral routes, which need a full-aperture image
 first -- the thing that does not fit.
 
+### Item 22, verified at the operating point that matters -- and it is I/O bound
+
+Stage 2's check was 16 looks over a 64 m grid. Re-run at the configuration the
+Giza runs actually use -- 128 looks, 0.90 overlap, 256 m grid, `--rbins 4096` --
+against the committed resident control of item 30
+(`runs/giza/2026-08-03-stream-control/`):
+
+```
+                    wall        user     mean CPU   peak RSS
+  resident      44 min 55 s        --        442%     ~11 GB of phase history
+  streamed       4 h 00 min    9626 s         67%       1.05 GB
+```
+
+**Exact.** All twelve substantive per-window columns identical digit for digit,
+and the cull's header line byte-identical. So the streaming path reproduces the
+resident one at ten times the look count and sixteen times the grid area of the
+original check.
+
+**But the wall-clock cost is 5.3x, not the 6% stage 1 measured for `focus`, and
+the CPU figure says it is not extra work.** Total user time went DOWN -- 9626 s
+against the resident run's implied ~11900 s -- while wall time went up 5.3x, so
+the process was waiting rather than computing. Mean CPU fell from 442% to 67% on
+eight cores. The collect is on external USB and `--rbins 4096` of 29160 samples
+makes every pulse a strided read; the streamed path adds a header and PVP re-parse
+per block on top.
+
+Not isolated further: separating drive bandwidth from seek cost from per-block
+re-parsing needs the same run against local storage. What is established is that
+`--stream` at this operating point is an I/O-bound trade on this hardware, and a
+budget should assume hours rather than the minutes stage 1 implies.
+
 **Nothing worth taking on safety.** GDAL's NITF truncation guard fires only above
 a million blocks and is self-described as "really a very safe bound"; this
 reader checks every declared block lies wholly inside the file, in subtraction

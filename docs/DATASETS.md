@@ -69,6 +69,53 @@ polarization and complex product type. Run `micromotion validate` before the
 full processing chain: a file being open and readable does not mean its
 geometry can support the intended measurement.
 
+## What each provider actually has, surveyed
+
+Counted from the providers' own STAC catalogues rather than from their marketing
+pages, on 2026-08-03. `tools/umbra_site_scan.py` is the Umbra walker; the Capella
+figures come from its `capella-open-data-cphd` collection.
+
+| provider | phase history | what the survey found | usable here |
+|---|---|---|---|
+| **Capella** | **1174 CPHD** | 707 spotlight, 232 sliding spotlight, 235 stripmap. Spotlight dwell 6–60 s, median 25 s. **95 distinct timezones.** | **Yes, and it is the main source.** The reader is written and tested against it, including the SGN and AmpSF quirks. |
+| **Umbra** | CPHD present per task | Task folders carry `*_CPHD.cphd` beside GEC/SICD/SIDD. 81 named sites plus 1314 ad-hoc collects. | **Untried.** The reader has never been pointed at an Umbra CPHD, and its SGN convention is unknown — item 3's override is keyed on `CollectorName`, so an Umbra product takes the standard branch by default. Verify against an image before trusting it. |
+| **ICEYE** | selected CPHD/SICD | 377 entries in the open collection; mostly SLC. | **Untried**, same caveat. |
+| **AFRL Gotcha** | X-band phase history | By request. | Airborne circular; useful for focusing and tomography checks, not for this measurement. |
+
+### Capella spotlight CPHD, ranked by what matters here
+
+**Long dwell is no longer the selection criterion.** `FOLLOW-UPS.md` item 32
+records the published validation operating at **5.2–6.1 s** of observation, not
+33, so a 20 s collect is already generous and the earlier hunt for 60 s scenes
+was optimising the wrong axis. What matters is incidence angle — vertical modes
+project onto the line of sight as `cos(incidence)` — and local time, because
+traffic is the excitation.
+
+Best geometry per site, over all 707 spotlight CPHD:
+
+```
+   n  best inc  max dwell  daylight       lat       lon   timezone
+  23      5.7        34        19    20.819    92.989   Asia/Yangon
+  75      6.3        38        53    16.769   -99.795   America/Mexico_City  (Acapulco)
+ 135      7.4        39        66    19.369  -155.196   Pacific/Honolulu     (Hawaii, volcanic)
+  26     14.2        34        12    34.069  -118.560   America/Los_Angeles  (San Fernando Valley)
+  23     14.3        35        15    -6.816   107.121   Asia/Jakarta
+  66     17.2        33        37    28.789   -81.276   America/New_York     (central Florida)
+  22     17.6        39        11    30.008   122.088   Asia/Shanghai        (Zhoushan)
+  17     18.5        39         9    45.621     9.800   Europe/Rome          (Lombardy)
+  14     19.5        60         9    41.005    28.977   Europe/Istanbul
+```
+
+`n` is collects at that site, `daylight` how many fall between 07:00 and 20:00
+local. **Istanbul is no longer the obvious pick on geometry alone** — Acapulco,
+Hawaii and Los Angeles all beat its 19.5 degrees, several with far more repeats.
+What Istanbul still has is a bridge in the footprint with a masonry aqueduct
+beside it at the same range, which is an in-scene static reference nothing else
+on this list offers.
+
+The Los Angeles cluster is the one worth screening next: 14.2 degrees, 26
+collects, urban infrastructure, and twelve of them in daylight.
+
 ## Long-dwell candidates over built infrastructure
 
 `FOLLOW-UPS.md` items 4 and 18 refer to these. Dwell is taken from the two
@@ -173,9 +220,11 @@ rather than a summary that could drift from it.
 Three things the imagery metadata would have supplied and the CPHD XML does not,
 recorded so nobody goes looking twice:
 
-- **`locale:datetime` / `locale:time`** — local time of acquisition. The Istanbul
-  argument above turns on 13:18 local against 01:39 local, and that was derived
-  by hand from the UTC timestamp and the longitude.
+- **`locale:datetime` / `locale:time`** — local time of acquisition. *(Correction:
+  these ARE available, in the STAC catalogue on the same bucket, just not in the
+  delivery directory beside the `.cphd` and not in the CPHD XML. The survey above
+  reads them straight out of the catalogue, so the by-hand derivation the
+  Istanbul argument used was unnecessary.)*
 - **`capella:squint_angle`**, stated directly rather than inferred.
 - **`radar.time_varying_parameters`** — `{start_timestamps, prf, pulse_bandwidth,
   pulse_duration}`, which is Capella declaring the PRF as *piecewise constant

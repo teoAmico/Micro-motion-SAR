@@ -1015,6 +1015,9 @@ here so the guide does not imply the set above is complete:
 ## 11. Where to read next
 
 - `README.md` — what the project is and what the bar for a result is.
+- **`docs/GLOSSARY.md`** — short definitions of the radar and measurement terms
+  used here, including terms that are easy to confuse such as transmit PRF and
+  vibration sampling rate.
 - **`docs/FOLLOW-UPS.md`** — the map of dead ends, with measurements. It records
   that sub-look images can be correct while the tracker fails to read them; that
   the reference scheme looks like the binding constraint and is not; and that a

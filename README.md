@@ -183,6 +183,7 @@ One matching frequency is not enough.
 ## Documentation
 
 - [User guide](docs/USER_GUIDE.md): commands, examples, memory settings and output interpretation
+- [Glossary](docs/GLOSSARY.md): definitions of radar and measurement terminology
 - [Experimental follow-ups](docs/FOLLOW-UPS.md): measured successes, failures and open questions
 - [Dataset guide](docs/DATASETS.md): phase-preserving SAR datasets and their limitations
 - [Run archive](runs/README.md): conventions for recorded experiments

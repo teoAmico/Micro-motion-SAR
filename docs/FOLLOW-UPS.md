@@ -75,7 +75,9 @@ said, not better) and item 7's line numbers.
 | 31 | bounded by 32 | the reported policy had the right frequency; the scene-wide GATE discarded it |
 | 32 | closed | the published estimator is brightest-pixel argmax; item 6 measured it and it was never built |
 | 33 | fixed by 34 | the static null is not comparable to Giza; item 31's gate cannot adjudicate it |
-| 34 | **the current state** | null density derived from geometry; it now separates signal from nothing on real data |
+| 34 | done | null density derived from geometry; it now separates signal from nothing on real data |
+| 35 | **the result** | ADJUDICATED at p = 0.05: a real-data measurement a proper null could not reproduce |
+| 36 | **the current state** | Umbra and ICEYE read correctly; the per-vendor SGN override is confirmed right |
 
 ---
 
@@ -3760,3 +3762,142 @@ observable was measured and each labelled for what it is:
 millimetres per second. The observable's own figure carries the marker at its own
 peak, because the selection reads that same spectrum; the derived one says in its
 title that a tilt can move its maximum.
+
+---
+
+## 35. ADJUDICATED: a real-data measurement a proper null control could not reproduce
+
+Items 30 to 34 are the two halves of one failure, fixed separately. Item 30
+extracted five injected frequencies from the Giza collect and could not report
+any of them; item 31 found the frequency had been right all along and the
+scene-wide gate had discarded it; item 33 found the null control that replaced
+that gate was itself unusable; item 34 fixed it. This is the first run with both
+halves working. `runs/giza/2026-08-03-alpha-verdict/`.
+
+0.163 Hz injected at 2 mm into the real Giza collect, 19 null trials -- the
+minimum for alpha = 0.05, since `p_min = 1/(M+1)`:
+
+```
+  null (13091 scatterers, 0.250 per cell)   min 12.0  mean 17.0  sd 3.6  worst 23.8
+  measurement                               0.163 Hz, prominence 32.0
+                                            backed by 9 windows, largest block 9
+                                            1.88x the null mean, 1.35x the worst
+  0 of 19 reached it                        empirical p = 0.0500
+
+  ADJUDICATED: p = 0.0500 <= alpha 0.05
+```
+
+**The reported frequency is the injected one**, from `rs_spectrum_best_window()`
+-- the policy `mmotion` actually prints -- with the verdict coming from the null
+rather than from cross-window agreement.
+
+### Four limits, none of them small
+
+*It is a POSITIVE CONTROL, not a detection.* The target was placed, at twenty
+times the median non-zero sample magnitude, and its window was known. Item 30's
+distinction is untouched: finding an unknown target needs a selection policy over
+the scene, and nothing here tests one.
+
+*p = 0.0500 is the weakest possible pass.* Nineteen trials is the minimum for
+this alpha, so a clean sweep returns exactly alpha and a single null reaching the
+measurement would have given 0.10 and failed. The margin in PROMINENCE is
+comfortable -- 32.0 against a worst null of 23.8 -- but the p-value has none, and
+a stronger claim needs more trials rather than a better result.
+
+*The null density is calibrated on this scene.* Item 34 set 0.25 scatterers per
+cell so the null's prominence matches Giza's uninjected value, so adjudicating a
+Giza measurement against it is IN-SAMPLE. Not circular in the fatal sense -- the
+calibration target was the motionless scene and the test is of an injected one --
+but the constant has not been shown to transfer, and a verdict on another collect
+rests on that until it is.
+
+*One frequency, one amplitude, one grid.* Nothing here bounds sensitivity. The
+sharpest next measurement is an amplitude sweep downward until adjudication
+fails, on this same collect, which needs no new data.
+
+---
+
+## 36. Umbra and ICEYE read correctly, and the SGN override is confirmed right to be per-vendor
+
+`DATASETS.md` recorded both as untried, with a named risk: item 3's SGN override
+is keyed on `CollectorName`, so a non-Capella product takes the standard branch,
+and if it were mislabelled the same way the image would come back mirrored.
+Tested rather than assumed.
+
+### Umbra: reads correctly with no override, verified against the vendor's own image
+
+`2023-09-12-02-36-33_UMBRA-04_CPHD.cphd`, Panama Canal, 0.84 GB. The metadata
+answers the question before the imagery does:
+
+```
+  CollectorName      Umbra-04
+  SGN                -1            <- declared, and honestly
+  SignalArrayFormat  CF8           <- float32, where Capella ships CI4
+  NumBytesPVP        240           <- 30 words, where Capella uses 33
+  AmpSF              ABSENT from the PVP
+  9693 vectors x 7218 samples, SPOTLIGHT, dwell 1.991 s
+```
+
+**Umbra declares `SGN = -1`, which is what Capella's override produces.** So both
+end up taking the inverse FX-to-delay transform, and Umbra gets there by being
+labelled correctly rather than by a vendor exception. The reader read it, 9680
+usable pulses of 9693, and focused it in 17 s.
+
+**Checked the way item 3 says this must be checked -- against imagery.** The
+focused image is the Panama Canal: waterway, lock chambers, basins, sharp
+speckle. Compared against Umbra's own GEC for the same acquisition, the
+asymmetric features fall on the same side of the canal in both -- the light-toned
+basins east of the channel, the built-up strip west of it, the locks in the same
+place. **A range mirror would have swapped those.** Not mirrored.
+
+That is the first evidence that keying the override on the collector, rather than
+inverting globally, was the right call: item 3 argued a conformant product from
+anyone else should still read correctly, and one now does.
+
+*The check is qualitative.* Two images at different scales and projections,
+compared by eye on distinctive features. A correlation against a resampled GEC
+would be stronger and has not been done.
+
+### ICEYE: six CPHD in the open archive, and they include DWELL modes
+
+Of 374 items in the open catalogue, **six carry a CPHD asset**:
+
+```
+  ICEYE-X47  dwell-precise  inc 25.2  Houston      2026-05-06  19.4 GB
+  ICEYE-X38  dwell-precise  inc 26.2  Vandenberg   2026-03-14
+  ICEYE-X38  dwell-precise  inc 27.6  Vienna       2026-04-02
+  ICEYE-X49  dwell-fine     inc 36.9  Mexico City  2026-03-17
+  ICEYE-X56  spot-fine      inc 30.3  Paris        2025-10-28
+  ICEYE-X50  spot-fine      inc 40.9  Bratislava   2025-10-27  16.5 GB
+```
+
+**"dwell-precise" and "dwell-fine" are long-stare modes**, which is the
+acquisition this method wants and which no other open provider labels as such.
+Bratislava is the site this file already listed without knowing a CPHD existed
+for it.
+
+The Houston dwell-precise screens as:
+
+```
+  CollectorName ICEYE-X47   SGN -1   CI4   AmpSF PRESENT   ModeType EXPERIMENTAL
+  dwell 15.345 s, 100802 pulses x 48000 samples, incidence 25.2 deg, 580.1 km
+  phase floor 0.2017 mm per look -- the best of any collect screened here
+```
+
+`SGN = -1` again, honestly declared, so the same reasoning applies. `AmpSF` is
+present where Umbra omits it, and item 21's handling covers both.
+
+**It FAILS its observable band for a 2 Hz target, and the reason is the dwell.**
+At the published aperture fractions the band reaches 0.905 Hz at 3.6 percent and
+1.810 Hz at 1.8 percent, both short of 2 Hz -- because 15.3 s makes each sub-look
+long. Note that the observation ratio at 1.8 percent is eta 0.552, squarely
+inside the published 0.39-0.69. The collect is not the problem; the untruncated
+dwell is, which is item 4 again and is now reachable with `--pulse-start` and
+`--max-pulses`.
+
+### Neither has been run through the measurement chain
+
+Both read and one focuses. Nothing here has tracked, taken a spectrum, or
+adjudicated on either provider, and the PVP layouts differ from Capella's in
+ways the reader handles by reading offsets from the XML rather than assuming
+them. Treat them as read-verified, not measurement-verified.

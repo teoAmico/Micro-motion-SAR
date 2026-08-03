@@ -78,8 +78,8 @@ figures come from its `capella-open-data-cphd` collection.
 | provider | phase history | what the survey found | usable here |
 |---|---|---|---|
 | **Capella** | **1174 CPHD** | 707 spotlight, 232 sliding spotlight, 235 stripmap. Spotlight dwell 6–60 s, median 25 s. **95 distinct timezones.** | **Yes, and it is the main source.** The reader is written and tested against it, including the SGN and AmpSF quirks. |
-| **Umbra** | CPHD present per task | Task folders carry `*_CPHD.cphd` beside GEC/SICD/SIDD. 81 named sites plus 1314 ad-hoc collects. | **Untried.** The reader has never been pointed at an Umbra CPHD, and its SGN convention is unknown — item 3's override is keyed on `CollectorName`, so an Umbra product takes the standard branch by default. Verify against an image before trusting it. |
-| **ICEYE** | selected CPHD/SICD | 377 entries in the open collection; mostly SLC. | **Untried**, same caveat. |
+| **Umbra** | CPHD present per task | Task folders carry `*_CPHD.cphd` beside GEC/SICD/SIDD. 81 named sites plus 1314 ad-hoc collects. Declares `SGN = -1` honestly, ships `CF8`, omits `AmpSF`. | **Reads correctly, verified against the vendor's own GEC** (item 36). No override needed — its honest `SGN` produces the same transform Capella's override does. Focused a Panama Canal collect; not mirrored. Never run through the measurement chain. |
+| **ICEYE** | **6 CPHD** of 374 open items | Includes `dwell-precise` and `dwell-fine` **long-stare modes** — Houston, Vandenberg, Vienna — plus spot-fine at Paris and **Bratislava**. Declares `SGN = -1`, ships `CI4`, carries `AmpSF`. | **Reads its metadata; screens clean on geometry.** Best phase floor of any collect screened here (0.2017 mm/look). Its 15.3 s dwell puts a 2 Hz target just above the band at published aperture fractions — truncate with `--max-pulses`. Signal never read. |
 | **AFRL Gotcha** | X-band phase history | By request. | Airborne circular; useful for focusing and tomography checks, not for this measurement. |
 
 ### Capella spotlight CPHD, ranked by what matters here

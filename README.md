@@ -34,7 +34,9 @@ Nothing here has detected real motion. Everything below is measured, and the
 numbers behind each claim are in [`docs/FOLLOW-UPS.md`](docs/FOLLOW-UPS.md).
 
 **What exists.** Readers for CPHD, SICD and UAVSAR; image formation; the
-sub-aperture and tracking chain; `validate`, which checks whether a collect can
+sub-aperture and tracking chain — including the brightest-pixel tracker the
+published campaigns use, which this project had measured working and not
+implemented (item 32); `validate`, which checks whether a collect can
 support the measurement you want before any of it is processed; and the controls
 that make a result worth reporting — a motionless-scene null, a per-window
 evidence file beside every run, and `--inject-vib`, which adds a vibration of
@@ -48,22 +50,30 @@ brightness that changes with viewing angle, as a building face or a bridge
 girder's does — and the recovery collapses, and motionless scenes start returning
 confident answers. Items 14, 24 and 25.
 
-**On real data it finds an injected vibration exactly, and then refuses to report
-it.** Five vibrations were added to a real Giza collect, one run each, plus one
-run with nothing added. The patch of ground holding the added vibration returned
-the right frequency all five times, with an error fifty times smaller than the
-test requires, and the untouched run returned something outside the tested range.
-The tool printed *no frequency* every time — because it decides by asking whether
-many patches agree, and 135 patches of empty desert outvote the one patch that
-was right. So the measurement works and the thing that reports it does not. That
-is the open problem. Item 30.
+**On real data it now finds an injected vibration and reports it, with a stated
+false-alarm level.** A 0.163 Hz vibration was added to a real Giza collect and
+the tool returned 0.163 Hz. Nineteen simulated motionless versions of the same
+scene were then put through the identical processing, and none of them produced
+anything as strong: p = 0.05. That is the first result here that a control of
+adequate size could not reproduce. Item 35.
 
-**Why that is not a detection.** The right patch was known in advance, because
-that is where the vibration was put. Finding an unknown target means choosing the
-right patch out of hundreds, which is exactly the step that failed. The added
-vibration is also an idealisation: a real scatterer's brightness changes with
-angle and this one's does not, which is the property that broke the simulated
-case above.
+Getting there took three fixes, and each was a defect in the *checking* rather
+than in the measurement. The tool used to decide by asking whether many patches
+of the scene agreed — which a small vibrating target can never win, since 135
+patches of empty desert outvote it, so all five earlier injections were found and
+then thrown away (item 30). The verdict now comes from the motionless control
+instead. That control was itself wrong: it scattered so few simulated reflectors
+that it looked nothing like real desert and rejected everything, including known
+signals (items 33, 34). And the rule for reading it counted how many controls were
+beaten rather than what that count is worth, so one control and thirty gave the
+same verdict (item 31).
+
+**Why that is still not a detection.** The vibration was put there, at a known
+place, and the patch was known in advance. Finding an unknown target means
+choosing the right patch out of hundreds, which is untested. The added vibration
+is also an idealisation: a real scatterer's brightness changes with viewing angle
+and this one's does not, which is the property that broke the simulated case
+above. And p = 0.05 is the weakest pass nineteen controls can give.
 
 **No collect available to this project contains motion known to be there**, so no
 output should be read as sensitivity to anything real.

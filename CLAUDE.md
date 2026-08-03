@@ -117,6 +117,16 @@ because this code is full of dimensionally interchangeable quantities that are
 physically different — Hz against rad/s, slant against ground range, azimuth line rate
 against transmit PRF — and the comment must state units and conventions.
 
+**The shell here is zsh, which does NOT word-split unquoted parameters.** A loop
+of the form `for a in "" "--max-pulses 60000"; do prog $a; done` passes the whole
+string as ONE argument in zsh where bash would split it into two, so the flag is
+silently not recognised and the run looks exactly like a flag that does not work.
+That cost a wrong diagnosis here: `--max-pulses` was reported as unimplemented in
+`mmotion`, and a reader defect was hunted for, when the option worked and the
+test harness did not. Write the arguments out in full, or use `${=a}` to force
+splitting. The general form of the lesson is the one this codebase repeats: a
+negative result from an unverified harness is not a negative result.
+
 **Search the literature online before concluding something is unsolved, and
 before designing a method this field already has.** This project reasons from a
 small set of papers it has read, and that set goes stale. Two of its standing

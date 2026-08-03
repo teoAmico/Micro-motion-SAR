@@ -206,7 +206,8 @@ static int rs_opt_no_optimize(int argc, char **argv)
  * reported rather than applied quietly: it lowers the effective PRF, and with it
  * the vibration frequency the sub-aperture stage can reach without aliasing. */
 static resonarsat_status_t rs_load_cphd(rs_cphd_t *c, const char *path, size_t rbin_window,
-                                        size_t pulse_stride, size_t max_pulses);
+                                        size_t pulse_stride, size_t max_pulses,
+                                        size_t pulse_first);
 
 /* Load one BLOCK of pulses, for the streaming focus path.
  *
@@ -237,7 +238,8 @@ static resonarsat_status_t rs_load_cphd_window(rs_cphd_t *c, const char *path,
 }
 
 static resonarsat_status_t rs_load_cphd(rs_cphd_t *c, const char *path, size_t rbin_window,
-                                        size_t pulse_stride, size_t max_pulses)
+                                        size_t pulse_stride, size_t max_pulses,
+                                        size_t pulse_first)
 {
     char probe[5] = { 0 };
     FILE *f = fopen(path, "rb");
@@ -251,7 +253,8 @@ static resonarsat_status_t rs_load_cphd(rs_cphd_t *c, const char *path, size_t r
     if (n == sizeof probe && memcmp(probe, "CPHD/", 5) == 0) {
         const rs_cphd_read_opts_t o = { .rbin_window = rbin_window,
                                         .pulse_stride = pulse_stride,
-                                        .max_pulses = max_pulses };
+                                        .max_pulses = max_pulses,
+                                        .pulse_first = pulse_first };
         const resonarsat_status_t st = rs_read_cphd(path, &o, c);
         if (st == RS_OK && pulse_stride > 1) {
             fprintf(stderr,
@@ -298,9 +301,20 @@ static resonarsat_status_t rs_load_cphd(rs_cphd_t *c, const char *path, size_t r
         }
         return st;
     }
+    /* Every read option is a CPHD-reader feature; rs_cphd_read() takes the whole
+     * file. Saying so matters more than it looks: a truncation that is silently
+     * ignored gives a complete, well-formed result over the WRONG pulse span,
+     * which is this project's signature failure mode. Caught by a verification
+     * run that showed --max-pulses and --pulse-start changing nothing on a
+     * simulator-format input, having been added for exactly that purpose. */
     if (pulse_stride > 1) {
         fprintf(stderr, "warning: --pulse-stride applies to CPHD products only; "
                         "ignored for this input\n");
+    }
+    if (max_pulses > 0 || pulse_first > 0) {
+        fprintf(stderr, "warning: --max-pulses/--pulse-start apply to CPHD "
+                        "products only; ignored for this input, so the WHOLE "
+                        "dwell\n         is being processed\n");
     }
     return rs_cphd_read(c, path);
 }
@@ -479,7 +493,7 @@ static int rs_cmd_info(int argc, char **argv)
         const size_t rbin_window = (size_t)rs_opt_double(argc, argv, "--rbins", 0.0);
         resonarsat_status_t st = rs_load_cphd(&c, cphd_path, rbin_window,
                        (size_t)rs_opt_double(argc, argv, "--pulse-stride", 0.0),
-                       (size_t)rs_opt_double(argc, argv, "--max-pulses", 0.0));
+                       (size_t)rs_opt_double(argc, argv, "--max-pulses", 0.0), 0);
         if (st != RS_OK) { rs_report_error("info", st); return 1; }
 
         /* Machine-readable form, for cross-checking this reader against an
@@ -804,7 +818,12 @@ static int rs_cmd_focus(int argc, char **argv)
         if (p_max && stream_total > p_max) stream_total = p_max;
         st = rs_load_cphd_window(&c, in, rbin_window, p_stride, stream_blk, 0);
     } else {
-        st = rs_load_cphd(&c, in, rbin_window, p_stride, p_max);
+        /* Zero, not p_start: in `focus` --pulse-start selects a sub-aperture of
+         * the RESIDENT collect at backprojection time (see below), so applying
+         * it to the read as well would skip the pulses twice. `mmotion` uses it
+         * as a read window instead, because there the whole point is to process
+         * a span of the dwell rather than all of it. */
+        st = rs_load_cphd(&c, in, rbin_window, p_stride, p_max, 0);
     }
     if (st != RS_OK) { rs_report_error("focus", st); return 1; }
 
@@ -1239,6 +1258,7 @@ static int rs_cmd_mmotion(int argc, char **argv)
                "                          [--subap pulse|uniform|paper]\n"
                "                          [--no-detrend] [--null-static N]\n"
                "                          [--null-scatterers N] [--null-alpha F]\n"
+               "                          [--pulse-start N] [--max-pulses N]\n"
                "                          [--inject-vib FREQ_HZ[,AMP_MM[,REL]]]\n"
                "                          [--stream N]\n"
                "                          [--estimator correlation|phase|splitband|argmax]\n"
@@ -1336,10 +1356,28 @@ static int rs_cmd_mmotion(int argc, char **argv)
      * platform track and the image plane exact, which is what the sampling
      * warning, --at and --null-static all read, while leaving the 11 GB of
      * signal on disc where the point is to keep it. */
+    /* DWELL TRUNCATION, WHICH THE PUBLISHED OPERATING POINT REQUIRES.
+     *
+     * `--max-pulses` was already honoured here; `--pulse-start` was not, so a run
+     * could take the FIRST span of a collect and no other. That is half of what
+     * FOLLOW-UPS.md item 4 asks for -- cut a collect into consecutive spans and
+     * compare them -- and the half that cannot answer the question, since one
+     * span in isolation shows nothing about whether the answer drifts.
+     *
+     * It matters more than a convenience. Suppi et al. (item 32) validate at an
+     * observation time of 5.2-6.1 s and aperture fractions of 1.8-4.9 percent.
+     * Applying their fraction to a 25 s dwell makes each sub-look four times too
+     * long: screened that way a Los Angeles collect FAILS its observable band at
+     * an averaging ceiling of 0.547 Hz against a 2 Hz target, which is an
+     * artefact of the untruncated dwell rather than of the collect
+     * (runs/screens/). Reaching the only operating point with published
+     * ground-truth validation behind it means processing about six seconds. */
+    const size_t mm_first = (size_t)rs_opt_double(argc, argv, "--pulse-start", 0.0);
+    const size_t mm_max   = (size_t)rs_opt_double(argc, argv, "--max-pulses", 0.0);
     resonarsat_status_t st = rs_load_cphd(&c, in,
                        mm_stream ? 2 : rbin_window,
                        (size_t)rs_opt_double(argc, argv, "--pulse-stride", 0.0),
-                       (size_t)rs_opt_double(argc, argv, "--max-pulses", 0.0));
+                       mm_max, mm_first);
     if (st != RS_OK) { rs_report_error("mmotion", st); return 1; }
 
     const size_t size = (size_t)rs_opt_double(argc, argv, "--size", 128);
@@ -1439,10 +1477,13 @@ static int rs_cmd_mmotion(int argc, char **argv)
                             "other.\n");
             rs_cphd_free(&c); return 1;
         }
+        /* The streamed read has to take the same window the geometry read took,
+         * or the sub-look layout is computed over one pulse span and the signal
+         * accumulated over another. */
         const rs_cphd_read_opts_t ro = { .rbin_window = rbin_window,
                                          .pulse_stride = 0,
-                                         .max_pulses = 0,
-                                         .pulse_first = 0 };
+                                         .max_pulses = mm_max,
+                                         .pulse_first = mm_first };
         sp.mode = RS_SUBAP_UNIFORM;
         printf("streaming the sub-aperture stage in blocks of %zu pulses\n",
                mm_stream);

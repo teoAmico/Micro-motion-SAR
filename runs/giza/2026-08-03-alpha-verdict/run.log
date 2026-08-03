@@ -42,3 +42,30 @@ with this collect's own geometry, through the identical chain:
   static trial 7/19: prominence 19.2 at 0.456 Hz
   static trial 8/19: prominence 19.2 at 1.856 Hz
   static trial 9/19: prominence 16.0 at 0.098 Hz
+  static trial 10/19: prominence 13.0 at 0.814 Hz
+  static trial 11/19: prominence 20.2 at 0.195 Hz
+  static trial 12/19: prominence 13.8 at 0.228 Hz
+  static trial 13/19: prominence 17.5 at 0.879 Hz
+  static trial 14/19: prominence 12.8 at 0.228 Hz
+  static trial 15/19: prominence 20.3 at 1.531 Hz
+  static trial 16/19: prominence 12.7 at 1.531 Hz
+  static trial 17/19: prominence 23.5 at 1.498 Hz
+  static trial 18/19: prominence 16.7 at 0.293 Hz
+  static trial 19/19: prominence 16.9 at 0.749 Hz
+  mean 17.0, sd 3.6, worst 23.8
+  detection 32.0 is 1.88x the mean and 1.35x the worst
+  0 of 19 reached it -- empirical p = 0.0500
+  No motionless realisation reached it.
+strongest peak in window 8: 0.163 Hz, prominence 32.0, quality 0.419, peak-to-peak velocity 7.7 mm/s
+  backed by 9 windows, largest touching block 9
+  ADJUDICATED: p = 0.0500 <= alpha 0.05, from 0 of 19 motionless realisations
+  reaching prominence 32.0 through the identical chain.
+  20 of 25 windows were eligible for selection (coherence gate; the floor does not apply to this estimator)
+  consensus: 0.163 Hz, agreed by 9 of 20 voting windows (45%), 6 distinct answers, largest contiguous block 9
+  cull: 0.163 Hz from 9 of 20 windows surviving (SNR 0, sigma 0, neighbours 11 removed), surface gates N/A
+  sub-aperture response 0.7672 (-2.3 dB) at an observation ratio of 0.39
+  (amplitude is QUALITATIVE -- relative amplitudes do not validate
+   against ground truth even where frequencies do)
+wrote runs/giza/2026-08-03-alpha-verdict/inj0163_freq.png, runs/giza/2026-08-03-alpha-verdict/inj0163_quality.png, runs/giza/2026-08-03-alpha-verdict/inj0163_scene.png,
+      runs/giza/2026-08-03-alpha-verdict/inj0163_spectrum.png (power), runs/giza/2026-08-03-alpha-verdict/inj0163_spectrum_mm.png (displacement),
+      runs/giza/2026-08-03-alpha-verdict/inj0163_spectrum_mms.png (velocity) and runs/giza/2026-08-03-alpha-verdict/inj0163_windows.csv

@@ -408,6 +408,70 @@ int main(void)
     /* ------------------------------------------------------------------
      * Malformed inputs. One deliberate defect per file.
      * ------------------------------------------------------------------ */
+    /* THE WINDOWED READ -- max_pulses AND pulse_first -- WHICH NOTHING TESTED.
+     *
+     * rs_cphd_read_opts_t documents these as the primitive that lets a caller
+     * walk a collect in blocks, and FOLLOW-UPS.md item 22's whole streaming
+     * design rests on them: rs_subaperture_from_cphd_stream() accumulates block
+     * by block, so a window that returned the wrong pulses would put the signal
+     * of one span under the geometry of another. Both option tests above set
+     * them to zero.
+     *
+     * The assertion that matters is not the COUNT but the CONTENT: a windowed
+     * read must return exactly the slice a full read would, geometry included.
+     * A cap that silently started from pulse zero would pass a count check and
+     * fail this one. */
+    RS_CASE("a windowed read returns exactly the slice a full read would");
+    {
+        RS_CHECK(write_cphd(path, NULL) == 0);
+        rs_cphd_t full;
+        RS_CHECK_OK(rs_read_cphd(path, NULL, &full));
+        RS_CHECK(full.n_pulse == NV);
+
+        const size_t first = 10, count = 20;
+        rs_cphd_read_opts_t o = { .rbin_window = 0, .pulse_stride = 0,
+                                  .max_pulses = count, .pulse_first = first };
+        rs_cphd_t win;
+        RS_CHECK_OK(rs_read_cphd(path, &o, &win));
+        printf("    full %zu pulses; window [%zu, %zu) -> %zu\n",
+               full.n_pulse, first, first + count, win.n_pulse);
+        RS_CHECK(win.n_pulse == count);
+
+        /* Same pulses, not merely the same number of them. */
+        for (size_t i = 0; i < win.n_pulse; i++) {
+            RS_CHECK_NEAR(win.t[i], full.t[first + i], 1e-12);
+            for (int k = 0; k < 3; k++) {
+                RS_CHECK_NEAR(win.pos[3 * i + k], full.pos[3 * (first + i) + k], 1e-9);
+            }
+            RS_CHECK_NEAR(win.r_ref[i], full.r_ref[first + i], 1e-9);
+        }
+        /* And the same signal samples, which is what streaming accumulates. */
+        for (size_t i = 0; i < win.n_pulse; i++) {
+            for (size_t j = 0; j < win.n_rbin; j++) {
+                const float complex a = win.signal[i * win.n_rbin + j];
+                const float complex b = full.signal[(first + i) * full.n_rbin + j];
+                RS_CHECK(crealf(a) == crealf(b) && cimagf(a) == cimagf(b));
+            }
+        }
+
+        /* max_pulses alone starts at the beginning. */
+        rs_cphd_read_opts_t o2 = { .max_pulses = count };
+        rs_cphd_t cap;
+        RS_CHECK_OK(rs_read_cphd(path, &o2, &cap));
+        RS_CHECK(cap.n_pulse == count);
+        RS_CHECK_NEAR(cap.t[0], full.t[0], 1e-12);
+        RS_CHECK(cap.t[0] != win.t[0]);   /* the window really is offset */
+
+        /* An origin past the end is refused rather than clamped: a caller
+         * walking blocks needs to be told it has run off, not handed a short
+         * read it cannot distinguish from the last block. */
+        rs_cphd_read_opts_t o3 = { .pulse_first = NV + 1 };
+        rs_cphd_t past;
+        RS_CHECK_ERR(rs_read_cphd(path, &o3, &past), RS_ERR_ARG);
+
+        rs_cphd_free(&cap); rs_cphd_free(&win); rs_cphd_free(&full);
+    }
+
     RS_CASE("malformed inputs are refused with a status, not a crash");
     {
         const struct { const char *damage; resonarsat_status_t want; const char *why; } cases[] = {

@@ -1,0 +1,47 @@
+warning: grid cell 0.500 m is coarser than the 0.064 m azimuth
+         resolution this collect supports. The image will alias:
+         each scatterer gains ghost peaks that resemble real
+         targets. Use --cell 0.064 or finer, or treat the result
+         as deliberately multi-looked.
+sub-apertures: 128 looks, dt 0.1550 s
+  observable band  f_max 3.23 Hz   AT sub-look resolution 8.26 m
+sub-pixel refinement: 1/200 px (default 1/10 azimuth, 1/20 range)
+tracked 49 windows (7 x 7); 49 pass the 0.00 coherence mask
+band floor: ignoring the first 3 bins (below 0.151 Hz) -- they carry the Hann skirt of any residual trend, not a vibration
+spectra: 65 bins, 0.0504 Hz resolution
+  amplitude dispersion: best 0.178, median 0.452; 11 of 49 windows meet D_A <= 0.25
+  persistent scatterers: 0.554 Hz from 1 of 11 candidates (D_A <= 0.25), best window 42 at D_A 0.215
+  local peak: 3.175 Hz in window 25 stands 62.5x its own neighbourhood
+           (median 5.785e-05 over 10 bins, guard 2, from 3038 window-bin pairs).
+           Comparable across frequency where 'prominence' is not; compare it
+           against another scene's maximum, not against a threshold.
+  scene-derived null: window 18 at 1.966 Hz stands 3.52 robust deviations above
+           its own scene (median 4.3, scale 1.0, 32 matched reference windows,
+           guard 1; runner-up 2.16 over 49 searched)
+           This is a robust deviation, NOT a normal deviate: do not read a
+           p-value off it. On this collect an uninjected scene reached 2.53
+           and injected targets 5.9-9.8. See rs_spectrum_scene_null().
+  located at window (2.00, 4.00) of (6, 6) -- pixel (47.5, 79.5) --
+           from 1 windows agreeing on 1.966 Hz, seeded from the reported peak
+strongest peak in window 18: 1.966 Hz, prominence 7.9, quality 0.056, peak-to-peak velocity 186.6 mm/s (UNCALIBRATED)
+           The frequency is the measurement. The velocity is the raw tracked
+           excursion including trend and noise -- a motionless Giza scene gives
+           124.8 mm/s through this same line. Do not quote it as an amplitude.
+  backed by 2 windows, largest touching block 1
+  NOT ADJUDICATED -- nothing here distinguishes this from an artefact of the
+  processing. Cross-window agreement cannot: it is blind to anything common to
+  every window (item 11), and it is diluted by background to 19-24% even for a
+  known true positive (item 31). Run --null-static N, or --inject-vib to check
+  the chain can see a known signal here at all.
+  49 of 49 windows were eligible for selection (coherence gate and quantisation floor)
+  consensus: 0.605 Hz, agreed by 4 of 49 voting windows (8%), 33 distinct answers, largest contiguous block 1
+  WARNING: the agreeing windows are SCATTERED (largest block 1 < 4).
+           Windows overlap at the tracking stride, so a resolvable mode
+           occupies a 2x2 block at minimum. This is the shape of coincidence.
+  cull: no window survived (49 entered; SNR 49, sigma 0, neighbours 0 removed)
+  sub-aperture response 0.8541 (-1.4 dB) at an observation ratio of 0.30
+  (amplitude is QUALITATIVE -- relative amplitudes do not validate
+   against ground truth even where frequencies do)
+wrote /private/tmp/claude-501/-Users-matteoamico-Workspace-micromotion/f78ece78-0dbf-4132-82ce-528a122eb41c/scratchpad/r_w05_freq.png, /private/tmp/claude-501/-Users-matteoamico-Workspace-micromotion/f78ece78-0dbf-4132-82ce-528a122eb41c/scratchpad/r_w05_quality.png, /private/tmp/claude-501/-Users-matteoamico-Workspace-micromotion/f78ece78-0dbf-4132-82ce-528a122eb41c/scratchpad/r_w05_scene.png,
+      /private/tmp/claude-501/-Users-matteoamico-Workspace-micromotion/f78ece78-0dbf-4132-82ce-528a122eb41c/scratchpad/r_w05_spectrum.png (power), /private/tmp/claude-501/-Users-matteoamico-Workspace-micromotion/f78ece78-0dbf-4132-82ce-528a122eb41c/scratchpad/r_w05_spectrum_mm.png (displacement),
+      /private/tmp/claude-501/-Users-matteoamico-Workspace-micromotion/f78ece78-0dbf-4132-82ce-528a122eb41c/scratchpad/r_w05_spectrum_mms.png (velocity) and /private/tmp/claude-501/-Users-matteoamico-Workspace-micromotion/f78ece78-0dbf-4132-82ce-528a122eb41c/scratchpad/r_w05_windows.csv

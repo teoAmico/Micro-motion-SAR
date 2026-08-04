@@ -237,6 +237,78 @@ static resonarsat_status_t rs_load_cphd_window(rs_cphd_t *c, const char *path,
     return rs_read_cphd(path, &o, c);
 }
 
+/* Load a displacement record from a text file, one sample per line, and
+ * normalise it to unit peak.
+ *
+ * WHY NORMALISE. --inject-vib's AMP_MM means "peak vertical displacement", and
+ * every amplitude sweep in FOLLOW-UPS.md is expressed in it. Scaling a measured
+ * record to unit peak before applying AMP_MM keeps that meaning identical
+ * across the two injection paths, so a waveform run and a sine run at the same
+ * AMP_MM are directly comparable -- which is the entire point of the exercise.
+ * The record's own physical amplitude is therefore discarded; what survives is
+ * its SHAPE, which is what a sine cannot supply.
+ *
+ * Blank lines and '#' comments are skipped. Returns a malloc'd array the caller
+ * frees, with the count in *n_out and the original peak in *peak_out (metres,
+ * if the file was in metres) for reporting. */
+static double *rs_load_waveform(const char *path, size_t *n_out, double *peak_out)
+{
+    FILE *fh = fopen(path, "r");
+    if (!fh) { rs_set_error("--inject-wave: cannot open '%s'", path); return NULL; }
+    size_t cap = 4096, n = 0;
+    double *w = malloc(cap * sizeof *w);
+    if (!w) { fclose(fh); rs_set_error("--inject-wave: out of memory"); return NULL; }
+    char line[256];
+    while (fgets(line, sizeof line, fh)) {
+        char *p = line;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p == '#' || *p == '\n' || *p == '\r' || *p == '\0') continue;
+        double v;
+        if (sscanf(p, "%lf", &v) != 1 || !isfinite(v)) {
+            free(w); fclose(fh);
+            rs_set_error("--inject-wave: '%s' line %zu is not a finite number",
+                         path, n + 1);
+            return NULL;
+        }
+        if (n == cap) {
+            cap *= 2;
+            double *t = realloc(w, cap * sizeof *w);
+            if (!t) { free(w); fclose(fh);
+                      rs_set_error("--inject-wave: out of memory"); return NULL; }
+            w = t;
+        }
+        w[n++] = v;
+    }
+    fclose(fh);
+    if (n < 2) {
+        free(w);
+        rs_set_error("--inject-wave: '%s' holds %zu samples, need at least 2",
+                     path, n);
+        return NULL;
+    }
+    /* Centre, then scale to unit peak. Centring matters: a record with a DC
+     * offset injects a static range shift, which the tracker would read as a
+     * trend and the carrier removal of item 51 would then eat. */
+    double mean = 0.0;
+    for (size_t i = 0; i < n; i++) mean += w[i];
+    mean /= (double)n;
+    double peak = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        w[i] -= mean;
+        const double a = fabs(w[i]);
+        if (a > peak) peak = a;
+    }
+    if (!(peak > 0.0)) {
+        free(w);
+        rs_set_error("--inject-wave: '%s' is constant, so there is nothing to "
+                     "inject", path);
+        return NULL;
+    }
+    for (size_t i = 0; i < n; i++) w[i] /= peak;
+    *n_out = n; *peak_out = peak;
+    return w;
+}
+
 static resonarsat_status_t rs_load_cphd(rs_cphd_t *c, const char *path, size_t rbin_window,
                                         size_t pulse_stride, size_t max_pulses,
                                         size_t pulse_first)
@@ -1261,6 +1333,7 @@ static int rs_cmd_mmotion(int argc, char **argv)
                "                          [--pulse-start N] [--max-pulses N]\n"
                "                          [--inject-vib FREQ_HZ[,AMP_MM[,REL]]]\n"
                "                          [--inject-at DX,DY]\n"
+               "                          [--inject-wave FILE[,RATE_HZ[,AMP_MM[,REL]]]]\n"
                "                          [--stream N]\n"
                "                          [--estimator correlation|phase|splitband|argmax]\n"
                "                          [--shuffle-looks SEED] [--null-trials N]\n"
@@ -1398,10 +1471,41 @@ static int rs_cmd_mmotion(int argc, char **argv)
      * distinguish a still scene from a chain that cannot see motion in this
      * data; running once with this tells you which. See simulate.h. */
     const char *inject = rs_opt(argc, argv, "--inject-vib");
+    /* --inject-wave FILE[,RATE_HZ[,AMP_MM[,REL]]] drives the same target from a
+     * MEASURED displacement record instead of a tone (item 69). It is the same
+     * control in every other respect and shares the block below. */
+    const char *inject_w = rs_opt(argc, argv, "--inject-wave");
     double inject_hz = 0.0;
-    if (inject) {
+    if (inject && inject_w) {
+        fprintf(stderr, "mmotion: --inject-vib and --inject-wave are two ways to "
+                        "drive the same target; pick one\n");
+        rs_cphd_free(&c); return 1;
+    }
+    if (inject || inject_w) {
         double f_inj = 0.0, amp_mm = 2.0, rel = 20.0;
-        if (sscanf(inject, "%lf,%lf,%lf", &f_inj, &amp_mm, &rel) < 1) {
+        char wpath[512] = {0};
+        double wrate = 100.0, *wave = NULL, wpeak = 0.0;
+        size_t n_wave = 0;
+        if (inject_w) {
+            /* FILE may contain no comma; scan the path up to one. */
+            const char *comma = strchr(inject_w, ',');
+            const size_t len = comma ? (size_t)(comma - inject_w) : strlen(inject_w);
+            if (len == 0 || len >= sizeof wpath) {
+                fprintf(stderr, "mmotion: --inject-wave wants "
+                                "FILE[,RATE_HZ[,AMP_MM[,REL]]], got '%s'\n", inject_w);
+                rs_cphd_free(&c); return 1;
+            }
+            memcpy(wpath, inject_w, len);
+            if (comma) sscanf(comma + 1, "%lf,%lf,%lf", &wrate, &amp_mm, &rel);
+            if (!(wrate > 0.0)) {
+                fprintf(stderr, "mmotion: --inject-wave RATE_HZ must be positive, "
+                                "got %g\n", wrate);
+                rs_cphd_free(&c); return 1;
+            }
+            wave = rs_load_waveform(wpath, &n_wave, &wpeak);
+            if (!wave) { rs_report_error("mmotion", RS_ERR_IO);
+                         rs_cphd_free(&c); return 1; }
+        } else if (sscanf(inject, "%lf,%lf,%lf", &f_inj, &amp_mm, &rel) < 1) {
             fprintf(stderr, "mmotion: --inject-vib wants FREQ_HZ[,AMP_MM[,REL]], "
                             "got '%s'\n", inject);
             rs_cphd_free(&c); return 1;
@@ -1433,12 +1537,50 @@ static int rs_cmd_mmotion(int argc, char **argv)
         const double origin[2] = { grid.origin[0] + inj_dx,
                                    grid.origin[1] + inj_dy };
         rs_inject_report_t rep;
-        st = rs_simulate_inject_vibrator(&c, origin, f_inj, amp_mm * 1e-3, rel,
-                                         &rep);
+        if (wave)
+            st = rs_simulate_inject_waveform(&c, origin, wave, n_wave,
+                                             1.0 / wrate, amp_mm * 1e-3, rel, &rep);
+        else
+            st = rs_simulate_inject_vibrator(&c, origin, f_inj, amp_mm * 1e-3, rel,
+                                             &rep);
         if (st != RS_OK) {
+            free(wave);
             rs_report_error("mmotion", st); rs_cphd_free(&c); return 1;
         }
-        if (inject_at)
+        if (wave) {
+            const double wdur = (double)(n_wave - 1) / wrate;
+            printf("POSITIVE CONTROL: injected a MEASURED waveform at %+.1f,%+.1f m "
+                   "from the grid origin,\n"
+                   "  %s: %zu samples at %g Hz = %.1f s, original peak %.4g,\n"
+                   "  rescaled to %.3f mm peak vertical displacement, %.1fx the "
+                   "scene's median\n"
+                   "  non-zero sample magnitude (%.4g).\n"
+                   "  deposited into %zu of %zu pulses, range bins %.1f to %.1f "
+                   "of %zu\n",
+                   inj_dx, inj_dy, wpath, n_wave, wrate, wdur, wpeak,
+                   amp_mm, rel, rep.scale_ref,
+                   rep.n_deposited, rep.n_pulse, rep.fbin_min, rep.fbin_max,
+                   c.n_rbin);
+            /* The dwell is seconds and the record is usually minutes; a dwell
+             * longer than the record sees the held endpoint, i.e. a static
+             * target, which would look exactly like a null. */
+            const double dwell = c.n_pulse > 1 ? c.t[c.n_pulse - 1] - c.t[0] : 0.0;
+            if (dwell > wdur)
+                printf("  WARNING: the dwell is %.1f s but the record is %.1f s, so "
+                       "the target is\n"
+                       "           HELD STILL for the remainder. Supply a longer "
+                       "record.\n", dwell, wdur);
+            else
+                printf("  the dwell samples %.1f s of it, %.0f%% of the record.\n",
+                       dwell, 100.0 * dwell / wdur);
+            printf("  THIS RUN IS ABOUT THE PIPELINE, NOT THE SCENE: a real "
+                   "structure is\n"
+                   "  multi-modal and non-stationary, so there is no single "
+                   "frequency to check\n"
+                   "  against -- read the windows CSV against the record's own "
+                   "spectrum.\n");
+            free(wave);
+        } else if (inject_at)
             printf("POSITIVE CONTROL: injected a %.4f Hz scatterer at %+.1f,%+.1f m "
                    "from the grid origin,\n"
                    "  %.3f mm vertical displacement, %.1fx the scene's median non-zero\n"

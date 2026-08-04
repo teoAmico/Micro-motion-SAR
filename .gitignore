@@ -24,9 +24,6 @@ data/*
 !runs/**/*.log
 !runs/**/*.md
 
-# Local survey of restricted or request-only ground-truth collections.
-docs/GROUND_TRUTH_DATASETS.md
-
 # Local execution runbook for the Capella Panama positive test.
 docs/PANAMA_POSITIVE_TEST.md
 docs/KSTL_ADSB_POSITIVE_TEST.md

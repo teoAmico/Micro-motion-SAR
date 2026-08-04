@@ -238,11 +238,15 @@ static double rs_signal_median_mag(const rs_cphd_t *cphd, size_t want)
 }
 
 /* Add a vibrating point scatterer to a real collect. See simulate.h. */
-resonarsat_status_t rs_simulate_inject_vibrator(rs_cphd_t *cphd,
-                                                const double centre[2],
-                                                double freq_hz, double amp_m,
-                                                double rel_amp,
-                                                rs_inject_report_t *report)
+/* The shared worker. 'wave' NULL gives the sinusoid every earlier measurement
+ * used; non-NULL drives the scatterer from a measured record instead. */
+static resonarsat_status_t rs_inject_core(rs_cphd_t *cphd,
+                                          const double centre[2],
+                                          double freq_hz, double amp_m,
+                                          double rel_amp,
+                                          const double *wave, size_t n_wave,
+                                          double wave_dt,
+                                          rs_inject_report_t *report)
 {
     if (report) {
         report->n_pulse = 0; report->n_deposited = 0;
@@ -255,9 +259,14 @@ resonarsat_status_t rs_simulate_inject_vibrator(rs_cphd_t *cphd,
         rs_set_error("inject: the collect carries no pulse geometry");
         return RS_ERR_ARG;
     }
-    if (!isfinite(freq_hz) || freq_hz <= 0.0) {
+    if (!wave && (!isfinite(freq_hz) || freq_hz <= 0.0)) {
         rs_set_error("inject: frequency must be positive and finite (got %g Hz)",
                      freq_hz);
+        return RS_ERR_ARG;
+    }
+    if (wave && (n_wave < 2 || !(wave_dt > 0.0))) {
+        rs_set_error("inject: a waveform needs at least 2 samples and a positive "
+                     "interval (got %zu at %g s)", n_wave, wave_dt);
         return RS_ERR_ARG;
     }
     if (!isfinite(amp_m) || !isfinite(rel_amp)) {
@@ -312,7 +321,20 @@ resonarsat_status_t rs_simulate_inject_vibrator(rs_cphd_t *cphd,
 
         /* Vertical displacement; the collect's own geometry projects it onto the
          * line of sight, which is why the observable is smaller than amp_m. */
-        const double dz = amp_m * sin(2.0 * M_PI * freq_hz * cphd->t[i]);
+        double dz;
+        if (wave) {
+            /* Linear interpolation into the measured record, held at the ends. */
+            const double u = cphd->t[i] / wave_dt;
+            if (u <= 0.0)                    dz = amp_m * wave[0];
+            else if (u >= (double)(n_wave - 1)) dz = amp_m * wave[n_wave - 1];
+            else {
+                const size_t j = (size_t)u;
+                const double f = u - (double)j;
+                dz = amp_m * ((1.0 - f) * wave[j] + f * wave[j + 1]);
+            }
+        } else {
+            dz = amp_m * sin(2.0 * M_PI * freq_hz * cphd->t[i]);
+        }
 
         const double dx = px - centre[0];
         const double dy = py - centre[1];
@@ -350,4 +372,33 @@ resonarsat_status_t rs_simulate_inject_vibrator(rs_cphd_t *cphd,
         return RS_ERR_RANGE;
     }
     return RS_OK;
+}
+
+/* The sinusoidal injection every measurement before item 69 used. Unchanged in
+ * behaviour: it is rs_inject_core() with no waveform. */
+resonarsat_status_t rs_simulate_inject_vibrator(rs_cphd_t *cphd,
+                                                const double centre[2],
+                                                double freq_hz, double amp_m,
+                                                double rel_amp,
+                                                rs_inject_report_t *report)
+{
+    return rs_inject_core(cphd, centre, freq_hz, amp_m, rel_amp,
+                          NULL, 0, 0.0, report);
+}
+
+/* Injection driven by a measured displacement record. See simulate.h for why
+ * this exists and what 'scale' means. */
+resonarsat_status_t rs_simulate_inject_waveform(rs_cphd_t *cphd,
+                                                const double centre[2],
+                                                const double *wave, size_t n_wave,
+                                                double wave_dt, double scale,
+                                                double rel_amp,
+                                                rs_inject_report_t *report)
+{
+    if (!wave) {
+        rs_set_error("inject: no waveform supplied");
+        return RS_ERR_ARG;
+    }
+    return rs_inject_core(cphd, centre, 0.0, scale, rel_amp,
+                          wave, n_wave, wave_dt, report);
 }

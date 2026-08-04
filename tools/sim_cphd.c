@@ -66,6 +66,70 @@ static void rs_sim_defaults(rs_sim_params_t *p)
     p->range_res = 1.0;
 }
 
+/* The measured displacement record --wave supplies, normalised to unit peak,
+ * and its sample rate. NULL means every vibrating target follows a sine, which
+ * is what every simulation here did before item 69. File scope because the
+ * scene is built once per process and the record applies to the whole of it --
+ * a structure's surface moves together, which is the same reasoning
+ * --clutter-vib rests on. */
+static double *rs_wave = NULL;
+static size_t  rs_n_wave = 0;
+static double  rs_wave_rate = 100.0;
+
+/* Read one displacement sample per line, centre it, and scale to unit peak so
+ * that vib_amp keeps meaning "peak displacement in metres" exactly as it does
+ * for the sinusoid. Returns 0 on success. Centring matters: a DC offset would
+ * displace the whole scene rather than vibrate it. */
+static int rs_load_wave(const char *spec)
+{
+    char path[512] = {0};
+    const char *comma = strchr(spec, ',');
+    const size_t len = comma ? (size_t)(comma - spec) : strlen(spec);
+    if (len == 0 || len >= sizeof path) return -1;
+    memcpy(path, spec, len);
+    if (comma) rs_wave_rate = atof(comma + 1);
+    if (!(rs_wave_rate > 0.0)) return -1;
+
+    FILE *fh = fopen(path, "r");
+    if (!fh) { fprintf(stderr, "sim_cphd: cannot open '%s'\n", path); return -1; }
+    size_t cap = 4096;
+    double *w = malloc(cap * sizeof *w);
+    if (!w) { fclose(fh); return -1; }
+    char line[256];
+    size_t n = 0;
+    while (fgets(line, sizeof line, fh)) {
+        char *q = line;
+        while (*q == ' ' || *q == '\t') q++;
+        if (*q == '#' || *q == '\n' || *q == '\r' || *q == '\0') continue;
+        double v;
+        if (sscanf(q, "%lf", &v) != 1) { free(w); fclose(fh); return -1; }
+        if (n == cap) {
+            cap *= 2;
+            double *t = realloc(w, cap * sizeof *w);
+            if (!t) { free(w); fclose(fh); return -1; }
+            w = t;
+        }
+        w[n++] = v;
+    }
+    fclose(fh);
+    if (n < 2) { free(w); return -1; }
+    double mean = 0.0;
+    for (size_t i = 0; i < n; i++) mean += w[i];
+    mean /= (double)n;
+    double peak = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        w[i] -= mean;
+        if (fabs(w[i]) > peak) peak = fabs(w[i]);
+    }
+    if (!(peak > 0.0)) { free(w); return -1; }
+    for (size_t i = 0; i < n; i++) w[i] /= peak;
+    rs_wave = w; rs_n_wave = n;
+    fprintf(stderr, "sim_cphd: --wave %s: %zu samples at %g Hz = %.2f s, "
+                    "original peak %.4g, rescaled to the amp_m argument\n",
+            path, n, rs_wave_rate, (double)(n - 1) / rs_wave_rate, peak);
+    return 0;
+}
+
 /* Generate range-compressed phase history for a target list.
  *
  * For each pulse the platform position is advanced along the track, each
@@ -123,9 +187,21 @@ static resonarsat_status_t rs_sim_generate(const rs_sim_params_t *p,
         for (size_t g = 0; g < n_target; g++) {
             const rs_sim_target_t *tg = &targets[g];
 
-            /* Vibration displaces the target vertically. */
+            /* Vibration displaces the target vertically. With --wave the SHAPE
+             * comes from a measured record instead of a sine; vib_amp still
+             * sets the peak, so an amplitude is the same quantity either way
+             * and the two runs are comparable (item 69). */
             double dz = 0.0;
-            if (tg->vib_freq > 0.0 && tg->vib_amp != 0.0) {
+            if (rs_wave && tg->vib_amp != 0.0) {
+                const double u = cphd->t[i] * rs_wave_rate;
+                if (u <= 0.0) dz = tg->vib_amp * rs_wave[0];
+                else if (u >= (double)(rs_n_wave - 1)) dz = tg->vib_amp * rs_wave[rs_n_wave - 1];
+                else {
+                    const size_t j = (size_t)u;
+                    const double fr = u - (double)j;
+                    dz = tg->vib_amp * ((1.0 - fr) * rs_wave[j] + fr * rs_wave[j + 1]);
+                }
+            } else if (tg->vib_freq > 0.0 && tg->vib_amp != 0.0) {
                 dz = tg->vib_amp * sin(2.0 * M_PI * tg->vib_freq * cphd->t[i] + tg->vib_phase);
             }
 
@@ -267,7 +343,7 @@ int main(int argc, char **argv)
     if (argc > 1 && (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0)) {
         printf("usage: sim_cphd OUT.cphd [freq_hz] [amp_m] [offset_x_m] [offset_y_m]\n"
                "                [--clutter N] [--clutter-extent M] [--clutter-rcs F]\n"
-               "                [--clutter-vib] [--seed S]\n"
+               "                [--clutter-vib] [--seed S] [--wave FILE[,RATE_HZ]]\n"
                "                [--offset-x M] [--offset-y M]\n"
                "\n"
                "The offsets translate the whole scene, which is how independent\n"
@@ -310,6 +386,14 @@ int main(int argc, char **argv)
 
     for (int i = 2; i < argc; i++) {
         const char *arg = argv[i];
+        if (strcmp(arg, "--wave") == 0) {
+            if (i + 1 >= argc || rs_load_wave(argv[++i]) != 0) {
+                fprintf(stderr, "sim_cphd: --wave wants FILE[,RATE_HZ] naming a "
+                                "text file of displacement samples\n");
+                return 1;
+            }
+            continue;
+        }
         if (strcmp(arg, "--clutter-vib") == 0) {
             clutter_vib = 1;
         } else if (strcmp(arg, "--clutter") == 0) {

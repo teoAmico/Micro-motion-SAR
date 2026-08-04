@@ -176,6 +176,36 @@ typedef struct {
     double amp;           /* rel_amp * scale_ref, the amplitude actually written */
 } rs_inject_report_t;
 
+/* As rs_simulate_inject_vibrator(), but driven by a MEASURED displacement
+ * record instead of a sinusoid.
+ *
+ * WHY. Every injection this project has run was a pure tone -- one frequency,
+ * one amplitude, stationary for the whole dwell. Real structures are none of
+ * those: they are multi-modal, non-stationary, and amplitude-modulated by
+ * whatever excites them. That is exactly the regime items 25, 55 and 56 found
+ * the SELECTION policies failing in, on a fixture built to imitate it, and no
+ * injection here has ever put the reporting stage in front of it.
+ *
+ * 'wave' holds 'n_wave' displacement samples in metres at 'wave_dt' seconds
+ * apart, starting at the collect's own t = 0. Samples are linearly interpolated
+ * at each pulse time and the record is HELD at its endpoints rather than
+ * wrapped -- a wrapped record would inject a discontinuity once per repeat and
+ * a spectral comb with it.
+ *
+ * 'scale' multiplies the record, because a measured waveform's own amplitude is
+ * usually far below what a collect can see (item 60: Oroville Dam moved 0.78 um
+ * against a 5.5 um floor) and the question being asked is about SHAPE.
+ *
+ * Everything else -- brightness, geometry, reporting -- is
+ * rs_simulate_inject_vibrator()'s, including its zero-amplitude twin rule: pass
+ * scale = 0 for the control that item 38 made mandatory. */
+resonarsat_status_t rs_simulate_inject_waveform(rs_cphd_t *cphd,
+                                                const double centre[2],
+                                                const double *wave, size_t n_wave,
+                                                double wave_dt, double scale,
+                                                double rel_amp,
+                                                rs_inject_report_t *report);
+
 resonarsat_status_t rs_simulate_inject_vibrator(rs_cphd_t *cphd,
                                                 const double centre[2],
                                                 double freq_hz, double amp_m,

@@ -1,0 +1,52 @@
+warning: grid cell 0.500 m is coarser than the 0.064 m azimuth
+         resolution this collect supports. The image will alias:
+         each scatterer gains ghost peaks that resemble real
+         targets. Use --cell 0.064 or finer, or treat the result
+         as deliberately multi-looked.
+sub-apertures: 128 looks, dt 0.1550 s
+  observable band  f_max 3.23 Hz   AT sub-look resolution 8.26 m
+sub-pixel refinement: 1/200 px (default 1/10 azimuth, 1/20 range)
+tracked 49 windows (7 x 7); 49 pass the 0.00 coherence mask
+band floor: ignoring the first 3 bins (below 0.151 Hz) -- they carry the Hann skirt of any residual trend, not a vibration
+spectra: 65 bins, 0.0504 Hz resolution
+  amplitude dispersion: best 0.407, median 0.502; 0 of 49 windows meet D_A <= 0.25
+  persistent scatterers: none -- 49 windows passed the shared gates, 0 met D_A <= 0.25
+  local peak: 3.024 Hz in window 48 stands 19.3x its own neighbourhood
+           (median 0.0001655 over 12 bins, guard 2, from 3038 window-bin pairs).
+           Comparable across frequency where 'prominence' is not; compare it
+           against another scene's maximum, not against a threshold.
+  scene-derived null: window 48 at 0.504 Hz stands 4.28 robust deviations above
+           its own scene (median 4.4, scale 0.9, 32 matched reference windows,
+           guard 1; runner-up 3.14 over 49 searched)
+           This is a robust deviation, NOT a normal deviate: do not read a
+           p-value off it. On this collect an uninjected scene reached 2.53
+           and injected targets 5.9-9.8. See rs_spectrum_scene_null().
+  located at window (6.00, 5.64) of (6, 6) -- pixel (111.5, 105.7) --
+           from 2 windows agreeing on 0.504 Hz, seeded from the reported peak, CLIPPED at the grid edge so biased inward
+  note: NO window holds a dominant scatterer by the persistent-scatterer
+           criterion, so the phase estimator's precondition is unmet across
+           this whole scene. That bears on --estimator phase, not on this run.
+           The 0.25 criterion is calibrated over independent passes, not
+           sub-looks; read it as a scale. See rs_microm_t.d_a.
+strongest peak in window 48: 0.504 Hz, prominence 8.3, quality 0.060, peak-to-peak velocity 188.7 mm/s (UNCALIBRATED)
+           The frequency is the measurement. The velocity is the raw tracked
+           excursion including trend and noise -- a motionless Giza scene gives
+           124.8 mm/s through this same line. Do not quote it as an amplitude.
+  backed by 4 windows, largest touching block 2
+  NOT ADJUDICATED -- nothing here distinguishes this from an artefact of the
+  processing. Cross-window agreement cannot: it is blind to anything common to
+  every window (item 11), and it is diluted by background to 19-24% even for a
+  known true positive (item 31). Run --null-static N, or --inject-vib to check
+  the chain can see a known signal here at all.
+  49 of 49 windows were eligible for selection (coherence gate and quantisation floor)
+  consensus: 0.504 Hz, agreed by 4 of 49 voting windows (8%), 36 distinct answers, largest contiguous block 2
+  WARNING: the agreeing windows are SCATTERED (largest block 2 < 4).
+           Windows overlap at the tracking stride, so a resolvable mode
+           occupies a 2x2 block at minimum. This is the shape of coincidence.
+  cull: no window survived (49 entered; SNR 49, sigma 0, neighbours 0 removed)
+  sub-aperture response 0.9900 (-0.1 dB) at an observation ratio of 0.08
+  (amplitude is QUALITATIVE -- relative amplitudes do not validate
+   against ground truth even where frequencies do)
+wrote /private/tmp/claude-501/-Users-matteoamico-Workspace-micromotion/f78ece78-0dbf-4132-82ce-528a122eb41c/scratchpad/r_s05_freq.png, /private/tmp/claude-501/-Users-matteoamico-Workspace-micromotion/f78ece78-0dbf-4132-82ce-528a122eb41c/scratchpad/r_s05_quality.png, /private/tmp/claude-501/-Users-matteoamico-Workspace-micromotion/f78ece78-0dbf-4132-82ce-528a122eb41c/scratchpad/r_s05_scene.png,
+      /private/tmp/claude-501/-Users-matteoamico-Workspace-micromotion/f78ece78-0dbf-4132-82ce-528a122eb41c/scratchpad/r_s05_spectrum.png (power), /private/tmp/claude-501/-Users-matteoamico-Workspace-micromotion/f78ece78-0dbf-4132-82ce-528a122eb41c/scratchpad/r_s05_spectrum_mm.png (displacement),
+      /private/tmp/claude-501/-Users-matteoamico-Workspace-micromotion/f78ece78-0dbf-4132-82ce-528a122eb41c/scratchpad/r_s05_spectrum_mms.png (velocity) and /private/tmp/claude-501/-Users-matteoamico-Workspace-micromotion/f78ece78-0dbf-4132-82ce-528a122eb41c/scratchpad/r_s05_windows.csv

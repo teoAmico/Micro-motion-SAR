@@ -2189,6 +2189,155 @@ int main(void)
         rs_microm_free(&m);
     }
 
+    /* THE SCENE IS ITS OWN NULL, AND THE GUARD RING IS WHAT MAKES IT ONE.
+     *
+     * Two properties are asserted, and they pull in opposite directions, which
+     * is the point: a LOCALISED target must stand out against its scene, and a
+     * COMMON-MODE artefact in every window must not.
+     *
+     * The guard ring is the part that is easy to get wrong and impossible to
+     * notice: at win 32 / stride 16 a window physically contains half of each
+     * neighbour, so a target leaks into them. Using those as reference puts the
+     * signal into its own null and pulls z down. The case measures z with the
+     * guard and without it on the same scene. */
+    RS_CASE("a window is scored against its scene, with its neighbours guarded out");
+    {
+        const size_t naz = 9, nrg = 9, nw = naz * nrg, nlk = 64;
+        rs_microm_t m;
+        memset(&m, 0, sizeof m);
+        m.n_looks = nlk; m.n_win = nw; m.n_win_az = naz; m.n_win_rg = nrg;
+        m.win_az = m.win_rg = 32; m.stride_az = m.stride_rg = 16;
+        m.dt = 0.25; m.az_spacing_m = m.rg_spacing_m = 1.0;
+        m.disp_az  = calloc(nw * nlk, sizeof *m.disp_az);
+        m.disp_rg  = calloc(nw * nlk, sizeof *m.disp_rg);
+        m.disp_los = calloc(nw * nlk, sizeof *m.disp_los);
+        m.vel_los  = calloc(nw * nlk, sizeof *m.vel_los);
+        m.quality  = calloc(nw, sizeof *m.quality);
+        m.d_a      = calloc(nw, sizeof *m.d_a);
+        RS_CHECK(m.disp_az && m.disp_rg && m.disp_los && m.vel_los && m.quality && m.d_a);
+
+        /* A deterministic hash for the background, so the case does not depend
+         * on any particular rand() and reproduces on every platform. */
+        #define BG_NOISE(w, k) \
+            (((double)(((w) * 2654435761u + (k) * 40503u) % 2039u) / 2039.0) - 0.5)
+
+        const size_t target = 4 * nrg + 4;      /* centre window */
+        const size_t tone_bin = 9;
+        for (size_t w = 0; w < nw; w++) {
+            m.quality[w] = 1.0;
+            /* D_A must VARY or matching has nothing to rank on -- a constant
+             * column is detected and reported as unmatched, which the first
+             * version of this fixture tripped over. */
+            /* D_A varies SMOOTHLY across the scene, as a real one does. An
+             * earlier version used w % 17, which is uncorrelated with position:
+             * the matched reference sets were then arbitrary subsets, one of
+             * them happened to be very tight (scale 0.15), and a LEAKED
+             * neighbour outscored the target with z 51.9. That is a real
+             * property of per-window matching, now recorded in the header --
+             * the fixture should not also be adversarial about it. */
+            const size_t az = w / nrg, rg = w % nrg;
+            m.d_a[w] = 0.20 + 0.004 * (double)(az + rg);
+            const int daz = (int)az - 4, drg = (int)rg - 4;
+            const int adaz = daz < 0 ? -daz : daz, adrg = drg < 0 ? -drg : drg;
+            const int on_target = (adaz == 0 && adrg == 0);
+            const int leaked    = (!on_target && adaz <= 1 && adrg <= 1);
+            /* The leak is weak enough that the target dominates its own ring.
+             * Neighbours genuinely carry signal in a real scene, so this is a
+             * fixture choice and not a claim that they do not. */
+            const double tone_amp = on_target ? 1.0 : (leaked ? 0.15 : 0.0);
+            for (size_t k = 0; k < nlk; k++) {
+                double v = 0.35 * BG_NOISE(w, k);
+                if (tone_amp > 0.0)
+                    v += tone_amp * sin(2.0 * M_PI * (double)tone_bin * (double)k / (double)nlk);
+                m.vel_los[w * nlk + k] = v;
+                m.disp_los[w * nlk + k] = v;
+            }
+        }
+
+        rs_spectrum_t spn;
+        RS_CHECK_OK(rs_spectrum_compute(&m, RS_SPEC_DISPLACEMENT, &spn));
+
+        rs_scene_null_t g;
+        RS_CHECK_OK(rs_spectrum_scene_null(&spn, 1, &g));
+        printf("    localised target: window %zu at %.4f Hz, z %.2f, "
+               "%zu matched refs (median %.2f, scale %.2f)\n",
+               g.window, g.freq_hz, g.z, g.n_ref, g.ref_median, g.ref_scale);
+        RS_CHECK(g.window == target);
+        RS_CHECK_NEAR(g.freq_hz, spn.freq[tone_bin], 1e-9);
+        RS_CHECK(g.matched != 0);
+        RS_CHECK(g.n_ref == RS_SCENE_NULL_MATCH);
+        RS_CHECK(g.n_searched > 0 && g.z > g.z_runner_up);
+
+        /* THE GUARD RING, tested on what it is actually specified to do:
+         * remove the windows the target physically leaks into from the
+         * reference set. With matching on, both calls retain the same COUNT, so
+         * the ring is asserted with matching off, where n_ref is the whole
+         * eligible set and the eight leaked neighbours are countable.
+         *
+         * Note the z barely moves either way. That is not the guard failing --
+         * it is the median and MAD being robust, which is why they were chosen.
+         * The guard matters when the target's footprint is a large fraction of
+         * the scene, where a mean and a standard deviation would already have
+         * been captured. */
+        for (size_t w = 0; w < nw; w++) m.d_a[w] = 0.30;   /* matching off */
+        rs_spectrum_t flat;
+        RS_CHECK_OK(rs_spectrum_compute(&m, RS_SPEC_DISPLACEMENT, &flat));
+        rs_scene_null_t on, off;
+        RS_CHECK_OK(rs_spectrum_scene_null(&flat, 1, &on));
+        RS_CHECK_OK(rs_spectrum_scene_null(&flat, 0, &off));
+        printf("    guard 1 -> %zu refs, z %.2f;  guard 0 -> %zu refs, z %.2f "
+               "(the 8 leaked neighbours)\n", on.n_ref, on.z, off.n_ref, off.z);
+        RS_CHECK(on.matched == 0 && off.matched == 0);
+        RS_CHECK(off.n_ref == nw - 1);            /* everything but the target */
+        RS_CHECK(on.n_ref == nw - 1 - 8);         /* minus the leaked ring */
+        RS_CHECK(on.window == target && off.window == target);
+
+        /* NOW THE COMMON-MODE CASE, which is item 37's failure in miniature:
+         * give EVERY window the same tone at the same strength. The scene has a
+         * huge, perfectly consistent peak everywhere and nothing is localised,
+         * so a scene-derived null must refuse to find a standout where
+         * --null-static scored one as a detection. */
+        for (size_t w = 0; w < nw; w++) {
+            m.d_a[w] = 0.20 + 0.004 * (double)(w / nrg + w % nrg);
+            for (size_t k = 0; k < nlk; k++) {
+                const double v = 0.35 * BG_NOISE(w, k)
+                    + sin(2.0 * M_PI * (double)tone_bin * (double)k / (double)nlk);
+                m.vel_los[w * nlk + k] = v;
+                m.disp_los[w * nlk + k] = v;
+            }
+        }
+        rs_spectrum_t cm;
+        RS_CHECK_OK(rs_spectrum_compute(&m, RS_SPEC_DISPLACEMENT, &cm));
+        rs_scene_null_t cmn;
+        RS_CHECK_OK(rs_spectrum_scene_null(&cm, 1, &cmn));
+        printf("    common mode in EVERY window: z %.2f (localised was %.2f)\n",
+               cmn.z, g.z);
+        /* Every window reports the tone, so the prominences agree and no window
+         * is unusual for its scene. The margin over the localised case is the
+         * whole value of this statistic. */
+        RS_CHECK(cmn.z < 0.25 * g.z);
+        RS_CHECK(cmn.z < 4.0);
+
+        /* Contract: a rejected call clears the output, and a scene too small to
+         * furnish RS_SCENE_NULL_MIN_REF references refuses rather than
+         * inventing a background out of three windows. */
+        RS_CHECK_ERR(rs_spectrum_scene_null(NULL, 1, &cmn), RS_ERR_ARG);
+        RS_CHECK(cmn.z == 0.0 && cmn.n_ref == 0);
+        {
+            rs_spectrum_t tiny = cm;
+            tiny.n_win = 4; tiny.n_win_az = 2; tiny.n_win_rg = 2;
+            rs_scene_null_t none;
+            RS_CHECK_ERR(rs_spectrum_scene_null(&tiny, 1, &none), RS_ERR_RANGE);
+            RS_CHECK(none.window == tiny.n_win && none.n_searched == 0);
+        }
+        #undef BG_NOISE
+
+        rs_spectrum_free(&cm);
+        rs_spectrum_free(&flat);
+        rs_spectrum_free(&spn);
+        rs_microm_free(&m);
+    }
+
     /* THE LOWEST BINS ARE NOT REPORTABLE, AND A CURVED TREND CANNOT WIN.
      *
      * This is item 37 as a regression. On the real Giza collect a 0.163 Hz

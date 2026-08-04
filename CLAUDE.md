@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 37 items and their status.
+an index of all 38 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -169,6 +169,18 @@ scene-wide agreement gate rejected all five true positives on real data
 (`FOLLOW-UPS.md` items 30-31) because a localised target cannot reach a fraction
 calibrated on fixtures where the whole scene vibrates. Agreement and contiguity
 are printed and gate nothing.
+
+**Every positive control must ship its zero-amplitude twin** (item 38). Running
+`--inject-vib` at amplitude 0 -- a bright scatterer added to the phase history that
+does not move -- produces a LARGER peak than any real injection (prominence 56.3
+against 38-47) and clears the same 19 motionless controls. Prominence,
+`--null-static` and `rs_spectrum_scene_null()` all rank the motionless target
+first. Only the reported FREQUENCY separates them: zero amplitude answers at the
+band floor, a real injection at the injected value. So item 35's `p = 0.05`
+measured that a scatterer was ADDED, not that it moved. Keep RECOVERABILITY (a
+frequency put in comes back out -- established) apart from DETECTABILITY (deciding
+something moved without knowing the answer -- not established), and never quote a
+positive control that has no zero-amplitude run beside it.
 
 **But a null only calibrates against noise its own model can produce** (item 37).
 Below 2 mm the Giza sweep reported bin 1 instead of the injected frequency, with

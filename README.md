@@ -166,14 +166,24 @@ The detailed measurements and failed hypotheses are recorded in
   synthetic scenes.
 - That recovery collapses when scatterer brightness changes with viewing angle,
   a property expected in real structures.
-- A known 0.163 Hz vibration injected into real Giza clutter was recovered and
-  exceeded 19 matched motionless controls (`p = 0.05`).
+- A known 0.163 Hz vibration injected into real Giza clutter was recovered
+  correctly at every amplitude from 2 mm down to 0.0625 mm.
+- **That recovery is of the frequency only.** Running the same injection at ZERO
+  amplitude — a bright scatterer added to the phase history that does not move —
+  produces a LARGER peak than any real injection, and it clears the same 19
+  motionless controls. The `p = 0.05` this project previously reported therefore
+  measured that a scatterer had been added, not that it vibrated. Only the
+  reported frequency separates the two: zero amplitude answers at the band
+  floor, a real injection answers at the injected value (item 38).
 - Earlier injected signals were measured in the correct patch but rejected by
   scene-wide selection rules; the current verdict instead uses the null control.
 - The injected patch and frequency were known in advance. Automatically locating
   an unknown vibrating target among hundreds of windows remains untested.
 - No available collect contains independently confirmed natural vibration, so
   the current results do not establish real-world sensitivity.
+- The distinction that matters is between **recoverability** — a frequency put in
+  comes back out, which is established — and **detectability** — deciding
+  something moved without already knowing the answer, which is not.
 
 The project considers a frequency-recovery experiment successful only when a
 sweep produces a fitted slope near 1 with RMS error below half a spectral bin,

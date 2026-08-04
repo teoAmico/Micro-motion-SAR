@@ -78,7 +78,8 @@ said, not better) and item 7's line numbers.
 | 34 | done | null density derived from geometry; it now separates signal from nothing on real data |
 | 35 | **the result** | ADJUDICATED at p = 0.05: a real-data measurement a proper null could not reproduce |
 | 36 | done | Umbra and ICEYE read correctly; the per-vendor SGN override is confirmed right |
-| 37 | **the current state** | bin 1 outscored the truth below 2 mm and every gate endorsed it; the first three bins are now unreportable, which relocates a trend rather than removing it |
+| 37 | done | bin 1 outscored the truth below 2 mm and every gate endorsed it; the first three bins are now unreportable, which relocates a trend rather than removing it |
+| 38 | **the current state** | a ZERO-amplitude injection outscores every real one, so the p-value measured the scatterer being added, not it moving |
 
 ---
 
@@ -4098,3 +4099,111 @@ dominant scatterer; the next common-mode artefact will be invisible for its own
 reason. The fix that generalises is a null built from the **real** scene --
 permuting or phase-scrambling the actual tracked series so the control inherits
 whatever the collect does -- rather than simulated beside it. Not attempted.
+
+
+## 38. The zero-amplitude control: the adjudication was measuring the wrong thing
+
+Item 37 fixed a defect and left the amplitude sweep adjudicating at every
+amplitude down to 0.0625 mm. A critique of that result asked for a control this
+project had never run: **the identical injection code path at zero amplitude**.
+A bright scatterer written into the phase history that does not move. If the
+statistic responds to that, it is responding to the injection rather than to
+motion. `runs/giza/2026-08-04-scene-null/`.
+
+**It responds to it, more strongly than to any real injection.**
+
+```
+--inject-vib "0.163,0.0,20"            <- ZERO amplitude
+
+strongest peak in window 8: 0.098 Hz, prominence 56.3, quality 0.895
+  backed by 9 windows, largest touching block 9
+```
+
+| run | reported | prominence | scene-null z |
+|---|---|---|---|
+| **zero amplitude (negative control)** | **0.098 Hz** | **54.7** | **8.23** |
+| uninjected, no injection at all | 0.130 Hz | 17.6 | 1.56 |
+| 0.0625 mm | 0.163 Hz | 46.7 | 6.38 |
+| 0.125 mm | 0.163 Hz | 44.4 | 5.99 |
+| 0.5 mm | 0.163 Hz | 39.0 | 5.34 |
+| 2.0 mm | 0.163 Hz | 38.0 | 5.28 |
+
+Against the recalibrated `--null-static` worst of 22.9 the motionless bright
+target ADJUDICATES at 2.5x the bar. Prominence ranks it first. The new
+scene-derived null ranks it first. **Every amplitude statistic here prefers the
+target that does not move.**
+
+**Only the reported FREQUENCY separates them.** Zero amplitude answers 0.098 Hz,
+bin 3 -- the band floor's own edge, item 37's trend arriving at the first door
+it is allowed through. Every real injection answers 0.163 Hz, the injected
+value. Nothing about the peak's SIZE carries the distinction; only its POSITION
+does.
+
+### What this costs item 35
+
+Item 35 adjudicated a 2 mm injection at p = 0.05 against 19 synthetic null
+trials and is the result this project has been quoting. A zero-amplitude
+injection through the same code path would have adjudicated too, and by more.
+**That p-value measured "a bright scatterer was added to the phase history", not
+"the scatterer vibrated."**
+
+It does not touch the frequency results. `rs_track_fit()`'s slope-and-rms bar
+(item 30) scores WHICH frequency comes back, and the zero-amplitude control does
+not return 0.163 Hz. What item 35 established is **recoverability**: a frequency
+put in comes back out. **Detectability** -- deciding something moved without
+already knowing the answer -- was never measured, and the statistic that claimed
+to measure it responds to the injection machinery.
+
+That distinction is also what the Vattulainen validation (item 37) lacks, for
+the same structural reason: every published test knows where the target is.
+
+### The scene-derived null, built here, and what it does and does not do
+
+`rs_spectrum_scene_null()` scores every window against the rest of its own
+scene: matched on `D_A`, with a guard ring of `ceil(win_az/stride_az) - 1` so a
+target is not used as its own reference, taking the maximum over windows so the
+look-elsewhere cost is inside the statistic.
+
+Four time-domain surrogates were considered and rejected, each circular or
+benign, and the reasoning is in the header: random permutation destroys the
+trend and recreates the too-benign background that made `--null-static` fail;
+phase scrambling preserves the periodogram that prominence is computed from;
+a circular shift preserves the spectrum exactly; a residual bootstrap inherits
+only what the trend model left, and the trend is the disputed term. The null
+must keep the low-frequency nuisance while destroying the localisation, and a
+time-domain surrogate of one series cannot separate those. Space can.
+
+It earns its place:
+
+- it refuses the real uninjected scene at z 1.56, against a family-wise maximum
+  of 2.53 measured over all 225 windows of a real motionless Giza scene;
+- injected targets at 256 m score 5.86 to 9.84 at the injected window;
+- in the test fixture it separates a localised target from a common-mode
+  artefact, z 38.75 against 2.63 -- the case `--null-static` structurally cannot
+  see;
+- it costs nothing and carries the collect's own trends by construction.
+
+**It does not fix the negative-injection problem**, because a bright static
+scatterer genuinely IS unusual for its scene. A spatial null answers "is this
+window unusual here" and correctly answers yes. The question needing an answer
+was "did it move".
+
+One cost is recorded in the header rather than hidden: matching gives each
+candidate its own reference set, so z is comparable across windows only when
+those sets are. Measured while building the test -- with a `D_A` pattern
+uncorrelated with position, a window carrying weak spill-over outscored the
+target, z 51.9 against 34.6, purely because its matched set had a scale of 0.15.
+
+### What would actually answer it
+
+A paired increment at the nominated frequency,
+`P_injected(f0) - P_zero_amplitude(f0)`, asking whether the injection ADDED
+recoverable evidence at f0 rather than whether an already-artefact-bearing window
+has a large peak. That needs the PSD at a nominated frequency;
+`PREFIX_windows.csv` records only each window's dominant frequency and the
+prominence there, so the zero-amplitude run cannot be interrogated at 0.163 Hz.
+Not attempted.
+
+**Any positive control here must now ship its zero-amplitude twin.** A positive
+control never run at zero amplitude does not establish that the effect came from
+the motion. That is a standing requirement, not a note.

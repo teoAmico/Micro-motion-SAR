@@ -3,6 +3,7 @@
 #include "resonarsat/microm.h"
 #include "resonarsat/fft.h"
 
+#include <float.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -938,6 +939,155 @@ resonarsat_status_t rs_spectrum_ps_window_opts(const rs_spectrum_t *spec,
     out->n_agree = best_count;
     out->d_a     = (pick < spec->n_win) ? spec->d_a[pick] : RS_DA_MAX;
     free(cand);
+    return RS_OK;
+}
+
+/* Ascending comparator over doubles, for the median and MAD below. */
+static int rs_cmp_double(const void *a, const void *b)
+{
+    const double x = *(const double *)a, y = *(const double *)b;
+    return (x > y) - (x < y);
+}
+
+/* Median of an array the caller allows us to reorder. Returns 0 for n == 0 so
+ * the callers below can treat an empty reference set as "no background". */
+static double rs_median_inplace(double *v, size_t n)
+{
+    if (n == 0) return 0.0;
+    qsort(v, n, sizeof *v, rs_cmp_double);
+    return (n % 2) ? v[n / 2] : 0.5 * (v[n / 2 - 1] + v[n / 2]);
+}
+
+/* One (index, key) pair, so reference windows can be ranked by how close their
+ * amplitude dispersion is to the candidate's without disturbing the spectrum. */
+typedef struct { double key; size_t idx; } rs_keyed_t;
+
+/* Ascending comparator over rs_keyed_t.key. Ties keep qsort's order, which is
+ * unspecified but harmless: tied keys are equally good matches by definition. */
+static int rs_cmp_keyed(const void *a, const void *b)
+{
+    const double x = ((const rs_keyed_t *)a)->key, y = ((const rs_keyed_t *)b)->key;
+    return (x > y) - (x < y);
+}
+
+/* Score every window against the rest of its own scene. See microm.h for why
+ * this is spatial rather than a time-domain surrogate, and for what it cannot
+ * test. */
+resonarsat_status_t rs_spectrum_scene_null(const rs_spectrum_t *spec,
+                                           size_t guard,
+                                           rs_scene_null_t *out)
+{
+    if (!out) {
+        rs_set_error("scene null: no output structure");
+        return RS_ERR_ARG;
+    }
+    memset(out, 0, sizeof *out);
+    if (!spec || !spec->prominence || !spec->dominant_freq || spec->n_win == 0) {
+        rs_set_error("scene null: spectrum has no per-window prominence");
+        return RS_ERR_ARG;
+    }
+    if (spec->n_win_az == 0 || spec->n_win_rg == 0 ||
+        spec->n_win_az * spec->n_win_rg != spec->n_win) {
+        rs_set_error("scene null: window grid %zux%zu does not describe %zu windows",
+                     spec->n_win_az, spec->n_win_rg, spec->n_win);
+        return RS_ERR_ARG;
+    }
+    out->window = spec->n_win;              /* "none qualified" until one does */
+
+    const size_t n = spec->n_win;
+    /* Three scratch arrays sized once: the candidate's matched keys, the
+     * retained reference prominences, and the deviations the MAD is taken of. */
+    rs_keyed_t *keys = malloc(n * sizeof *keys);
+    double *ref = malloc(n * sizeof *ref);
+    double *dev = malloc(n * sizeof *dev);
+    if (!keys || !ref || !dev) {
+        free(keys); free(ref); free(dev);
+        rs_set_error("scene null: out of memory for %zu windows", n);
+        return RS_ERR_ALLOC;
+    }
+
+    /* Matching needs a D_A that actually varies. rs_spectrum_compute() fills
+     * every entry with RS_DA_MAX when the tracker left none, and a constant key
+     * ranks nothing -- so detect that once rather than silently "matching" on a
+     * constant. */
+    int have_da = 0;
+    if (spec->d_a) {
+        for (size_t w = 1; w < n && !have_da; w++)
+            if (spec->d_a[w] != spec->d_a[0]) have_da = 1;
+    }
+    out->matched = have_da;
+
+    double best_z = -DBL_MAX, second_z = -DBL_MAX;
+    size_t n_searched = 0;
+
+    for (size_t w = 0; w < n; w++) {
+        const double p_w = spec->prominence[w];
+        if (!(p_w > 0.0)) continue;         /* masked or empty window */
+        const size_t caz = w / spec->n_win_rg, crg = w % spec->n_win_rg;
+
+        /* Everything outside the guard ring is a candidate reference. The ring
+         * is Chebyshev because window overlap is separable in the two axes. */
+        size_t n_keys = 0;
+        for (size_t v = 0; v < n; v++) {
+            if (!(spec->prominence[v] > 0.0)) continue;
+            const size_t az = v / spec->n_win_rg, rg = v % spec->n_win_rg;
+            const size_t daz = (az > caz) ? az - caz : caz - az;
+            const size_t drg = (rg > crg) ? rg - crg : crg - rg;
+            if (daz <= guard && drg <= guard) continue;
+            keys[n_keys].idx = v;
+            keys[n_keys].key = have_da ? fabs(spec->d_a[v] - spec->d_a[w]) : 0.0;
+            n_keys++;
+        }
+        if (n_keys < RS_SCENE_NULL_MIN_REF) continue;
+
+        /* Keep the closest matches in D_A. Without D_A every key is zero, the
+         * sort is a no-op and this becomes a plain unmatched neighbourhood --
+         * which is what 'matched' reports to the caller. */
+        size_t n_ref = n_keys;
+        if (have_da && n_keys > RS_SCENE_NULL_MATCH) {
+            qsort(keys, n_keys, sizeof *keys, rs_cmp_keyed);
+            n_ref = RS_SCENE_NULL_MATCH;
+        }
+        for (size_t i = 0; i < n_ref; i++) ref[i] = spec->prominence[keys[i].idx];
+
+        const double med = rs_median_inplace(ref, n_ref);
+        for (size_t i = 0; i < n_ref; i++) dev[i] = fabs(ref[i] - med);
+        const double mad = rs_median_inplace(dev, n_ref);
+        /* A degenerate scale means every reference window scored identically,
+         * which is a background with no spread rather than an infinitely
+         * significant candidate. Skipping is the honest reading. */
+        const double scale = 1.4826 * mad;
+        if (!(scale > 0.0)) continue;
+
+        const double z = (p_w - med) / scale;
+        n_searched++;
+        if (z > best_z) {
+            second_z = best_z;
+            best_z = z;
+            out->window = w;
+            out->freq_hz = spec->dominant_freq[w];
+            out->prominence = p_w;
+            out->z = z;
+            out->ref_median = med;
+            out->ref_scale = scale;
+            out->n_ref = n_ref;
+        } else if (z > second_z) {
+            second_z = z;
+        }
+    }
+
+    free(keys); free(ref); free(dev);
+
+    if (n_searched == 0) {
+        memset(out, 0, sizeof *out);
+        out->window = spec->n_win;
+        rs_set_error("scene null: no window had %u reference windows outside a "
+                     "guard of %zu with a non-degenerate spread",
+                     RS_SCENE_NULL_MIN_REF, guard);
+        return RS_ERR_RANGE;
+    }
+    out->n_searched = n_searched;
+    out->z_runner_up = (second_z == -DBL_MAX) ? 0.0 : second_z;
     return RS_OK;
 }
 

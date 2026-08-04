@@ -1396,6 +1396,125 @@ resonarsat_status_t rs_spectrum_ps_window_opts(const rs_spectrum_t *spec,
                                                double da_max,
                                                rs_spectrum_ps_t *out);
 
+/* What a scene-derived null found. See rs_spectrum_scene_null(). */
+typedef struct {
+    size_t window;        /* the window maximising z; n_win if none qualified */
+    double freq_hz;       /* that window's dominant frequency */
+    double prominence;    /* and its prominence */
+
+    double z;             /* (prominence - ref_median) / ref_scale */
+    double ref_median;    /* the matched reference set's median prominence */
+    double ref_scale;     /* 1.4826 * MAD of it, the robust sigma equivalent */
+    size_t n_ref;         /* reference windows behind that z */
+
+    size_t n_searched;    /* windows that got a z -- the family size */
+    double z_runner_up;   /* the second-highest z anywhere in the scene */
+    int    matched;       /* non-zero if D_A matching was applied */
+} rs_scene_null_t;
+
+/* Minimum reference windows before a z is computed for a candidate. Below this
+ * a median and a MAD are describing noise rather than a background. */
+#define RS_SCENE_NULL_MIN_REF 8u
+
+/* Reference windows retained after matching, closest first in |dD_A|. Enough
+ * that the MAD is stable, few enough that the retained set still resembles the
+ * candidate on a scene of a few hundred windows. */
+#define RS_SCENE_NULL_MATCH 32u
+
+/* Score every window against the rest of its OWN scene, and return the strongest.
+ *
+ * WHY THIS EXISTS. --null-static synthesises motionless scenes and processes
+ * them through the same chain, which is the right idea and has one structural
+ * limit: it calibrates only against noise the simulator can produce. Item 37 is
+ * that limit arriving. A residual trend on the real collect reached prominence
+ * 56 while the synthetic null topped out at 23.8, so the artefact was scored as
+ * a detection by a control that could not generate it. No amount of extra
+ * trials fixes that; the model is missing the term.
+ *
+ * A real collect already contains hundreds of places where nothing is moving.
+ * Those are the null. They cost nothing to evaluate, and they carry the scene's
+ * own trends, brightness statistics and processing artefacts by construction --
+ * including any this project has not thought of.
+ *
+ * WHY NOT A SURROGATE OF THE TIME SERIES. Four standard constructions were
+ * considered and all of them are circular or benign here:
+ *   - random permutation destroys the temporal correlation AND the trend, which
+ *     reproduces exactly the too-benign background that made --null-static fail;
+ *   - phase scrambling preserves the periodogram magnitude, and prominence is
+ *     computed FROM that periodogram, so the surrogate carries the same peak;
+ *   - a circular shift preserves the spectrum exactly, so it cannot test whether
+ *     a spectral peak is real;
+ *   - a residual bootstrap after detrending inherits only what the trend model
+ *     left, and the disputed artefact is precisely what that model removes.
+ * Every one of them fails because the null must keep the low-frequency nuisance
+ * while destroying the localisation, and a time-domain surrogate of a single
+ * series cannot separate those. Space can: the nuisance is shared across
+ * windows, the target is not.
+ *
+ * THE GUARD RADIUS is not optional and is not a tuning knob. Windows overlap
+ * whenever stride < win, so a target in one window is physically inside its
+ * neighbours' pixels too. Including those in the reference set puts the signal
+ * in its own null and biases z toward zero. Pass
+ *   guard = ceil(win_az / stride_az) - 1
+ * which is 1 at the usual 32/16, and 0 only when the windows are disjoint.
+ *
+ * MATCHING. A bright, low-D_A, well-tracked window is not exchangeable with a
+ * dark one, so the reference set is the RS_SCENE_NULL_MATCH windows closest to
+ * the candidate in amplitude dispersion. When no D_A is present -- the
+ * correlator leaves none -- matching is skipped and 'matched' reports 0, which
+ * a caller must read as a weaker null rather than as an equivalent one.
+ *
+ * WHAT MATCHING COSTS. Each candidate gets its OWN reference set, so z is only
+ * comparable between windows whose sets are comparable. A candidate whose 32
+ * nearest neighbours in D_A happen to be unusually alike gets a small scale and
+ * a large z for that reason alone. This was measured while building the test:
+ * with a D_A pattern uncorrelated with position, a window carrying a weak
+ * spill-over of the target outscored the target itself, z 51.9 against 34.6,
+ * purely because its matched set had a scale of 0.15. Real scenes vary D_A
+ * smoothly, which makes matched sets spatially coherent and the effect much
+ * smaller, but it is not zero -- read a large z together with 'ref_scale' and
+ * treat an anomalously small scale as a reason to distrust the ranking.
+ *
+ * THE STATISTIC is robust by necessity: the mean and standard deviation of a
+ * scene containing a target are shifted by that target. Median and MAD are not.
+ * 1.4826 makes the MAD comparable to a standard deviation for Gaussian data;
+ * the prominence distribution is not Gaussian, so z is a robust deviation and
+ * NOT a normal deviate, and must not be converted to a p-value through a normal
+ * tail.
+ *
+ * FAMILY-WISE BY CONSTRUCTION. Every window is scored and the maximum returned,
+ * so the look-elsewhere cost of searching the scene is inside the statistic
+ * rather than applied to it afterwards. Calibrating it therefore needs the
+ * distribution of this same maximum over scenes where nothing moves.
+ *
+ * MEASURED, on the real Giza collect at 256 m, 225 windows, --estimator phase:
+ *
+ *   uninjected control, all 225 windows scored   median -0.04, 90th 1.56,
+ *                                                99th 2.46, MAXIMUM 2.53
+ *   0.098 Hz injected      z = 9.84 at the injected window
+ *   0.130 Hz               z = 8.04
+ *   0.163 Hz               z = 8.51
+ *   0.196 Hz               z = 7.45
+ *   0.228 Hz               z = 5.86
+ *
+ * All five clear the control's family-wise maximum by 2.3x or better, and the
+ * control's own maximum is the null sample that matters: it is what the same
+ * window search returns on the same scene with nothing in it.
+ *
+ * WHAT THIS IS NOT. One control scene is one draw of the family-wise maximum,
+ * so 2.53 is an observation and not a calibrated threshold -- it says where this
+ * collect sat, not where the next one will. Prominence is scene- and
+ * processing-dependent, so a z from one configuration does not transfer to
+ * another. And this null shares the estimator, the detrend and the band floor
+ * with the measurement, so it cannot test any of them; a defect common to every
+ * window is invisible to it exactly as it is to --null-static. It answers one
+ * question only: is this window unusual FOR THIS SCENE.
+ *
+ * 'out' is cleared on any non-OK return. */
+resonarsat_status_t rs_spectrum_scene_null(const rs_spectrum_t *spec,
+                                           size_t guard,
+                                           rs_scene_null_t *out);
+
 /* Return the observation ratio implied by a sub-aperture duration and a measured
  * frequency: t_sap divided by that frequency's period, i.e. how many cycles of
  * the motion each sub-look integrates over.

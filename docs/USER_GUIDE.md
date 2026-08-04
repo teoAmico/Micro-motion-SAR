@@ -990,6 +990,14 @@ here so the guide does not imply the set above is complete:
   wrote. If you have code holding an `img->r0`, it will fail to compile — that
   is the point of the rename. Anything indexing range bins against it must
   offset from the CENTRE bin. See `docs/FOLLOW-UPS.md` item 5.
+- **`--inject-vib` at ZERO amplitude produces a bigger "detection" than any real
+  one.** A bright scatterer that does not move reaches prominence 56.3 on the
+  Giza collect, against 38-47 for real injections, and it clears the
+  `--null-static` controls. Prominence, the null and the scene-derived null all
+  rank it first; only the reported FREQUENCY separates it (zero amplitude answers
+  at the band floor, a real injection at the injected value). **A positive control
+  is not evidence unless its zero-amplitude twin has been run.** `FOLLOW-UPS.md`
+  item 38.
 - **The first three frequency bins are never reported, and this is not
   configurable.** A Hann window's main lobe is ±2 bins, so bins 1 and 2 hold the
   skirt of any residual trend and cannot be separated from it at any SNR;

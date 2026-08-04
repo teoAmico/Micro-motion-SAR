@@ -1925,6 +1925,39 @@ static int rs_cmd_mmotion(int argc, char **argv)
         }
     }
 
+    /* The scene-derived null. Unlike --null-static this needs no extra
+     * processing and carries the collect's own trends by construction, which is
+     * exactly what item 37 showed the simulated null could not. It gates
+     * nothing, like the policies above.
+     *
+     * The guard radius is the overlap between neighbouring windows, so that a
+     * target sitting inside its neighbours' pixels is not used as its own
+     * reference. Disjoint windows give 0. */
+    {
+        const size_t guard = (mp.stride_az > 0 && mp.win_az > mp.stride_az)
+                           ? (mp.win_az + mp.stride_az - 1) / mp.stride_az - 1
+                           : 0;
+        rs_scene_null_t sn;
+        if (rs_spectrum_scene_null(&spec, guard, &sn) == RS_OK) {
+            printf("  scene-derived null: window %zu at %.3f Hz stands %.2f robust "
+                   "deviations above\n"
+                   "           its own scene (median %.1f, scale %.1f, %zu matched "
+                   "reference windows,\n"
+                   "           guard %zu; runner-up %.2f over %zu searched)%s\n",
+                   sn.window, sn.freq_hz, sn.z, sn.ref_median, sn.ref_scale,
+                   sn.n_ref, guard, sn.z_runner_up, sn.n_searched,
+                   sn.matched ? "" : ", UNMATCHED -- no D_A");
+            printf("           This is a robust deviation, NOT a normal deviate: "
+                   "do not read a\n"
+                   "           p-value off it. On this collect an uninjected "
+                   "scene reached 2.53\n"
+                   "           and injected targets 5.9-9.8. See "
+                   "rs_spectrum_scene_null().\n");
+        } else {
+            printf("  scene-derived null: not computed -- %s\n", rs_last_error());
+        }
+    }
+
     if (n_ps == 0) {
         printf("  %s: NO window holds a dominant scatterer by the "
                "persistent-scatterer\n"

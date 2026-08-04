@@ -915,8 +915,22 @@ collects stay out. See [`runs/README.md`](../runs/README.md).
 
 ## 9. Choosing estimator and reference
 
-Two orthogonal choices. **One estimator setting is now known to work on synthetic
-data**; nothing works on real data. The honest summary is below.
+Two orthogonal choices. The honest summary is below, and it changed with items
+30–43: **injected frequencies now recover on real data**, which the earlier
+version of this section denied.
+
+Keep two things apart when reading it.
+
+- **Recoverability** — a frequency put into the data comes back out. Established
+  on the real Giza collect, down to 0.0625 mm of injected motion (items 30, 37).
+- **Detectability** — deciding something moved without already knowing the
+  answer. **Not established, by anything here.** A bright scatterer that does not
+  move outscores every real injection on prominence, on `--null-static` and on
+  the scene-derived null; only the reported frequency separates them, and on a
+  real target you do not have the frequency in advance (item 38).
+
+Three estimators pass the project's slope-and-rms bar on *some* fixture. None of
+that is evidence about detection.
 
 `--estimator correlation|phase|splitband|argmax`
 
@@ -931,6 +945,11 @@ data**; nothing works on real data. The honest summary is below.
   constraint on the scene and not a formality (`FOLLOW-UPS.md` item 15); and it
   is unvalidated on real data, where the sub-look decorrelation the simulator
   cannot produce is the obvious threat.
+
+  **On real data it recovers injected frequencies**, down to 0.0625 mm, provided
+  the first three spectral bins are excluded — which they now always are. Below
+  2 mm without that exclusion it reported bin 1 instead, with *rising* confidence
+  as the target weakened (items 30, 37).
 
   **That threat has now been measured, and the recovery does not survive it**
   (`FOLLOW-UPS.md` items 24-25). Given scatterers bright over only part of the
@@ -969,10 +988,15 @@ data**; nothing works on real data. The honest summary is below.
 - `splitband` — split-band phase linking over all N² interferograms. Returned one
   fixed frequency at every configuration swept.
 
-**The default is still `correlation`**, because the phase result is synthetic and
-amplitude-bounded and the default should not quietly become the untested-on-real-
-data path. Choose `phase` deliberately, for small motion, and run `--null-static`
-beside it.
+**The default is still `correlation`.** The phase route's real-data recoveries
+are all of *injected* signals whose frequency was known in advance, its aspect
+dependence failure (items 24–25) is unaddressed, and the default should not
+quietly become the path whose preconditions are hardest to check.
+
+Choose `phase` deliberately, for small motion. Run `--null-static` beside it —
+and **also run the zero-amplitude twin**, `--inject-vib F,0.0,REL`, because
+`--null-static` alone passes a target that never moves (items 38–39, and section
+7 step 0b for how to compare the two).
 
 `--reference first|adjacent|pair|lag`
 
@@ -989,6 +1013,10 @@ beside it.
 `--coherence F` masks windows whose sub-looks do not correlate, default 0.40.
 Isolated point targets on an empty scene score below that even when tracking
 perfectly; pass `0` to inspect an unmasked result.
+
+**No test exercises this gate**, and the default sits above what the fixtures can
+reach, so every real-data run recorded here passes `--coherence 0`. Why it cannot
+be tested is `FOLLOW-UPS.md` item 12f.
 
 **It masks a different quantity under `--estimator phase`**, which reads one
 pixel's phase and forms no correlation surface at all. There `quality` is

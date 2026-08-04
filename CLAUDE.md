@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 64 items and their status.
+an index of all 65 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -126,6 +126,16 @@ That cost a wrong diagnosis here: `--max-pulses` was reported as unimplemented i
 test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
+
+**MULTI-PIXEL COMBINATION IS NOT A LEVER, IN EITHER FORM** (items 64-65). SqueeSAR
+done properly — KS-test homogeneous pixel selection plus `phaselink.c`'s ML solver
+— is WORSE than the naive version and eightfold worse than one pixel: artefact
+70.7 to 1326 at K=9. **Statistically homogeneous pixels are homogeneous in the
+ARTEFACT too**, so the ML estimator sharpens the shared carrier residual because
+it is doing its job. Same shape as items 47 and 55: an average, a null or a
+normalisation only helps against variation ACROSS the things combined. That closes
+the factor-of-four search — finer cells 1.4x and a quartic ~1.4x are what remain,
+so the floor is within about 2x of what this approach can reach.
 
 **NAIVE MULTI-PIXEL COMBINATION FAILS** (item 64): combining the K brightest
 pixels makes the artefact GROW faster than the signal — 70.7 to 182 at K=4 — where

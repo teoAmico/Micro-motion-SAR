@@ -173,6 +173,39 @@ static double rs_phasor_refine(const rs_subap_stack_t *stack, size_t pa, size_t 
     return 0.5 * (lo + hi);
 }
 
+static int rs_cmp_dbl(const void *a, const void *b);   /* defined below */
+
+/* Two-sample Kolmogorov-Smirnov statistic between two amplitude samples.
+ *
+ * D = max |F1(x) - F2(x)| over the pooled order statistics. This is SqueeSAR's
+ * test for whether two pixels are drawn from the same scattering population --
+ * STATISTICALLY HOMOGENEOUS PIXELS, the set that may legitimately be combined.
+ *
+ * Item 64 measured what happens without it. Taking the K BRIGHTEST pixels
+ * instead made the artefact grow faster than the signal, 70.7 to 182 at K = 4,
+ * because the second and third brightest pixels in a window are usually
+ * DIFFERENT scatterers, each with its own sub-pixel offset and so its own
+ * carrier residual. Homogeneity is a statement about the amplitude
+ * DISTRIBUTION across looks; brightness is not.
+ *
+ * Both arrays are sorted in place, so callers pass scratch. */
+static double rs_ks_stat(double *a, size_t na, double *b, size_t nb)
+{
+    if (na == 0 || nb == 0) return 1.0;
+    qsort(a, na, sizeof *a, rs_cmp_dbl);
+    qsort(b, nb, sizeof *b, rs_cmp_dbl);
+    size_t i = 0, j = 0;
+    double d = 0.0;
+    while (i < na && j < nb) {
+        const double x = (a[i] <= b[j]) ? a[i] : b[j];
+        while (i < na && a[i] <= x) i++;
+        while (j < nb && b[j] <= x) j++;
+        const double gap = fabs((double)i / (double)na - (double)j / (double)nb);
+        if (gap > d) d = gap;
+    }
+    return d;
+}
+
 /* Median of a scratch array, which this reorders. */
 static int rs_cmp_dbl(const void *a, const void *b)
 {
@@ -397,13 +430,20 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
         double *pxacc = malloc(n_looks * sizeof *pxacc);
         double *pxsum = malloc(n_looks * sizeof *pxsum);
         unsigned char *pxtaken = malloc(win_az * win_rg);
+        /* KS-test scratch, and the de-ramped stack handed to the phase linker:
+         * n_looks signals of up to RS_MICROM_MAX_PIXELS samples. */
+        double *ksref = malloc(n_looks * sizeof *ksref);
+        double *kscan = malloc(n_looks * sizeof *kscan);
+        double *kstmp = malloc(n_looks * sizeof *kstmp);
+        float complex *plsig = malloc(n_looks * RS_MICROM_MAX_PIXELS * sizeof *plsig);
+        double *plph = malloc(n_looks * sizeof *plph);
         /* Split-band estimation needs every look's patch simultaneously. */
         const int want_stack = (params->estimator == RS_MICROM_EST_SPLITBAND);
         float complex *pstack = want_stack
             ? malloc(n_looks * win_az * win_rg * sizeof *pstack) : NULL;
         double *pshift = want_stack ? malloc(n_looks * sizeof *pshift) : NULL;
 
-        if (!pref || !pcur || !pxacc || !pxsum || !pxtaken || (want_stack && (!pstack || !pshift))) {
+        if (!pref || !pcur || !pxacc || !pxsum || !pxtaken || !ksref || !kscan || !kstmp || !plsig || !plph || (want_stack && (!pstack || !pshift))) {
             shared_st = RS_ERR_ALLOC;
         } else {
 #ifdef _OPENMP
@@ -561,25 +601,57 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
                     }
                     ref_mean /= (double)(win_az * win_rg);
 
-                    /* The n_px brightest pixels of the reference patch, by
-                     * partial selection rather than a full sort: n_px is a
-                     * handful and the patch is a thousand. */
+                    /* The pixels this window's estimate is built from. */
                     size_t sel[RS_MICROM_MAX_PIXELS];
                     size_t n_sel = 0;
                     {
-                        unsigned char *taken = pxtaken;
-                        memset(taken, 0, win_az * win_rg);
+                        /* THE BRIGHTEST, PLUS ITS STATISTICALLY HOMOGENEOUS
+                         * NEIGHBOURS -- SqueeSAR's construction. Item 64
+                         * measured why the obvious alternative fails: the K
+                         * BRIGHTEST pixels make the artefact grow faster than
+                         * the signal, because the second and third brightest
+                         * are usually DIFFERENT scatterers carrying their own
+                         * carriers and residuals. Homogeneity is a statement
+                         * about the amplitude DISTRIBUTION across looks, not
+                         * about brightness.
+                         *
+                         * The threshold is the standard two-sample KS critical
+                         * value c(alpha)*sqrt((n+m)/(n*m)), c = 1.36 at
+                         * alpha = 0.05, computed from the look count rather
+                         * than chosen. */
+                        size_t bi = 0; double bv = -1.0;
+                        for (size_t i = 0; i < win_az * win_rg; i++) {
+                            const double a = (double)cabsf(pref[i]);
+                            if (a > bv) { bv = a; bi = i; }
+                        }
+                        sel[n_sel++] = bi;
                         const size_t want = (n_px < RS_MICROM_MAX_PIXELS)
                                           ? n_px : RS_MICROM_MAX_PIXELS;
-                        for (size_t t = 0; t < want; t++) {
-                            double bv = -1.0; size_t bi = 0; int got = 0;
-                            for (size_t i = 0; i < win_az * win_rg; i++) {
-                                if (taken[i]) continue;
-                                const double a = (double)cabsf(pref[i]);
-                                if (!got || a > bv) { bv = a; bi = i; got = 1; }
+                        if (want > 1) {
+                            const double nd = (double)n_looks;
+                            const double dcrit = 1.36 * sqrt(2.0 / nd);
+                            const size_t ra = bi / win_rg, rr = bi % win_rg;
+                            for (size_t k = 0; k < n_looks; k++) {
+                                const rs_slc_t *im = &stack->look[k];
+                                const size_t a_ = az0 + ra, r_ = rg0 + rr;
+                                ksref[k] = (a_ < im->n_az && r_ < im->n_rg)
+                                    ? (double)cabsf(im->data[a_ * im->n_rg + r_]) : 0.0;
                             }
-                            if (!got) break;
-                            taken[bi] = 1; sel[n_sel++] = bi;
+                            for (size_t i = 0; i < win_az * win_rg && n_sel < want; i++) {
+                                if (i == bi) continue;
+                                const size_t ca = i / win_rg, cr = i % win_rg;
+                                int inb = 1;
+                                for (size_t k = 0; k < n_looks; k++) {
+                                    const rs_slc_t *im = &stack->look[k];
+                                    const size_t a_ = az0 + ca, r_ = rg0 + cr;
+                                    if (a_ >= im->n_az || r_ >= im->n_rg) { inb = 0; break; }
+                                    kscan[k] = (double)cabsf(im->data[a_ * im->n_rg + r_]);
+                                }
+                                if (!inb) continue;
+                                memcpy(kstmp, ksref, n_looks * sizeof *kstmp);
+                                if (rs_ks_stat(kstmp, n_looks, kscan, n_looks) < dcrit)
+                                    sel[n_sel++] = i;
+                            }
                         }
                     }
 
@@ -842,12 +914,16 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
                         const double psi = (pr_re != 0.0 || pr_im != 0.0)
                                          ? atan2(pr_im, pr_re) : 0.0;
 
-                        /* Accumulated rather than written: this pixel is one of
-                         * n_sel, and what the window reports is their weighted
-                         * mean. Weight is amplitude SQUARED -- phase noise goes
-                         * as 1/SNR and SNR as amplitude, so A^2 is
-                         * inverse-variance. Applied once per pixel below; the
-                         * per-look sum here is the series itself. */
+                        /* THE DE-RAMPED SAMPLE ITSELF goes to the phase linker,
+                         * not a phase estimated from it. rs_phase_link() forms
+                         * the sample covariance across sub-looks and solves for
+                         * the maximum-likelihood phase vector using every pair,
+                         * which is what item 64's averaging discarded.
+                         *
+                         * De-ramped BEFORE the covariance because each pixel has
+                         * its own carrier -- averaging cross-terms over pixels
+                         * with different carriers decoheres them. */
+                        plsig[k * n_sel + si] = (float complex)(dr_ + I * di_);
                         pxacc[k] += -psi * lambda / (4.0 * M_PI);
 
                         const size_t idx = (size_t)w * n_looks + k;
@@ -876,12 +952,24 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
 
                     if (!any_px || !(wsum > 0.0)) goto next_window;
 
-                    for (size_t k = 0; k < n_looks; k++) {
-                        const size_t idx = (size_t)w * n_looks + k;
-                        const double d = pxsum[k] / wsum;
-                        out->disp_los[idx] = d;
-                        out->phase[idx] = -d * 4.0 * M_PI / lambda;
-                        out->disp_az[idx] = out->disp_rg[idx] = 0.0;
+                    if (n_sel > 1 &&
+                        rs_phase_link(plsig, n_looks, n_sel, plph) == RS_OK) {
+                        /* Phase linking: the maximum-likelihood phase over the
+                         * whole covariance, referenced to look 0. */
+                        for (size_t k = 0; k < n_looks; k++) {
+                            const size_t idx = (size_t)w * n_looks + k;
+                            out->phase[idx] = plph[k];
+                            out->disp_los[idx] = -plph[k] * lambda / (4.0 * M_PI);
+                            out->disp_az[idx] = out->disp_rg[idx] = 0.0;
+                        }
+                    } else {
+                        for (size_t k = 0; k < n_looks; k++) {
+                            const size_t idx = (size_t)w * n_looks + k;
+                            const double d = pxsum[k] / wsum;
+                            out->disp_los[idx] = d;
+                            out->phase[idx] = -d * 4.0 * M_PI / lambda;
+                            out->disp_az[idx] = out->disp_rg[idx] = 0.0;
+                        }
                     }
 
                     /* Velocity by differencing, so that the spectrum sees the
@@ -1178,6 +1266,7 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
         free(pxacc);
         free(pxsum);
         free(pxtaken);
+        free(ksref); free(kscan); free(kstmp); free(plsig); free(plph);
         free(pstack);
         free(pshift);
     }

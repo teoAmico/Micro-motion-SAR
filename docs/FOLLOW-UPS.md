@@ -105,7 +105,8 @@ said, not better) and item 7's line numbers.
 | 61 | done | all 315 screened: NONE has motion above the floor that survives auditing; invert the search to start from earthquakes |
 | 62 | done | the earthquake route fails on DUTY CYCLE: expected coincidences 0.14, needs 7x the archive |
 | 63 | done | finer cells give 1.4x of the needed 4x and are non-monotone; Umbra is disqualified on dwell despite 4048 products |
-| 64 | **the current state** | naive multi-pixel combination FAILS -- brightest-K is not statistically homogeneous, and phaselink.c already holds the right estimator |
+| 64 | done | naive multi-pixel combination FAILS -- brightest-K is not statistically homogeneous, and phaselink.c already holds the right estimator |
+| 65 | **the current state** | SHP + phase linking is WORSE still: homogeneous pixels share the ARTEFACT, so the ML estimator sharpens it |
 
 ---
 
@@ -6009,3 +6010,63 @@ like free sqrt(K). It does NOT test item 15's precondition -- whether several
 pixels share the motion -- because a brightest-K construction cannot answer that.
 
 `--pixels` stays, defaulting to 1, which reproduces every earlier measurement.
+
+
+## 65. SqueeSAR done properly is worse, because homogeneous pixels share the artefact
+
+Item 64 found brightest-K combination failing and identified the literature's
+method -- KS-test selection of statistically homogeneous pixels, then
+maximum-likelihood phase linking over the covariance, already half-implemented in
+`phaselink.c`. Implemented properly. `runs/giza/2026-08-04-shp/`.
+
+```
+ pixels   artefact  signal @0.03125mm  signal/artefact
+      1       70.7             2310.4             32.7
+      9     1326.3             5391.8              4.1
+     25     1326.3             5391.8              4.1
+
+  item 64's brightest-K at K=9, for comparison:      27.3
+```
+
+**Worse than the naive version and eightfold worse than one pixel.** The signal
+does rise, 2310 to 5392 -- phase linking genuinely extracts more from the stack --
+but the artefact rises NINETEENFOLD and the ratio that decides detection falls.
+
+K=25 is identical to K=9, so the KS test selects about nine homogeneous pixels
+per window and the cap is not binding.
+
+### Why, and it is item 47's argument in a new place
+
+Averaging beats down noise that is INDEPENDENT between the things averaged. The
+carrier residual is not independent between neighbouring pixels: they sit at
+similar sub-pixel offsets, so they carry similar carriers and similar residuals
+after the cubic fit of item 53.
+
+**Statistically homogeneous pixels are homogeneous in the artefact too.** The KS
+test selects pixels from the same scattering population, which is precisely the
+set that shares a residual, and a maximum-likelihood estimator over the whole
+covariance then estimates that shared term very precisely. It amplifies the
+common mode because it is doing its job well.
+
+This is the same shape as item 47 (a local background cannot separate a real
+sideband from a real tone) and item 55 (the local peak addresses coloured noise,
+not spurious peaks generally): **a null, a normalisation or an average only helps
+against variation across the things being combined.**
+
+### What it closes
+
+Items 62-63 named a missing factor of four and identified multi-pixel combination
+as the one untried lever with the headroom. **It is not a lever.** Both its naive
+and its literature forms make detection worse here, structurally rather than by
+mis-tuning.
+
+The remaining routes are already measured and insufficient: finer cells 1.4x
+(item 63), a quartic carrier term perhaps 1.4x by item 53's trend. Roughly 2x
+against the 4x needed, with nothing else identified.
+
+**The honest position: this instrument's floor is within about a factor of two of
+what this approach can reach.** Closing the gap to ordinary ground motion, which
+items 60-62 showed is what would supply hundreds of controls, needs something not
+yet identified rather than more of what is here.
+
+`--pixels` defaults to 1, reproducing every earlier measurement.

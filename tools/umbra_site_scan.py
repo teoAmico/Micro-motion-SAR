@@ -1,4 +1,4 @@
-"""Scan Umbra's open STAC catalogue for collects over given ground sites.
+"""Scan Umbra's open STAC catalogue for collects near instrumented ground sites.
 
 Written to answer one question: is the corner-reflector campaign behind Suppi et
 al. (IWSHM 2025) -- Villa Gherta in Trento, and Glasgow Green -- in Umbra's open
@@ -20,8 +20,23 @@ def get(u):
     try:
         with urllib.request.urlopen(u, timeout=30) as r: return json.load(r)
     except Exception: return None
-# targets: Glasgow Green and Trento (Villa Gherta), from the IWSHM campaign
-TARGETS = {"Rotterdam": (51.95, 4.14), "Panama Canal": (9.08, -79.68), "Glasgow Green": (55.8475, -4.2400), "Trento": (46.07, 11.12)}
+# Catalogue controls, published shaker sites, and public sensor archives.
+TARGETS = {
+    # Catalogue controls and the two published shaker sites.
+    "Rotterdam": (51.95, 4.14),
+    "Panama Canal": (9.08, -79.68),
+    "Glasgow Green": (55.8475, -4.2400),
+    "Trento": (46.07, 11.12),
+    # Independently hosted, timestamped structural-monitoring archives.
+    "Hardanger Bridge": (60.4808, 6.8296),
+    "Werrington Bridge": (-33.764025, 150.741983),
+    "Vanersborg Bridge": (58.3808, 12.3233),
+    "openLAB Bautzen": (51.1816, 14.4277),
+    "KW51 Leuven": (50.9004, 4.7000),
+    "NREL Flatirons": (39.9106, -105.2347),
+    "Punta Langosteira Port": (43.3577, -8.3871),
+    "TigerRAY mooring": (47.679517, -122.230500),
+}
 months=[]
 for y in ("2024","2025"):
     c=get(B+y+"/catalog.json")
@@ -45,8 +60,11 @@ def check(u):
     bb=d.get("bbox")
     if not bb or len(bb)<4: return None
     for name,(lat,lon) in TARGETS.items():
-        if bb[0]-0.3<=lon<=bb[2]+0.3 and bb[1]-0.3<=lat<=bb[3]+0.3:
-            return ("hit", name, d.get("id"), bb, d.get("properties",{}).get("datetime"))
+        inside = bb[0] <= lon <= bb[2] and bb[1] <= lat <= bb[3]
+        near = bb[0]-0.3<=lon<=bb[2]+0.3 and bb[1]-0.3<=lat<=bb[3]+0.3
+        if near:
+            return ("hit", "inside" if inside else "near", name, d.get("id"),
+                    bb, d.get("properties",{}).get("datetime"))
     return None
 todo=items; depth=0
 while todo and depth<4:
@@ -58,4 +76,4 @@ while todo and depth<4:
     print(f"depth {depth}: {len(todo)} checked, {len(nxt)} deeper, {len(hits)} hits", file=sys.stderr)
     todo=nxt; depth+=1
 for h in hits: print(h)
-if not hits: print("NO ITEM within 0.3 deg of Glasgow Green or Trento")
+if not hits: print("NO ITEM within 0.3 deg of any target")

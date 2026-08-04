@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 47 items and their status.
+an index of all 49 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -228,6 +228,12 @@ different quantity. The shared `quality >= 0.5*q_max` gate is now INERT on real
 scenes — speckle alone scores 0.67 and real imagery 0.81-0.94 — which is a better
 failure than removing the signal but means a pass is not evidence.
 
+**Do not raise `--overlap` for the phase route** (item 48): separation collapses
+four orders of magnitude between 0.75 and 0.90 and fails at 0.95, on real data,
+withdrawing item 14's advice. **The local peak's control range on real Giza desert
+is 15.1-34.4 over nine disjoint grids** (item 49), so anything under ~35x there is
+inside what empty desert produces; nine controls give p_min = 0.10, not 0.05.
+
 **The noise floor is RED, so `prominence` is biased toward low frequencies** (item
 47). At `--overlap 0.90` adjacent sub-looks share nine tenths of their pulses, so
 their errors are correlated: bins 1-4 carry 24x the power of the band above
@@ -297,10 +303,13 @@ RESOLUTION CELL (item 15 — a lattice finer than that puts several equal scatte
 one cell and satisfies nothing, which is why it first appeared to fail on the
 dominant-scatterer fixture).
 
-Unlike `correlation`, **phase wants high `--overlap`**: recovery holds to 95%, and high
-overlap is what buys sub-look coherence on a real collect. Item 13's response ceiling is
-the correlator's, now measured — at 90% overlap a 1.3 Hz tone sits at a response of 0.055
-and phase still recovers it.
+That sweep also concluded **phase wants high `--overlap`** — recovery holding to 95%,
+high overlap buying sub-look coherence. **Item 48 withdraws it on real data.** The
+injection-versus-control separation collapses four orders of magnitude between 0.75
+and 0.90 and fails entirely at 0.95, because overlap correlates the noise between
+adjacent looks and correlated noise is red (item 47). Overlap does buy coherence; it
+spends it manufacturing the floor the coherence was for. Where the optimum sits is
+not established — only that 0.90–0.95 is far worse than anything below it.
 
 **Run once on the real Giza collect** (item 17): `--estimator phase` at 0.90 overlap,
 45 minutes, and it returned a NULL at 16% window agreement — the project's own

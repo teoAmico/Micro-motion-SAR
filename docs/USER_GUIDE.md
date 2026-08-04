@@ -962,11 +962,27 @@ that is evidence about detection.
   was measured on, and expecting that to transfer to a real collect has no
   measured basis.
 
-  **Use it with high `--overlap`**, unlike `correlation`. Recovery holds to 95%
-  overlap, and high overlap is what buys sub-look coherence on a real collect —
-  0.85 at 95% against 0.07 at zero. The response ceiling that makes overlap
-  useless for `correlation` does not bind here: at 90% overlap a 1.3 Hz tone sits
-  at a response of 0.055 and is still recovered.
+  **Do NOT use it with high `--overlap`.** This section used to say the opposite,
+  on the strength of item 14's synthetic sweep. Measured on the real Giza collect
+  (item 48), the separation between an injection and its control collapses by four
+  orders of magnitude between 0.75 and 0.90, and at 0.95 neither selection policy
+  finds a 2 mm injection at all:
+
+  ```
+   overlap   injected local peak   control   separation
+      0.00     816,997 (correct)      22.9      35,676x
+      0.50   1,207,566 (correct)      12.6      95,838x
+      0.75   1,856,891 (wrong bin)    12.9     143,945x
+      0.90         431.8 (correct)    39.2          11x
+      0.95          46.7 (WRONG)      26.0         1.8x
+  ```
+
+  Overlap does buy sub-look coherence, which was item 14's premise. It also
+  correlates the noise between adjacent looks, and correlated noise is red, and a
+  red floor is where a spurious peak lives (item 47) — so what overlap buys in
+  coherence it spends on manufacturing the thing the coherence was for. Where the
+  optimum sits is **not** established; what is established is that 0.90–0.95 is far
+  worse than anything below it.
 - `correlation` (default) — cross-correlation peak, sub-pixel refined. Has not
   been shown to recover a frequency on a distributed-clutter fixture; it does
   recover on a single-dominant-target fixture (slope 1.006, rms 0.0035), which is

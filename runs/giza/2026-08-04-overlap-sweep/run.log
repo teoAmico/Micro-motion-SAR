@@ -1,0 +1,50 @@
+########## overlap 0.0 -- injected 0.163 Hz at 2 mm
+  injected 0.1630 Hz sits at sub-aperture response 0.997 (observation ratio 0.04)
+sub-apertures: 128 looks, dt 0.2568 s
+  observable band  f_max 1.95 Hz   AT sub-look resolution 6.59 m
+  local peak: 0.152 Hz in window 16 stands 816996.9x its own neighbourhood
+strongest peak in window 8: 0.152 Hz, prominence 35.6, quality 0.996, peak-to-peak velocity 3.8 mm/s (UNCALIBRATED)
+  sub-aperture response 0.9975 (-0.0 dB) at an observation ratio of 0.04
+########## overlap 0.0 -- control
+  local peak: 0.913 Hz in window 2 stands 22.9x its own neighbourhood
+strongest peak in window 15: 0.548 Hz, prominence 6.7, quality 0.637, peak-to-peak velocity 95.8 mm/s (UNCALIBRATED)
+########## overlap 0.5 -- injected 0.163 Hz at 2 mm
+  injected 0.1630 Hz sits at sub-aperture response 0.989 (observation ratio 0.08)
+sub-apertures: 128 looks, dt 0.2547 s
+  observable band  f_max 1.96 Hz   AT sub-look resolution 3.32 m
+  local peak: 0.153 Hz in window 16 stands 1207566.1x its own neighbourhood
+strongest peak in window 8: 0.153 Hz, prominence 36.8, quality 0.997, peak-to-peak velocity 3.8 mm/s (UNCALIBRATED)
+  sub-aperture response 0.9900 (-0.1 dB) at an observation ratio of 0.08
+########## overlap 0.5 -- control
+  local peak: 1.534 Hz in window 20 stands 12.6x its own neighbourhood
+strongest peak in window 17: 0.613 Hz, prominence 6.6, quality 0.726, peak-to-peak velocity 110.5 mm/s (UNCALIBRATED)
+########## overlap 0.75 -- injected 0.163 Hz at 2 mm
+  injected 0.1630 Hz sits at sub-aperture response 0.957 (observation ratio 0.16)
+sub-apertures: 128 looks, dt 0.2509 s
+  observable band  f_max 1.99 Hz   AT sub-look resolution 1.69 m
+  local peak: 0.187 Hz in window 6 stands 1856891.1x its own neighbourhood
+strongest peak in window 8: 0.156 Hz, prominence 38.9, quality 0.997, peak-to-peak velocity 3.6 mm/s (UNCALIBRATED)
+  sub-aperture response 0.9603 (-0.4 dB) at an observation ratio of 0.16
+########## overlap 0.75 -- control
+  local peak: 1.619 Hz in window 0 stands 12.9x its own neighbourhood
+strongest peak in window 14: 0.249 Hz, prominence 13.6, quality 0.710, peak-to-peak velocity 109.4 mm/s (UNCALIBRATED)
+########## overlap 0.90 -- injected 0.163 Hz at 2 mm
+  injected 0.1630 Hz sits at sub-aperture response 0.767 (observation ratio 0.39)
+sub-apertures: 128 looks, dt 0.2399 s
+  observable band  f_max 2.08 Hz   AT sub-look resolution 0.70 m
+  local peak: 0.163 Hz in window 17 stands 431.8x its own neighbourhood
+strongest peak in window 17: 0.163 Hz, prominence 39.1, quality 0.992, peak-to-peak velocity 7.5 mm/s (UNCALIBRATED)
+  sub-aperture response 0.7672 (-2.3 dB) at an observation ratio of 0.39
+########## overlap 0.90 -- control
+  local peak: 0.163 Hz in window 13 stands 39.2x its own neighbourhood
+strongest peak in window 6: 0.130 Hz, prominence 17.9, quality 0.704, peak-to-peak velocity 124.8 mm/s (UNCALIBRATED)
+########## overlap 0.95 -- injected 0.163 Hz at 2 mm
+  injected 0.1630 Hz sits at sub-aperture response 0.329 (observation ratio 0.73)
+sub-apertures: 128 looks, dt 0.2235 s
+  observable band  f_max 2.24 Hz   AT sub-look resolution 0.38 m
+  local peak: 0.105 Hz in window 1 stands 46.7x its own neighbourhood
+strongest peak in window 1: 0.105 Hz, prominence 36.5, quality 0.923, peak-to-peak velocity 91.2 mm/s (UNCALIBRATED)
+  sub-aperture response 0.6756 (-3.4 dB) at an observation ratio of 0.47
+########## overlap 0.95 -- control
+  local peak: 0.175 Hz in window 5 stands 26.0x its own neighbourhood
+strongest peak in window 1: 0.140 Hz, prominence 20.7, quality 0.719, peak-to-peak velocity 126.3 mm/s (UNCALIBRATED)

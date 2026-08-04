@@ -1,0 +1,27 @@
+########## grid at -150,-150 m
+  local peak: 1.840 Hz in window 2 stands 25.0x its own neighbourhood
+strongest peak in window 0: 0.736 Hz, prominence 7.8, quality 0.726, peak-to-peak velocity 102.8 mm/s (UNCALIBRATED)
+########## grid at 0,-150 m
+  local peak: 0.184 Hz in window 14 stands 34.4x its own neighbourhood
+strongest peak in window 14: 0.092 Hz, prominence 10.6, quality 0.774, peak-to-peak velocity 101.3 mm/s (UNCALIBRATED)
+########## grid at 150,-150 m
+  local peak: 0.123 Hz in window 0 stands 15.1x its own neighbourhood
+strongest peak in window 4: 0.184 Hz, prominence 7.4, quality 0.697, peak-to-peak velocity 105.7 mm/s (UNCALIBRATED)
+########## grid at -150,0 m
+  local peak: 1.626 Hz in window 15 stands 22.5x its own neighbourhood
+strongest peak in window 18: 0.307 Hz, prominence 6.9, quality 0.884, peak-to-peak velocity 104.8 mm/s (UNCALIBRATED)
+########## grid at 0,0 m
+  local peak: 0.215 Hz in window 4 stands 20.8x its own neighbourhood
+strongest peak in window 4: 0.215 Hz, prominence 8.0, quality 0.893, peak-to-peak velocity 111.6 mm/s (UNCALIBRATED)
+########## grid at 150,0 m
+  local peak: 1.687 Hz in window 5 stands 19.2x its own neighbourhood
+strongest peak in window 2: 0.368 Hz, prominence 6.6, quality 0.711, peak-to-peak velocity 113.9 mm/s (UNCALIBRATED)
+########## grid at -150,150 m
+  local peak: 1.840 Hz in window 1 stands 20.9x its own neighbourhood
+strongest peak in window 9: 0.215 Hz, prominence 10.0, quality 0.710, peak-to-peak velocity 113.1 mm/s (UNCALIBRATED)
+########## grid at 0,150 m
+  local peak: 0.184 Hz in window 0 stands 16.2x its own neighbourhood
+strongest peak in window 0: 0.184 Hz, prominence 6.1, quality 0.908, peak-to-peak velocity 105.0 mm/s (UNCALIBRATED)
+########## grid at 150,150 m
+  local peak: 0.092 Hz in window 3 stands 19.5x its own neighbourhood
+strongest peak in window 15: 0.890 Hz, prominence 6.3, quality 0.643, peak-to-peak velocity 114.1 mm/s (UNCALIBRATED)

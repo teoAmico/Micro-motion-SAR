@@ -88,7 +88,9 @@ said, not better) and item 7's line numbers.
 | 44 | done | dwell truncation works and `validate` silently ignored the flag that does it |
 | 45 | done | first ICEYE measurement: urban misses the PS precondition too, and the quality gate discards the true positive |
 | 46 | done | the phase route's quality is now spatial dominance, which fixes item 45 and leaves the gate inert |
-| 47 | **the current state** | the noise floor is RED, so prominence prefers low frequencies; a local background fixes it |
+| 47 | done | the noise floor is RED, so prominence prefers low frequencies; a local background fixes it |
+| 48 | **withdraws item 14** | high overlap is WRONG for the phase route on real data: separation collapses 4 orders of magnitude by 0.90 |
+| 49 | **the current state** | the local peak calibrated on nine disjoint grids of real desert: 15.1-34.4 |
 
 ---
 
@@ -4893,3 +4895,102 @@ is a MOVING AVERAGE over shared pulses, so its power rolls off as sinc^2 and is
 locally flat over twenty bins; the fixture now models that. A collect with a
 steeper floor would need a narrower neighbourhood or a fitted slope, and neither
 is implemented.
+
+
+## 48. High overlap is wrong for the phase route, and item 14 said otherwise
+
+Item 14 measured that phase recovery "holds to 95% overlap" on synthetic
+fixtures and reasoned that high overlap buys sub-look coherence on a real
+collect. `docs/USER_GUIDE.md` turned that into advice -- "use it with high
+`--overlap`, unlike `correlation`" -- and every phase run in this project has
+used 0.90. Item 47 then found that overlap is what makes the noise red.
+
+Nobody had measured the three effects together. `runs/giza/2026-08-04-overlap-sweep/`.
+
+```
+ overlap  sub-look res   injected local peak     control   separation
+    0.00        6.59 m     816,997  (correct)      22.9      35,676x
+    0.50        3.32 m   1,207,566  (correct)      12.6      95,838x
+    0.75        1.69 m   1,856,891  (WRONG bin)    12.9     143,945x
+    0.90        0.70 m         431.8 (correct)     39.2          11x
+    0.95        0.38 m          46.7 (WRONG)       26.0         1.8x
+```
+
+**The separation collapses by four orders of magnitude between 0.75 and 0.90,
+and at 0.95 neither policy finds the injection at all.** `best_window` reports
+0.105 Hz there and the local peak agrees with it; both are wrong.
+
+The ordinary prominence says the same thing more quietly: the control scores
+6.6-13.6 at overlap 0-0.75 and 17.9-20.7 at 0.90-0.95. What grows is item 47's
+red floor.
+
+### Why the reasoning failed
+
+Item 14's premise was sound and its conclusion does not follow. Overlap does buy
+sub-look coherence. It also correlates the noise between adjacent looks, and
+correlated noise is red, and a red floor is exactly where a spurious peak lives.
+**What overlap buys in coherence it spends on manufacturing the thing the
+coherence was for.**
+
+**Sub-look resolution moves the opposite way and does not rescue the high end.**
+At overlap 0 each sub-look is 6.59 m against 0.38 m at 0.95, seventeen times
+coarser, and item 15's precondition is one dominant scatterer per sub-look
+resolution cell -- so the coarse end should be the harder one. It is not. The
+noise term dominates the precondition term across this whole range.
+
+### What is and is not established
+
+**Established:** the 0.90-0.95 band this project has used throughout is far
+worse than anything below it, on this collect, and item 14's advice as written
+should not be followed.
+
+**Not established:** where the optimum is. Five points, one collect, one
+frequency, one amplitude. The separation still rises from 0.00 to 0.75 and the
+0.75 point names the wrong bin, so "use 0.5" would be fitting a recommendation to
+three points -- which is how item 14 got here.
+
+### A caution about the statistic itself
+
+The local peak named the WRONG bin at overlap 0.75 -- 0.187 Hz where bin 5 is
+0.156 Hz -- while `best_window` named the right one. It maximises a RATIO, so a
+bin with a quieter neighbourhood can beat a bin carrying more signal. That is a
+real failure mode and it showed up at the best-separating setting.
+
+
+## 49. The local peak calibrated on real clutter, with no simulator
+
+Item 47 left the local peak gating nothing because its control maximum was known
+from two scenes. `runs/giza/2026-08-04-localpeak-calib/`.
+
+Nine 96 m grids on the same real uninjected Giza collect, a 3x3 lattice at 150 m
+spacing so no two share a window, at `--overlap 0.5`:
+
+```
+  15.1  16.2  19.2  19.5  20.8  20.9  22.5  25.0  34.4
+  min 15.1   median 20.8   MAX 34.4
+```
+
+The largest is 2.3x the smallest across nine independent patches of desert. A
+2 mm injection at the same settings gives 1,207,566 -- **35,104x the worst
+control grid**.
+
+**No simulator anywhere in it.** This is the scene-derived idea of item 38
+applied to frequency instead of space: the collect supplies its own controls and
+they carry whatever it does, which is the property `--null-static` never had
+(items 33, 37).
+
+### What nine controls are worth
+
+**A smallest possible p of 1/10 = 0.10.** A conformal p-value cannot express more
+than the control count allows -- the same arithmetic item 35 recorded for
+`--null-static`, where nineteen trials were the minimum for 0.05. Nineteen
+disjoint grids would reach it and the collect is large enough to supply them;
+this run did not.
+
+The p-value is not what is doing the work at 35,104x. The number to carry forward
+is the RANGE: **anything under about 35x on this collect at this setting is inside
+what empty desert produces.**
+
+It is one collect, one setting, one grid size. The control maximum is a maximum
+over every window and every bin, so it grows with the number of windows searched
+and does not transfer to a larger grid.

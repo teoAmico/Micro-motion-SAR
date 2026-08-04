@@ -82,7 +82,8 @@ said, not better) and item 7's line numbers.
 | 38 | done | a ZERO-amplitude injection outscores every real one, so the p-value measured the scatterer being added, not it moving |
 | 39 | done | the paired increment at a nominated frequency answers item 38: the scene gains exactly zero, the target gains |
 | 40 | superseded by 41 | the target can be moved off the grid origin at last, and the reported window follows it |
-| 41 | **the current state** | the 16 m offset is not geometry: overlapping windows track one scatterer and the centred one scores lowest |
+| 41 | done | the 16 m offset is not geometry: overlapping windows track one scatterer and the centred one scores lowest |
+| 42 | **the current state** | the centroid over the agreeing cluster turns item 41's 16 m localisation bound into 0.1 m |
 
 ---
 
@@ -4439,3 +4440,71 @@ showed `max |difference| = 0` -- which reads as "the injection never reaches
 focus", a dramatic and entirely false finding. `CLAUDE.md` documents this exact
 trap because it already cost a wrong diagnosis about `--max-pulses`. Documenting
 it was not enough to prevent it.
+
+
+## 42. The centroid: item 41's 16 m bound becomes 0.1 m
+
+Item 41 measured localisation at exactly one window -- 5 placements of 5, never
+better, never worse -- and identified the cause as geometric: at 50% overlap the
+target sits in four windows carrying the same evidence, and the one it is
+CENTRED in scores lowest. It proposed a centroid over the agreeing cluster and
+did not try it. `rs_spectrum_centroid()` tries it.
+`runs/giza/2026-08-04-centroid/`.
+
+**No tolerance parameter.** The obvious construction -- "windows within x
+percent of the peak" -- needs a threshold nobody can derive. The cluster is
+instead the 4-connected block whose dominant frequency matches the seed's to
+within half a bin, which is `rs_spectrum_block_at()`'s existing notion of
+agreement, so membership comes from the measurement. The weight is prominence
+ABOVE THE SCENE MEDIAN, floored at zero: raw prominence lets the background pull
+the answer toward the middle of the cluster's bounding box. Measured, raw gives
+0.463 windows of error and the excess 0.403; squaring the excess gives 0.405, so
+the plain excess is used.
+
+Five INTERIOR placements, truth from the injection geometry verified in item 41
+by differencing two focused images:
+
+```
+ offset m |        truth |        argmax |           centroid
+   +0, +0 | (2.00,2.00)  |  (3,2)  1.00  | (2.00,2.01) 0.01
+  -16,-16 | (1.00,1.00)  |  (0,2)  1.00  | (1.00,1.01) 0.01
+  -16, +0 | (1.00,2.00)  |  (0,3)  1.00  | (1.00,2.01) 0.01
+   +0,+16 | (2.00,3.00)  |  (1,4)  1.00  | (2.00,3.01) 0.01
+  +16,-16 | (3.00,1.00)  |  (2,2)  1.00  | (3.00,1.01) 0.01
+
+  argmax   mean 1.000 windows = 16.0 m, worst 1.00
+  centroid mean 0.008 windows =  0.1 m, worst 0.01
+```
+
+**A factor of 125, and finer than the 1.0 m grid cell.** A centre of mass over
+nine windows is no more limited by the window spacing than a star centroid is by
+the pixel pitch. Item 41's bound was a property of reporting an integer index,
+not of the measurement.
+
+Item 40's placements were all at +-32 m, which puts the target ON the grid
+boundary with half its footprint off the grid; that truncation is the whole of
+the 0.403 residual those runs showed. The interior placements above have no such
+bias.
+
+The systematic +0.01 in range across all five is unexplained. It is a sixth of a
+metre and has not been chased.
+
+### The flag had to be redefined, which is itself the finding
+
+`clipped` first meant "the agreeing cluster touches the grid edge". Measured,
+that fires on FOUR of these five placements -- every one accurate to 0.01 -- and
+would have warned about nothing. Restricting it to the weight-bearing windows
+fires on the same four, with 33-55% of the weight at the edge.
+
+Cluster reach is not the thing. What biases a centroid is the TARGET sitting at
+the boundary so half its own footprint is missing, so the flag now tests whether
+the CENTROID lies within one window of the edge. That separates item 40's +-32 m
+placements from these, which is what a warning has to do.
+
+### Still not detection
+
+The cluster is grown from a window the caller has already chosen to believe, and
+a scene where nothing is known to move still returns a null. One collect, one
+frequency, five placements, all at 2 mm -- the strong end, where item 37 showed
+the reported window moving with amplitude. This needs repeating at 0.125 mm
+before 0.1 m localisation is claimed generally.

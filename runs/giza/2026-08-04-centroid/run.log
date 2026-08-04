@@ -1,0 +1,20 @@
+########## injected at 0,0 m
+POSITIVE CONTROL: injected a 0.1630 Hz scatterer at +0.0,+0.0 m from the grid origin,
+strongest peak in window 17: 0.163 Hz, prominence 39.1, quality 0.430, peak-to-peak velocity 7.5 mm/s (UNCALIBRATED)
+  backed by 10 windows, largest touching block 9
+########## injected at -16,-16 m
+POSITIVE CONTROL: injected a 0.1630 Hz scatterer at -16.0,-16.0 m from the grid origin,
+strongest peak in window 2: 0.163 Hz, prominence 39.1, quality 0.419, peak-to-peak velocity 7.8 mm/s (UNCALIBRATED)
+  backed by 9 windows, largest touching block 9
+########## injected at -16,0 m
+POSITIVE CONTROL: injected a 0.1630 Hz scatterer at -16.0,+0.0 m from the grid origin,
+strongest peak in window 3: 0.163 Hz, prominence 39.1, quality 0.419, peak-to-peak velocity 7.7 mm/s (UNCALIBRATED)
+  backed by 10 windows, largest touching block 10
+########## injected at 0,16 m
+POSITIVE CONTROL: injected a 0.1630 Hz scatterer at +0.0,+16.0 m from the grid origin,
+strongest peak in window 9: 0.163 Hz, prominence 39.1, quality 0.419, peak-to-peak velocity 7.8 mm/s (UNCALIBRATED)
+  backed by 11 windows, largest touching block 9
+########## injected at 16,-16 m
+POSITIVE CONTROL: injected a 0.1630 Hz scatterer at +16.0,-16.0 m from the grid origin,
+strongest peak in window 12: 0.163 Hz, prominence 39.1, quality 0.419, peak-to-peak velocity 7.8 mm/s (UNCALIBRATED)
+  backed by 9 windows, largest touching block 9

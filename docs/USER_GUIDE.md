@@ -1044,6 +1044,13 @@ here so the guide does not imply the set above is complete:
   wrote. If you have code holding an `img->r0`, it will fail to compile — that
   is the point of the rename. Anything indexing range bins against it must
   offset from the CENTRE bin. See `docs/FOLLOW-UPS.md` item 5.
+- **Read the `located at` line, not the window index, for position.** The window
+  named by `strongest peak in window N` is wrong by exactly one window every time
+  at 50% overlap — the target sits in four windows and the one it is centred in
+  scores lowest. The `located at` centroid beside it is accurate to 0.008 windows
+  (0.1 m), finer than the grid cell. If it says `CLIPPED at the grid edge`, the
+  target is at the boundary with half its footprint off the grid: move the grid.
+  `FOLLOW-UPS.md` items 41–42.
 - **The velocity beside a reported frequency is not a calibrated amplitude.** It
   is the raw peak-to-peak of the tracked series before detrending, so it carries
   the trend and the noise: a motionless Giza scene prints 124.8 mm/s through that

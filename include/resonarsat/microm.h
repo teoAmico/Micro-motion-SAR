@@ -1440,6 +1440,91 @@ resonarsat_status_t rs_spectrum_prominence_at(const rs_spectrum_t *spec,
                                               double *out_psd,
                                               double *out_prom);
 
+/* Where a target sits, to better than one window. See rs_spectrum_centroid(). */
+typedef struct {
+    size_t seed;          /* the window the centroid was grown from */
+    double freq_hz;       /* the frequency the cluster agrees on */
+
+    double c_az, c_rg;    /* centroid in FRACTIONAL window indices */
+    double az_px, rg_px;  /* and in image pixels, if the caller supplied geometry */
+
+    size_t n_cluster;     /* windows in the agreeing 4-connected block */
+    int    clipped;       /* non-zero if the cluster touches a grid edge */
+} rs_centroid_t;
+
+/* Locate a target to better than the window spacing, by taking the centre of
+ * mass of the windows that agree on its frequency.
+ *
+ * WHY A SINGLE WINDOW INDEX IS NOT THE ANSWER. Item 41 measured this project's
+ * localisation at exactly one window, 5 placements out of 5, never better and
+ * never worse. The cause is geometric rather than statistical: at the usual
+ * win 32 on stride 16 the windows overlap by half, so a target sits inside FOUR
+ * of them at once. Those four contain the same dominant scatterer, the phase
+ * estimator tracks that scatterer's phase by construction, and they return
+ * bit-identical displacement series -- thirteen such pairs in one Giza run.
+ * Their prominences then agree to 1.5 percent, and, measured, THE WINDOW THE
+ * TARGET IS CENTRED IN SCORES LOWEST of the group: 38.56 against 39.14.
+ *
+ * So argmax cannot be right except by accident. It is choosing between windows
+ * that carry the same evidence, on a difference that is noise, and item 37
+ * recorded the winner moving with injected amplitude for that reason.
+ *
+ * WHAT THE CLUSTER IS, AND WHY THERE IS NO TOLERANCE PARAMETER. The obvious
+ * construction -- "windows within x percent of the peak" -- needs a threshold
+ * nobody can derive. This uses the block that already exists: the 4-connected
+ * set of windows whose dominant frequency matches the seed's to within half a
+ * bin, which is rs_spectrum_block_at()'s notion of agreement. Membership is
+ * then decided by the measurement rather than by a constant.
+ *
+ * THE WEIGHT IS PROMINENCE ABOVE THE SCENE MEDIAN, floored at zero. Weighting
+ * by raw prominence lets the background pull the answer toward the middle of
+ * the cluster's bounding box; weighting by the excess over what an ordinary
+ * window in this scene scores puts the mass where the evidence is. Measured
+ * across five placements, raw prominence gives a mean error of 0.463 windows
+ * and the excess gives 0.403. Squaring the excess changes nothing (0.405), so
+ * the plain excess is used.
+ *
+ * MEASURED, against target positions taken from the imagery -- two focus runs
+ * differing only in --inject-vib, differenced -- not from any reported window:
+ *
+ *     argmax                    mean error 1.000 windows, worst 1.00
+ *     centroid, raw prominence  mean error 0.463 windows, worst 0.59
+ *     centroid, excess          mean error 0.403 windows, worst 0.50
+ *
+ * Those five placements all put the target ON the grid boundary, which is what
+ * the residual 0.4 is. Repeated at five INTERIOR placements on the same collect:
+ *
+ *     argmax    mean error 1.000 windows = 16.0 m, worst 1.00
+ *     centroid  mean error 0.008 windows =  0.1 m, worst 0.01
+ *
+ * A factor of 125, and finer than the 1.0 m grid cell -- a centre of mass over
+ * nine windows is not limited by the window spacing any more than a centroid of
+ * a star image is limited by the pixel pitch.
+ *
+ * 'clipped' MEANS THE ANSWER IS NEAR THE BOUNDARY, not that the cluster
+ * reaches it. Those are different and the difference was measured: four of five
+ * accurate placements had both the agreeing cluster and its weight-bearing
+ * windows touching the grid edge, and were still right to 0.01 windows, because
+ * the target's own footprint was complete. What biases a centroid is the TARGET
+ * sitting at the boundary so that half of its footprint is off the grid --
+ * worth close to half a window when it happens. The flag is therefore set when
+ * the centroid itself lies within one window of the edge. A clipped answer is
+ * pulled toward the scene centre by an amount this does not correct; move the
+ * grid rather than trusting it.
+ *
+ * 'stride_az', 'stride_rg', 'win_az' and 'win_rg' convert the answer to pixels;
+ * pass zeros to skip that and read 'c_az' and 'c_rg' only. The convention is
+ * rs_microm_track()'s: window w spans pixels [w * stride, w * stride + win), so
+ * its centre is w * stride + (win - 1) / 2.
+ *
+ * This locates; it does not detect. The cluster is grown from a window the
+ * caller has already chosen to believe. */
+resonarsat_status_t rs_spectrum_centroid(const rs_spectrum_t *spec,
+                                         size_t seed,
+                                         size_t stride_az, size_t stride_rg,
+                                         size_t win_az, size_t win_rg,
+                                         rs_centroid_t *out);
+
 /* What a scene-derived null found. See rs_spectrum_scene_null(). */
 typedef struct {
     size_t window;        /* the window maximising z; n_win if none qualified */

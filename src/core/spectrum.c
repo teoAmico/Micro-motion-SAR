@@ -942,6 +942,127 @@ resonarsat_status_t rs_spectrum_ps_window_opts(const rs_spectrum_t *spec,
     return RS_OK;
 }
 
+/* Defined below, beside the scene-derived null that also needs it. */
+static double rs_median_inplace(double *v, size_t n);
+
+/* Centre of mass of the windows agreeing with a seed. See microm.h on why a
+ * single window index cannot be the answer at 50 percent overlap. */
+resonarsat_status_t rs_spectrum_centroid(const rs_spectrum_t *spec,
+                                         size_t seed,
+                                         size_t stride_az, size_t stride_rg,
+                                         size_t win_az, size_t win_rg,
+                                         rs_centroid_t *out)
+{
+    if (!out) {
+        rs_set_error("centroid: no output structure");
+        return RS_ERR_ARG;
+    }
+    memset(out, 0, sizeof *out);
+    if (!spec || !spec->prominence || !spec->dominant_freq || spec->n_win == 0) {
+        rs_set_error("centroid: spectrum has no per-window prominence");
+        return RS_ERR_ARG;
+    }
+    if (seed >= spec->n_win) {
+        rs_set_error("centroid: seed window %zu of %zu", seed, spec->n_win);
+        return RS_ERR_ARG;
+    }
+    if (spec->n_win_az == 0 || spec->n_win_rg == 0 ||
+        spec->n_win_az * spec->n_win_rg != spec->n_win) {
+        rs_set_error("centroid: window grid %zux%zu does not describe %zu windows",
+                     spec->n_win_az, spec->n_win_rg, spec->n_win);
+        return RS_ERR_ARG;
+    }
+    if (!(spec->df > 0.0)) {
+        rs_set_error("centroid: spectrum has no bin width");
+        return RS_ERR_ARG;
+    }
+
+    const size_t n = spec->n_win, nrg = spec->n_win_rg;
+    const double f0 = spec->dominant_freq[seed];
+    const double tol = 0.5 * spec->df;
+
+    /* The scene median prominence, which the weight is taken above. Copied
+     * because rs_median_inplace() sorts what it is given. */
+    double *tmp = malloc(n * sizeof *tmp);
+    unsigned char *in = calloc(n, 1);
+    size_t *stack = malloc(n * sizeof *stack);
+    if (!tmp || !in || !stack) {
+        free(tmp); free(in); free(stack);
+        rs_set_error("centroid: out of memory for %zu windows", n);
+        return RS_ERR_ALLOC;
+    }
+    for (size_t w = 0; w < n; w++) tmp[w] = spec->prominence[w];
+    const double med = rs_median_inplace(tmp, n);
+    free(tmp);
+
+    /* Flood-fill the 4-connected block agreeing with the seed's frequency --
+     * the same notion of agreement rs_spectrum_block_at() uses, so membership
+     * comes from the measurement and not from a tolerance parameter. */
+    size_t top = 0;
+    stack[top++] = seed;
+    in[seed] = 1;
+    size_t n_cluster = 0;
+    double sw = 0.0, saz = 0.0, srg = 0.0;
+
+    while (top > 0) {
+        const size_t w = stack[--top];
+        const size_t a = w / nrg, r = w % nrg;
+        n_cluster++;
+
+        const double excess = spec->prominence[w] - med;
+        if (excess > 0.0) {
+            sw  += excess;
+            saz += excess * (double)a;
+            srg += excess * (double)r;
+        }
+
+        const long da[4] = { 1, -1, 0, 0 }, dr[4] = { 0, 0, 1, -1 };
+        for (int k = 0; k < 4; k++) {
+            const long na = (long)a + da[k], nr = (long)r + dr[k];
+            if (na < 0 || nr < 0 ||
+                na >= (long)spec->n_win_az || nr >= (long)nrg) continue;
+            const size_t nv = (size_t)na * nrg + (size_t)nr;
+            if (in[nv]) continue;
+            if (fabs(spec->dominant_freq[nv] - f0) > tol) continue;
+            in[nv] = 1;
+            stack[top++] = nv;
+        }
+    }
+    free(in); free(stack);
+
+    /* Every member at or below the scene median leaves no mass to average. The
+     * seed alone then answers, which is argmax's behaviour and is reported as
+     * a one-window cluster rather than dressed up. */
+    if (!(sw > 0.0)) {
+        out->c_az = (double)(seed / nrg);
+        out->c_rg = (double)(seed % nrg);
+    } else {
+        out->c_az = saz / sw;
+        out->c_rg = srg / sw;
+    }
+    out->seed = seed;
+    out->freq_hz = f0;
+    out->n_cluster = n_cluster;
+    /* Truncation is about where the ANSWER sits, not where the cluster reaches.
+     * A centroid a full window inside the boundary has the target's whole
+     * footprint on the grid even when the agreeing block runs to the edge --
+     * measured, four of five accurate placements had cluster AND weight
+     * touching the edge and were still right to 0.01 windows. What actually
+     * biases the answer is the target itself being at the boundary, so half its
+     * footprint is off the grid. That is this test. */
+    out->clipped = (out->c_az < 1.0 || out->c_rg < 1.0 ||
+                    out->c_az > (double)spec->n_win_az - 2.0 ||
+                    out->c_rg > (double)nrg - 2.0);
+
+    /* Window w spans pixels [w*stride, w*stride + win), so its centre is
+     * w*stride + (win-1)/2 -- rs_microm_track()'s convention. */
+    if (stride_az > 0 && win_az > 0)
+        out->az_px = out->c_az * (double)stride_az + 0.5 * (double)(win_az - 1);
+    if (stride_rg > 0 && win_rg > 0)
+        out->rg_px = out->c_rg * (double)stride_rg + 0.5 * (double)(win_rg - 1);
+    return RS_OK;
+}
+
 /* Prominence at a nominated frequency for one window. See microm.h on why this
  * is a different question from the dominant peak, and on item 38. */
 resonarsat_status_t rs_spectrum_prominence_at(const rs_spectrum_t *spec,

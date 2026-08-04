@@ -1992,6 +1992,24 @@ static int rs_cmd_mmotion(int argc, char **argv)
         }
     }
 
+    /* Where the target actually is, to better than a window. argmax cannot get
+     * this right except by accident: at 50% overlap a target sits in four
+     * windows that track the same scatterer and score within 1.5% of each
+     * other, and the one it is CENTRED in scores lowest. See item 41. */
+    {
+        rs_centroid_t ct;
+        if (rs_spectrum_centroid(&spec, best, mp.stride_az, mp.stride_rg,
+                                 mp.win_az, mp.win_rg, &ct) == RS_OK) {
+            printf("  located at window (%.2f, %.2f) of (%zu, %zu) -- pixel "
+                   "(%.1f, %.1f) --\n"
+                   "           from %zu windows agreeing on %.3f Hz%s\n",
+                   ct.c_az, ct.c_rg, spec.n_win_az - 1, spec.n_win_rg - 1,
+                   ct.az_px, ct.rg_px, ct.n_cluster, ct.freq_hz,
+                   ct.clipped ? ", CLIPPED at the grid edge so biased inward"
+                              : "");
+        }
+    }
+
     /* The scene-derived null. Unlike --null-static this needs no extra
      * processing and carries the collect's own trends by construction, which is
      * exactly what item 37 showed the simulated null could not. It gates

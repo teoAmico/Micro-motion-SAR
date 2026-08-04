@@ -34,6 +34,26 @@
 
 /* One chain run. Returns the recovered dominant frequency of the most active
  * window, or -1 on failure, and reports the diagnostics that explain it. */
+/* A deterministic 32-bit mixer, so a fixture's per-window noise is genuinely
+ * uncorrelated BETWEEN windows and identical on every platform.
+ *
+ * Worth the twelve lines. The centroid case first used ((w*A + k*B) % M)
+ * directly, which is LINEAR in k -- a sawtooth carrying the same dominant
+ * frequency in every window, differing only in phase. Every background window
+ * then agreed with every other, and the 4-connected agreeing cluster swallowed
+ * all 36 windows of the grid. The centroid still landed correctly, because the
+ * weight is prominence above the scene median and the background contributes
+ * none, so the defect was invisible in the number being tested and showed up
+ * only in the cluster size. */
+static double rs_test_noise(size_t w, size_t k)
+{
+    unsigned x = (unsigned)(w * 73856093u) ^ (unsigned)(k * 19349663u);
+    x ^= x >> 16; x *= 2246822519u;
+    x ^= x >> 13; x *= 3266489917u;
+    x ^= x >> 16;
+    return (double)x / 4294967295.0 - 0.5;
+}
+
 static double run_case(double vib_freq, double vib_amp, size_t n_looks,
                        double *pp_out, double *quality_out,
                        double *t_sap_out, double *df_out, double *prom_out)
@@ -2208,6 +2228,92 @@ int main(void)
      * zero-amplitude injection outscore a real one. Asked about f0 specifically,
      * the ordering reverses -- and that reversal is the whole point of the
      * paired increment this exists to support. */
+    /* THE CENTROID BEATS ARGMAX BECAUSE ARGMAX CANNOT SEE HALF A WINDOW.
+     *
+     * Item 41's situation built exactly: a target whose energy spans a 2x2
+     * block of overlapping windows, with the window it is CENTRED in scoring
+     * slightly LOWEST -- which is what was measured on the real collect, 38.56
+     * against 39.14. argmax then names a corner of the block; the centre of
+     * mass names the middle, which is where the target is. */
+    RS_CASE("the centroid resolves a target argmax puts a whole window away");
+    {
+        const size_t naz = 6, nrg = 6, nw = naz * nrg, nlk = 64;
+        rs_microm_t m;
+        memset(&m, 0, sizeof m);
+        m.n_looks = nlk; m.n_win = nw; m.n_win_az = naz; m.n_win_rg = nrg;
+        m.win_az = m.win_rg = 32; m.stride_az = m.stride_rg = 16;
+        m.dt = 0.25; m.az_spacing_m = m.rg_spacing_m = 1.0;
+        m.disp_az  = calloc(nw * nlk, sizeof *m.disp_az);
+        m.disp_rg  = calloc(nw * nlk, sizeof *m.disp_rg);
+        m.disp_los = calloc(nw * nlk, sizeof *m.disp_los);
+        m.vel_los  = calloc(nw * nlk, sizeof *m.vel_los);
+        m.quality  = calloc(nw, sizeof *m.quality);
+        m.d_a      = calloc(nw, sizeof *m.d_a);
+        RS_CHECK(m.disp_az && m.disp_rg && m.disp_los && m.vel_los && m.quality && m.d_a);
+
+        /* The target sits between windows 2 and 3 on both axes, so the truth is
+         * (2.5, 2.5) and no single window index can express it. */
+        const size_t tone_bin = 9;
+        for (size_t w = 0; w < nw; w++) {
+            m.quality[w] = 1.0; m.d_a[w] = 0.3;
+            const size_t a = w / nrg, r = w % nrg;
+            const int member = (a == 2 || a == 3) && (r == 2 || r == 3);
+            /* The CENTRE-most members are given the SMALLER amplitude, so a
+             * naive argmax is pulled to a corner. Without this inversion the
+             * case would pass for the wrong reason. */
+            const double blk_amp = member ? ((a == 2 && r == 2) ? 0.92 : 1.00) : 0.0;
+            for (size_t k = 0; k < nlk; k++) {
+                double v = 0.30 * rs_test_noise(w, k);
+                if (blk_amp > 0.0)
+                    v += blk_amp * sin(2.0 * M_PI * (double)tone_bin * (double)k / (double)nlk);
+                m.vel_los[w * nlk + k] = v;
+                m.disp_los[w * nlk + k] = v;
+            }
+        }
+
+        rs_spectrum_t sc;
+        RS_CHECK_OK(rs_spectrum_compute(&m, RS_SPEC_DISPLACEMENT, &sc));
+        size_t argmax_w = 0;
+        for (size_t w = 1; w < nw; w++)
+            if (sc.prominence[w] > sc.prominence[argmax_w]) argmax_w = w;
+
+        rs_centroid_t ct;
+        RS_CHECK_OK(rs_spectrum_centroid(&sc, argmax_w, m.stride_az, m.stride_rg,
+                                         m.win_az, m.win_rg, &ct));
+        const double t_az = 2.5, t_rg = 2.5;
+        const double e_arg = fmax(fabs((double)(argmax_w / nrg) - t_az),
+                                  fabs((double)(argmax_w % nrg) - t_rg));
+        const double e_cen = fmax(fabs(ct.c_az - t_az), fabs(ct.c_rg - t_rg));
+        printf("    truth (%.1f,%.1f); argmax window %zu (%zu,%zu) err %.2f; "
+               "centroid (%.2f,%.2f) err %.2f\n",
+               t_az, t_rg, argmax_w, argmax_w / nrg, argmax_w % nrg, e_arg,
+               ct.c_az, ct.c_rg, e_cen);
+        printf("    cluster %zu windows at %.4f Hz, pixel (%.1f,%.1f), clipped %d\n",
+               ct.n_cluster, ct.freq_hz, ct.az_px, ct.rg_px, ct.clipped);
+
+        RS_CHECK(e_arg >= 0.5);              /* argmax is half a window out ... */
+        RS_CHECK(e_cen < 0.25);              /* ... and the centroid is not */
+        RS_CHECK(e_cen < e_arg);
+        RS_CHECK(ct.n_cluster >= 4);
+        RS_CHECK(ct.clipped == 0);           /* the block is interior by design */
+        /* Pixels follow rs_microm_track()'s convention: centre = w*stride +
+         * (win-1)/2, so (2.5, 2.5) is pixel 2.5*16 + 15.5 = 55.5. */
+        RS_CHECK_NEAR(ct.az_px, ct.c_az * 16.0 + 15.5, 1e-9);
+        RS_CHECK_NEAR(ct.rg_px, ct.c_rg * 16.0 + 15.5, 1e-9);
+
+        /* Contract: rejected calls clear the output, and a seed off the end is
+         * an error rather than a read past the array. */
+        RS_CHECK_ERR(rs_spectrum_centroid(&sc, nw, 16, 16, 32, 32, &ct), RS_ERR_ARG);
+        RS_CHECK(ct.n_cluster == 0);
+        RS_CHECK_ERR(rs_spectrum_centroid(NULL, 0, 16, 16, 32, 32, &ct), RS_ERR_ARG);
+        /* Zero geometry means "give me window indices only". */
+        RS_CHECK_OK(rs_spectrum_centroid(&sc, argmax_w, 0, 0, 0, 0, &ct));
+        RS_CHECK(ct.az_px == 0.0 && ct.rg_px == 0.0 && ct.c_az > 0.0);
+
+        rs_spectrum_free(&sc);
+        rs_microm_free(&m);
+    }
+
     RS_CASE("prominence at a nominated frequency reverses the dominant-peak ranking");
     {
         const size_t nw = 2, nlk = 64;

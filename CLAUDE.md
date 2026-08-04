@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 44 items and their status.
+an index of all 45 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -215,6 +215,15 @@ motionless target won. The median window's increment is +0.00 and the injected
 window's is positive — but the pairing must differ in NOTHING BUT amplitude:
 paired against the uninjected run instead of the zero-amplitude one, the increment
 is LARGER than a real 0.5 mm signal, because it is then measuring the scatterer.
+
+**The quality gate discards vibrating targets on the phase route** (item 45). On
+that route `quality` IS amplitude stability, the same quantity as `D_A`, and a
+scatterer vibrating at 2 mm is not amplitude-stable — so the persistent-scatterer
+criterion and the signal being measured are in direct conflict at large amplitude.
+Measured on ICEYE Houston: six windows carry the injected frequency at the scene's
+highest prominence and all six fail the gate, so the tool reported a trend
+artefact instead. Item 37 found the complement — a barely-moving scatterer has LOW
+`D_A` and passes. The gate prefers targets that do not move.
 
 **But a null only calibrates against noise its own model can produce** (item 37).
 Below 2 mm the Giza sweep reported bin 1 instead of the injected frequency, with

@@ -1,0 +1,28 @@
+########## no injection -- the screen
+warning: grid cell 1.000 m is coarser than the 0.210 m azimuth
+sub-apertures: 128 looks, dt 0.0448 s
+  observable band  f_max 11.17 Hz   AT sub-look resolution 2.89 m
+  amplitude dispersion: best 0.444, median 0.597; 0 of 25 windows meet D_A <= 0.25
+  persistent scatterers: none -- 23 windows passed the shared gates, 0 met D_A <= 0.25
+  located at window (0.28, 0.59) of (4, 4) -- pixel (19.9, 25.0) --
+  scene-derived null: window 1 at 0.524 Hz stands 3.03 robust deviations above
+  WARNING: NO window holds a dominant scatterer by the persistent-scatterer
+strongest peak in window 0: 0.524 Hz, prominence 25.4, quality 0.543, peak-to-peak velocity 105.7 mm/s (UNCALIBRATED)
+  backed by 9 windows, largest touching block 9
+  NOT ADJUDICATED -- nothing here distinguishes this from an artefact of the
+########## positive control, 1.0 Hz at 2 mm
+  amplitude dispersion: best 0.457, median 0.714; 0 of 25 windows meet D_A <= 0.25
+  persistent scatterers: none -- 13 windows passed the shared gates, 0 met D_A <= 0.25
+  located at window (0.00, 0.00) of (4, 4) -- pixel (15.5, 15.5) --
+  scene-derived null: window 12 at 1.047 Hz stands 7.13 robust deviations above
+  WARNING: NO window holds a dominant scatterer by the persistent-scatterer
+strongest peak in window 0: 0.524 Hz, prominence 25.4, quality 0.543, peak-to-peak velocity 105.7 mm/s (UNCALIBRATED)
+  backed by 5 windows, largest touching block 4
+########## its zero-amplitude twin
+  amplitude dispersion: best 0.457, median 0.661; 0 of 25 windows meet D_A <= 0.25
+  persistent scatterers: none -- 20 windows passed the shared gates, 0 met D_A <= 0.25
+  located at window (1.90, 1.90) of (4, 4) -- pixel (45.8, 45.8) --
+  scene-derived null: window 12 at 0.524 Hz stands 2.88 robust deviations above
+  WARNING: NO window holds a dominant scatterer by the persistent-scatterer
+strongest peak in window 6: 0.524 Hz, prominence 26.7, quality 0.361, peak-to-peak velocity 3.3 mm/s (UNCALIBRATED)
+  backed by 12 windows, largest touching block 11

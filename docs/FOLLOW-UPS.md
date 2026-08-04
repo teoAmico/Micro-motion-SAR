@@ -85,7 +85,8 @@ said, not better) and item 7's line numbers.
 | 41 | done | the 16 m offset is not geometry: overlapping windows track one scatterer and the centred one scores lowest |
 | 42 | done | the centroid over the agreeing cluster turns item 41's 16 m localisation bound into 0.1 m |
 | 43 | done | that 0.1 m is amplitude-dependent: 0.13 m at 2 mm, 2.24 m at 0.125 mm, linear in 1/amplitude |
-| 44 | **the current state** | dwell truncation works and `validate` silently ignored the flag that does it |
+| 44 | done | dwell truncation works and `validate` silently ignored the flag that does it |
+| 45 | **the current state** | first ICEYE measurement: urban misses the PS precondition too, and the quality gate discards the true positive |
 
 ---
 
@@ -4630,3 +4631,90 @@ street grid, building blocks, a circular structure, large parking areas. **The
 Reading the whole product needs 38.7 GB against this machine's 25.8 GB. The
 reader refuses with the arithmetic and names `--rbins`, which is how that refusal
 should read.
+
+
+## 45. First measurement run on ICEYE: the quality gate discards the true positive
+
+Item 44 made the Houston collect usable. This is the first measurement run on it:
+truncated to 6.138 s, `--estimator phase`, 128 looks at 0.90 overlap, 96 m grid,
+with a 1.0 Hz injection at 2 mm and its mandatory zero-amplitude twin.
+`runs/iceye/2026-08-04-houston-first/`.
+
+### Urban does not meet the persistent-scatterer precondition either
+
+```
+                       best D_A   median   windows meeting D_A <= 0.25
+  Giza  (desert, 225)     0.381        —              0 of 225   (item 19)
+  Houston (urban,  25)    0.444     0.597              0 of  25
+```
+
+**Houston is WORSE than Giza on best `D_A`.** The expectation behind screening a
+city was that dense construction would supply the dominant scatterers a desert
+could not. It does not, and the reason is printed beside it: the sub-look
+resolution here is **2.89 m**, and item 15's precondition is one dominant per
+SUB-LOOK RESOLUTION CELL. A 2.89 m cell in a dense city holds many strong
+scatterers, not one. Urban density works against the criterion at this cell size.
+
+That closes a hypothesis this project has carried since item 19 -- that the Giza
+null was about desert -- without needing a third scene.
+
+### The quality gate discards the true positive
+
+`df` is 0.1629 Hz and six windows report 1.047 Hz, inside half a bin of the
+injected 1.000, with the highest prominence in the scene. Every one fails the
+gate:
+
+```
+ win  (az,rg)   dominant    prom  quality  gates
+   0 (0,0)        0.524    25.4   0.5428      1   <- REPORTED
+   6 (1,1)        1.047    35.8   0.2061      0
+  12 (2,2)        1.047    35.0   0.2406      0   <- the injected window
+```
+
+`mmotion` reported 0.524 Hz, the first admissible bin above the band floor --
+item 37's trend at the first door it is allowed through.
+
+**This is not a threshold that wants tuning.** On the phase route `quality` IS
+amplitude stability, the same quantity as `D_A`. A scatterer vibrating at 2 mm is
+not amplitude-stable across sub-looks, because that is what the motion does to
+it. **The persistent-scatterer criterion and the signal being measured are in
+direct conflict at large amplitude**, and item 37 found the complement: a
+barely-moving scatterer has LOW `D_A` and passes. The gate prefers targets that
+do not move.
+
+Item 31's failure mode -- the tracker recovers and the policy discards -- with a
+different culprit, on a different vendor.
+
+### The scene-derived null and the paired increment both recover it
+
+```
+                    plain        injected            zero-amplitude twin
+  scene null   0.524 Hz z 3.03   1.047 Hz z 7.13     0.524 Hz z 2.88
+               window 1          WINDOW 12           window 12
+```
+
+The null names the injected window -- 12 is `(2,2)`, the grid origin -- and the
+injected frequency, at more than twice the z of either control. It applies no
+quality gate, which is exactly why it survives.
+
+The increment at 1.000 Hz agrees: +86.91 at windows 6, 7 and 11, +80.32 at 12,
+**median +0.00** over 25 windows. The machinery contributes nothing, as item 39
+measured on Capella, and the centred window again scores slightly lowest of its
+neighbours -- item 41 reproduced on another vendor and another scene.
+
+**Item 38 concluded the scene-derived null did not help.** It did not there,
+because the confound was a bright static scatterer that genuinely IS unusual for
+its scene. Here the confound is a gate, and the null is the only reported
+statistic that steps around it. Both readings stand: it is useful against some
+confounds and not others, which is the most that can be said for any single
+statistic here.
+
+### Open, and not attempted
+
+The `located at` centroid is seeded from `best_window`, so on the injected run it
+reports (0.00, 0.00) -- the artefact's position rather than the target's. **The
+centroid is only as good as its seed**, and nothing currently seeds it from the
+scene-derived null. That is a one-line change with a measurement behind it and it
+has not been made.
+
+Nothing in this scene is known to move. The 1.047 Hz is ours.

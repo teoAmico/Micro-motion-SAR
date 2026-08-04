@@ -571,8 +571,9 @@ on real data while still passing item 11's artefact at 100% agreement.
 
 ## 7. Making a result credible
 
-Five things, in increasing cost. A result without at least the first two is not
-worth reporting.
+Six things, in increasing cost. A result without at least the first three is not
+worth reporting — step 0b was added after a zero-amplitude control showed that a
+positive control alone can be passed by a target that never moves.
 
 **0. A positive control, if the answer is a null.** `--inject-vib
 FREQ_HZ[,AMP_MM[,REL]]` adds a scatterer of known frequency and amplitude to the
@@ -596,6 +597,15 @@ sample magnitude. Keep the *projected* amplitude below about λ/8 for
 tests nothing. `REL` is deliberately bounded and relative — `FOLLOW-UPS.md` item
 21 records a conclusion that had to be retracted because an unbounded injected
 gain let outliers rather than the mechanism carry the result.
+
+**A positive control on its own is not evidence, and this is measured rather
+than cautionary.** Run the same command with `AMP_MM` set to `0.0` — a bright
+scatterer added to the phase history that does not move — and on the Giza collect
+it produces a *larger* peak than any real injection (prominence 56.3 against
+38–47), clearing the same `--null-static` controls. Prominence, the null control
+and the scene-derived null all rank the motionless target first. Only the
+reported **frequency** separates them. See `0b` below for how to compare the two,
+and `FOLLOW-UPS.md` items 38 and 39.
 
 Run it as a **separate** run from the measurement. The injected scatterer is in
 the data, so the reported answer is the injection — on the quick-start fixture,
@@ -637,6 +647,47 @@ All four selection policies return 1.210 Hz against a 1.2 Hz injection, inside
 the 0.0252 Hz half-bin — and the scene's own 0.5 Hz is nowhere in the output,
 because a scatterer at 20x the median swamps it. That is the control working, and
 it is also why the run tells you nothing about the scene.
+
+**0b. The zero-amplitude twin, and `--probe-hz` to compare against it.** The two
+runs differ in nothing but amplitude, so anything they share is the injection
+machinery rather than the motion.
+
+```sh
+./build/micromotion mmotion --cphd scene.cphd ... --probe-hz 0.163 \
+    --inject-vib 0.163,0.5,20 --out real
+./build/micromotion mmotion --cphd scene.cphd ... --probe-hz 0.163 \
+    --inject-vib 0.163,0.0,20 --out zero      # the twin: same code path, no motion
+```
+
+`--probe-hz` adds `probe_psd` and `probe_prominence` to every row of
+`PREFIX_windows.csv`, measured at that one frequency for every window. **The
+dominant-peak columns cannot be differenced between runs** whose strongest peaks
+sit at different frequencies, which is exactly how the motionless target won
+above. Subtract the twin's `probe_prominence` from the real run's, window by
+window. On the Giza collect at 0.5 mm:
+
+```
+  win  8   +5.15     <- the injected window
+  win 18   +5.06     }
+  win 17   +5.06     }  its aliasing ghosts, from a 1.0 m cell against a
+  win 13   +5.06     }  0.051 m azimuth resolution -- mmotion warns about this
+  MEDIAN over 25 windows:  +0.00
+```
+
+The median window gains **exactly nothing**, which is the point: the injection
+machinery contributes zero at the probed frequency, so what is left is the
+motion.
+
+**The pairing must differ in nothing but amplitude.** Difference the *uninjected*
+run against the zero-amplitude twin instead and you get +7.71 at the injected
+window and +18.35 elsewhere — larger than a real 0.5 mm signal — because those
+two runs differ by the scatterer's presence, not its motion. Paired wrongly the
+statistic is worse than useless, since it looks like a stronger result.
+
+This validates injection experiments and **transfers nothing to a real target**:
+a collect with a suspected vibrating object has no zero-amplitude twin to
+subtract.
+
 
 **1. A null control.** `--null-static N` runs the identical processing over a
 scene known to be motionless. This is the only check that catches common-mode
@@ -959,6 +1010,8 @@ here so the guide does not imply the set above is complete:
 
 | flag | command | what it does |
 |---|---|---|
+| `--fmin HZ` | `mmotion` | raises the peak-picking floor above the always-excluded first three bins; it cannot lower it |
+| `--probe-hz HZ` | `mmotion` | adds `probe_psd` and `probe_prominence` at one nominated frequency, so two runs can be differenced there |
 | `--no-detrend` | `mmotion` | skip the least-squares line removal before the periodogram |
 | `--b-shift HZ` | `mmotion` | master/slave band separation; only `--reference pair` uses it |
 | `--null-trials N` | `mmotion` | trials for the shuffled-look floor, beside `--null-static` |

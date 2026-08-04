@@ -175,6 +175,12 @@ The detailed measurements and failed hypotheses are recorded in
   measured that a scatterer had been added, not that it vibrated. Only the
   reported frequency separates the two: zero amplitude answers at the band
   floor, a real injection answers at the injected value (item 38).
+- Comparing a run against its zero-amplitude twin **at one nominated frequency**
+  (`--probe-hz`) does separate them: the median window gains exactly `+0.00`
+  while the injected window gains, so the injection machinery contributes nothing
+  and what remains is the motion. This makes the injection experiments
+  trustworthy and transfers nothing to a real target, which has no twin to
+  subtract (item 39).
 - Earlier injected signals were measured in the correct patch but rejected by
   scene-wide selection rules; the current verdict instead uses the null control.
 - The injected patch and frequency were known in advance. Automatically locating

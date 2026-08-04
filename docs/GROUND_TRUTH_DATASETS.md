@@ -1,25 +1,80 @@
-# SAR Micro-Motion Ground-Truth Data
+# SAR Micro-Motion Ground-Truth Dataset Catalogue
 
-> **Cross-checked against the measured floor, 2026-08-04 (`FOLLOW-UPS.md` item 66).**
-> The comparisons below use the PER-LOOK phase floor that `validate` reports
-> (0.2017 mm/look on ICEYE). The end-to-end detection floor measured after 128
-> looks and a periodogram is **0.0055 mm RMS** (item 53) — **37x lower**. Against
-> that, Kilauea is not "700 times below": its stations sit at 1.7 um median, 3x
-> below, with `HV.RIMD` reaching 15 um on 2024-06-09, which is **2.7x ABOVE**.
-> Item 61 rejected that reading on ATTRIBUTION — no catalogued event, and the
-> station is only intermittently high — not on amplitude. Oroville (0.78 um) and
-> Mexico City (0.6 um) remain genuinely below. The conclusion of this page stands;
-> the margin on Kilauea is much narrower than stated.
+> **Catalogue purpose:** an inventory of ground-truth datasets and candidate
+> pairings for SAR micro-motion validation. Entries include public downloads,
+> request-based collections, synchronized SAR pairs, and standalone motion
+> data suitable for injection or detector tests.
+
+## How to use this catalogue
+
+Use the dataset class and status to select the most suitable source:
+
+| Class | What it provides | Typical use |
+|---|---|---|
+| **Synchronized SAR pair** | Phase-preserving SAR plus independently timestamped motion truth | End-to-end validation |
+| **SAR candidate** | A known SAR collection or target that still needs a sensor match or access request | Discovery and pairing |
+| **Ground-motion fixture** | Public vibration, acceleration, GNSS or displacement data without a confirmed SAR collect | Injection, regression and detector tests |
+
+Before treating a dataset as a benchmark, verify these five fields:
+
+1. **Acquisition:** product type, identifier, footprint and exact aperture.
+2. **Truth:** sensor type, channel, calibration, units and target coordinates.
+3. **Time:** an absolute UTC clock and uncertainty small enough for the dwell.
+4. **Geometry:** target containment and a defensible projection into radar line of sight.
+5. **Access:** a stable download or a documented request path, with permission to
+   redistribute derived results.
+
+Status labels:
+
+- **Positive:** synchronized motion is demonstrated and plausibly above the
+  measured practical floor.
+- **Null/control:** the SAR and truth are synchronized, but motion is below the
+  floor or no motion is expected.
+- **Candidate:** the spatial or temporal relationship is promising, but one or
+  more required fields remain unverified.
+- **Fixture:** useful public truth data with no confirmed SAR overlap.
+- **Rejected near-match:** proximity, date or catalogue metadata looked useful,
+  but exact geometry, timing, format or attribution failed.
+
+Use this entry format when adding another dataset:
+
+```text
+### Dataset name
+
+**Status:** Positive | Null/control | Candidate | Fixture | Rejected near-match
+
+- Provider and stable landing page:
+- SAR product and exact UTC aperture:
+- Ground-truth source, sample rate and clock:
+- Target coordinates and line-of-sight information:
+- Access and redistribution limits:
+- Why it is useful / what remains unverified:
+```
+
+The records are grouped by dataset type. The opening table gives the quickest
+route to a usable source; each record contains the evidence, limitations and
+links needed to retrieve or evaluate it.
+
+## Catalogue index
+
+| Need | Start here |
+|---|---|
+| Public SAR plus synchronized truth | [Public pipeline-compatible datasets](#public-pipeline-compatible-datasets) |
+| Best exact or near-exact pairings | [Priority synchronized and near-synchronized datasets](#priority-synchronized-and-near-synchronized-datasets) |
+| Controlled amplitude/frequency tests | [Controlled land targets](#controlled-land-targets) |
+| Public structural waveforms for injection | [Open structural waveforms for injection tests](#open-structural-waveforms-for-injection-tests) |
+| Ships, trains and other moving targets | [Adjacent micro-motion benchmarks](#adjacent-micro-motion-benchmarks) and [Public on-board ship-motion sources](#public-on-board-ship-motion-sources) |
+| Airport and aircraft motion | [Airport CPHD and surface-motion cross-match](#airport-cphd-and-surface-motion-cross-match) |
+| Requesting unpublished data | [Request-based datasets: what to request](#request-based-datasets-what-to-request) |
 
 
-This page tracks phase-preserving spaceborne SAR collections acquired at the
-same time as an independent vibration measurement. The goal is to find data that
-can test both questions the project cares about:
+The catalogue focuses on phase-preserving spaceborne SAR collections paired with
+independent motion measurements. The datasets support two validation questions:
 
 1. Can the software recover a vibration known to be present?
 2. Does it stay silent on bright objects and scene areas that did not vibrate?
 
-Two exact openly catalogued pairings have now been found. A Capella spotlight
+Two exact openly catalogued pairings are included. A Capella spotlight
 CPHD over Kilauea overlaps a calibrated 100 Hz HVO seismometer trace and is
 anonymous on both sides. It is native to the present `mmotion --cphd` route,
 but the recorded displacement is hundreds of times below the estimated
@@ -33,7 +88,7 @@ native `mmotion` input. No single repository packages either pair together, and
 the stronger spotlight/dwell collections below still require requests to their
 authors, project teams or commercial providers.
 
-## Strict public, pipeline-compatible detectable benchmark result
+## Public pipeline-compatible datasets
 
 Applying all four requirements at once gives no confirmed result: the data must
 be downloadable from a public URL (an unofficial mirror is acceptable),
@@ -78,7 +133,7 @@ manifest establishes all of the following:
 6. every constituent file is downloadable, even if it comes from a different
    repository or an unofficial mirror.
 
-This compositional search is now being applied as a spatiotemporal join between
+The compositional records below come from a spatiotemporal join between
 public Capella and Umbra phase-history catalogues and independently published
 bridge, turbine, dam, machinery and seismic archives. Catalogue proximity alone
 is insufficient. For example, Capella CPHD
@@ -270,7 +325,7 @@ are sparse in time.  The Severn Suspension Bridge campaigns used nine receivers
 at 10 or 20 Hz and observed centimetre-scale deck/tower response, but they were
 short campaigns rather than a continuously public archive.
 
-## Best candidates
+## Priority synchronized and near-synchronized datasets
 
 ### Kilauea earthquake, Capella CPHD plus HVO station RIMD
 
@@ -619,7 +674,7 @@ route, not a public download.
 Source: ESA, "Innovative micro-Doppler processing and applications from SAR."
 <https://eo4society.esa.int/2025/05/05/innovative-micro-doppler-processing-and-applications-from-sar/>
 
-## Other real targets
+## Other reported real-world targets
 
 ### Celtic Park stadium, Glasgow
 
@@ -1117,7 +1172,7 @@ estimator with measured motion while retaining either direct displacement or a
 known excitation channel. They must be labelled waveform-injection tests, not
 SAR validation.
 
-## Other independent spaceborne author lines screened
+## Additional author-reported SAR collections
 
 - Vera Costantini, Bernardino Chiaia, Marco Civera, Alberto Ciavattone,
   Davide Ambrosio, Carlo Ranalletta Felluga, Emanuele Del Monte, Roberta Marini
@@ -1332,7 +1387,7 @@ paired honestly with spaceborne imagery.
 
 - Dataset: <https://data.mendeley.com/datasets/wv5bwx694m/1>
 
-## Historical experimental data located but not downloadable
+## Historical experimental data without a public download
 
 The 2003--2006 APY-6 experiment is a particularly relevant predecessor. An
 airborne X-band SAR at 9.6 GHz and 1 kHz PRF observed two mechanically vibrating
@@ -1577,7 +1632,7 @@ Capella scenes and must not be presented as synchronized truth.
 - ADSB.lol historical data: <https://www.adsb.lol/docs/open-data/historical/>
 - OurAirports data: <https://ourairports.com/data/>
 
-## What to request
+## Request-based datasets: what to request
 
 A useful release needs more than a cropped image and a published spectrum. Ask
 for:
@@ -1596,7 +1651,7 @@ failed tests and scenes in which the ground sensors found no vibration. A releas
 containing only successful examples can validate frequency estimation but cannot
 calibrate detection.
 
-## Public-repository search
+## Repository access and discovery notes
 
 Searches of Zenodo, Figshare, Mendeley Data, the University of Strathclyde STAX
 repository and general web data indexes found papers and theses but no paired
@@ -1652,7 +1707,7 @@ from the experiment team.
 - ESA TerraSAR-X dissemination collection:
   <https://tpm-ds.eo.esa.int/oads/access/collection/TerraSAR-X/searchbyfilename>
 
-## Additional project holdings
+## Additional project datasets available by request
 
 ESA's EO4Security programme says its teams also tested high-rise buildings and
 stadiums and produced formal validation reports. Public pages name Celtic Park

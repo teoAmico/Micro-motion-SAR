@@ -591,6 +591,27 @@ has processed returns it. If the injected frequency comes back, a null elsewhere
 in that scene is evidence about the ground. If it does not, the null was only ever
 evidence about the pipeline.
 
+**A sine is the easiest possible motion, and the reported answer fails on
+anything harder.** `--inject-wave FILE[,RATE_HZ[,AMP_MM[,REL]]]` drives the same
+target from a measured displacement record instead — one sample per line, in
+metres, centred and rescaled so `AMP_MM` still means peak displacement and the
+two runs are comparable. `sim_cphd --wave FILE[,RATE_HZ]` does the same for a
+whole `--clutter-vib` patch, which is the fixture that recovers.
+
+```sh
+./build/sim_cphd w.cphd 0.5 0.02 --clutter 400 --clutter-vib --seed 7 \
+    --wave "almanor_hnz_20s.txt,41.6667"
+```
+
+On a real accelerometer record with six modes within a factor of two, the scene
+and processing that report a sine correctly at 0.504 Hz against 0.500 report
+1.966 Hz with no mode within 1.3 Hz (`FOLLOW-UPS.md` item 69). Prominence cannot
+win when the energy is split across modes, so it goes to the tallest noise line.
+**Read the windows CSV against the record's own spectrum, not the reported
+frequency** — there is no single frequency for a structure to be right about.
+If the record is shorter than the dwell the target is held still for the
+remainder, which looks exactly like a null; `mmotion` warns when that happens.
+
 Defaults are 2 mm of vertical displacement at 20× the scene's median non-zero
 sample magnitude. Keep the *projected* amplitude below about λ/8 for
 `--estimator phase`: the observable wraps beyond λ/4 and an injection that wraps
@@ -1063,6 +1084,8 @@ here so the guide does not imply the set above is complete:
 
 | flag | command | what it does |
 |---|---|---|
+| `--inject-wave FILE[,RATE_HZ[,AMP_MM[,REL]]]` | `mmotion` | drives the injected target from a measured displacement record instead of a tone; mutually exclusive with `--inject-vib` |
+| `--wave FILE[,RATE_HZ]` | `sim_cphd` | drives every vibrating target, including a `--clutter-vib` patch, from a measured record |
 | `--inject-at DX,DY` | `mmotion` | offsets the injected scatterer in metres from the grid origin, which is otherwise where it always lands |
 | `--fmin HZ` | `mmotion` | raises the peak-picking floor above the always-excluded first three bins; it cannot lower it |
 | `--probe-hz HZ` | `mmotion` | adds `probe_psd` and `probe_prominence` at one nominated frequency, so two runs can be differenced there |

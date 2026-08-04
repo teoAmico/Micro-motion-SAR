@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 68 items and their status.
+an index of all 69 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -127,7 +127,23 @@ test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
 
-**EVERY INJECTION HERE HAS BEEN A PURE SINUSOID** (item 68), and real structures
+**A REAL STRUCTURE'S MOTION NOW GOES IN, AND THE REPORTED ANSWER GOES WRONG**
+(item 69). `sim_cphd --wave FILE[,RATE_HZ]` and `mmotion --inject-wave` drive the
+target from a measured displacement record instead of a tone; both normalise to
+unit peak so `AMP_MM` means the same thing either way, and
+`rs_simulate_inject_vibrator()` is behaviourally unchanged. On the Oroville Dam
+accelerometer's record of the M5.5 Lake Almanor earthquake — six modes within a
+factor of two, no dominant line — the same scene, seed, amplitude and processing
+that report a sine correctly at 0.504 Hz against 0.500 report **1.966 Hz**, with
+no mode within 1.3 Hz; window-level hit rate halves, 20% to 10%. The tracker is
+not blind to it (consensus 0.605 Hz against a true mode at 0.583), so this is
+items 7-9 again and worse: the energy is SPLIT across six modes, none is ever
+prominent, and `rs_spectrum_best_window()` goes to the tallest noise line. **A
+statistic that reports one frequency is the wrong shape of answer for a
+structure.** Every earlier synthetic recovery here was measured on the easiest
+possible motion.
+
+**EVERY INJECTION BEFORE ITEM 69 WAS A PURE SINUSOID** (item 68), and real structures
 are multi-modal, non-stationary and amplitude-modulated — the regime items 25, 55
 and 56 found the selection policies failing in. `GROUND_TRUTH_DATASETS.md` lists
 public SHM waveforms (Aventa turbine 200 Hz, Hell Bridge 100 Hz, Route 345) whose

@@ -109,7 +109,8 @@ said, not better) and item 7's line numbers.
 | 65 | done | SHP + phase linking is WORSE still: homogeneous pixels share the ARTEFACT, so the ML estimator sharpens it |
 | 66 | done | GROUND_TRUTH_DATASETS.md corroborates items 61-62 independently; its floor is the PER-LOOK one, 37x pessimistic |
 | 67 | done | public-only leaves ONE usable pairing, Kilauea, and the test it supports is CORRELATION over 51 collects, not detection |
-| 68 | **the current state** | the doc's new SHM datasets have no co-located collect, but they are real WAVEFORMS to inject in place of a sine |
+| 68 | done | the doc's new SHM datasets have no co-located collect, but they are real WAVEFORMS to inject in place of a sine |
+| 69 | **the current state** | a real structure's motion is injected for the first time, and the REPORTED answer goes wrong where a sine is correct |
 
 ---
 
@@ -6228,3 +6229,82 @@ injection path taking a series instead of a frequency, and the fixtures already
 here. **That is the cheapest untried experiment left**, and unlike items 63-65 it
 is not chasing a factor of two -- it is asking whether the reporting stage works
 on realistic motion at all.
+
+
+## 69. A real waveform instead of a sine: the reported answer goes wrong
+
+Item 68 said this was the cheapest untried experiment left. It is done, and it
+is the most damaging result in this file.
+
+### The path
+
+`rs_simulate_inject_waveform()` drives the injected scatterer from a measured
+displacement record; `sim_cphd --wave FILE[,RATE_HZ]` drives the whole
+`--clutter-vib` patch from one, which is the fixture that actually recovers.
+`mmotion --inject-wave` exposes the first. Both normalise the record to unit
+peak, so `AMP_MM` keeps meaning peak vertical displacement and a waveform run is
+directly comparable with a sine run at the same amplitude.
+`rs_simulate_inject_vibrator()` is unchanged in behaviour -- it is now a wrapper
+passing no waveform -- so every earlier measurement stands.
+
+### The waveform
+
+Oroville Dam, `BK.ORV.00.HNZ`, the M5.5 Lake Almanor earthquake of 2023-05-11,
+from NCEDC, response removed to displacement, highest-energy 20 s slice:
+
+```
+  1.200Hz(1.00) 1.150Hz(0.80) 1.250Hz(0.78) 0.750Hz(0.77) 1.400Hz(0.54) 1.100Hz(0.48)
+```
+
+Six lines within a factor of two, no dominant mode. A sine has one line at 1.00
+and nothing else; that is the whole difference under test. Oroville was taken
+over the Zenodo SHM packages of `GROUND_TRUTH_DATASETS.md` because it is free,
+public, already this project's nominated static negative control (item 60), and
+a real structure -- and item 68 showed those sites have no collect over them
+either, so the download buys shape and nothing else.
+
+### The result
+
+Identical scene, seed, amplitude and processing. Only the shape of the
+displacement in time differs.
+
+| | injected | reported | consensus |
+|---|---|---|---|
+| sine | 0.500 Hz | **0.504 Hz** correct | 0.504 Hz, 4/49 |
+| real record | six modes, 0.31-0.58 Hz | **1.966 Hz**, no mode within 1.3 Hz | 0.605 Hz, 4/49 |
+
+Window-level, counting a window as a hit if its dominant frequency is within one
+bin of ANY of the six modes: **20% for the sine, 10% for the record.** The
+comparison is generous to the waveform by construction -- the sine is scored
+against a target six bins wide when it has one line in it -- and it still scores
+twice as well.
+
+The record is replayed at 1/2.4 speed so its cluster lands at 0.46-0.58 Hz. That
+is necessary, not cosmetic: a 1.20 Hz SINE does not recover in this fixture
+either (2.520 Hz reported), by item 13's response ceiling, so comparing a
+recoverable sine against an unrecoverable waveform would have measured the
+ceiling rather than the waveform. Time-scaling preserves every ratio between the
+modes and the entire envelope. The sine run reproduces the 2026-08-01 e2e result
+to three decimals, so the fixture and operating point are unchanged.
+
+### What it means
+
+The tracker is NOT blind to the record: consensus lands at 0.605 Hz against a
+true mode at 0.583, within half a bin of the fifth-strongest line. It is
+`rs_spectrum_best_window()` -- prominence, the reported answer -- that picks
+1.966 Hz over all six.
+
+That is items 7-9 again and worse. There the selection policy discarded a
+carrier the tracker had recovered in most windows. Here the recovered energy is
+**split across six modes**, so no single one is ever prominent enough to win and
+prominence goes to whatever noise line is tallest. **A statistic that reports one
+frequency is the wrong shape of answer for a structure**, and no threshold on it
+fixes that. What a structure needs reported is a modal SET, scored as a set.
+
+The honest reading of every earlier synthetic recovery in this project is now
+that it was measured on the easiest possible motion. Item 25 found item 14's
+recovery not surviving aspect-dependent scattering; this finds the reported
+policy not surviving realistic motion. The two gaps are independent and both
+sit between the fixtures and a real collect.
+
+Run: `runs/synthetic/2026-08-04-real-waveform/`.

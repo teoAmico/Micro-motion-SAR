@@ -2838,6 +2838,7 @@ static int rs_cmd_validate(int argc, char **argv)
                "                           [--estimator correlation|phase|splitband]\n"
                "                           [--subap pulse|uniform|paper]\n"
                "                           [--n LOOKS]\n"
+               "                           [--max-pulses N] [--pulse-start N]\n"
                "\n"
                "--estimator picks which observable the checks are answered\n"
                "for, and four of them differ. The band ceiling is the\n"
@@ -3003,8 +3004,21 @@ static int rs_cmd_validate(int argc, char **argv)
         if (img.az_spacing_m > 0.0) req.cell_m = img.az_spacing_m;
     } else {
         /* Eight bins rather than one: the reader refuses a window too narrow
-         * to focus, and this command has no use for the samples either way. */
-        const rs_cphd_read_opts_t opts = { .rbin_window = 8 };
+         * to focus, and this command has no use for the samples either way.
+         *
+         * --max-pulses AND --pulse-start ARE HONOURED HERE, which they were not
+         * until the ICEYE screen. Truncating the dwell is the documented remedy
+         * when a collect's sub-apertures are too long for the target frequency
+         * -- it is what raises the observable band -- so 'validate' is exactly
+         * the command a caller runs to find out whether it will work. Reading
+         * the whole collect regardless made it answer about the untruncated
+         * dwell while accepting the flag, so the answer was FAIL for a
+         * configuration that passes. See FOLLOW-UPS item 44. */
+        const rs_cphd_read_opts_t opts = {
+            .rbin_window = 8,
+            .max_pulses  = (size_t)rs_opt_double(argc, argv, "--max-pulses", 0.0),
+            .pulse_first = (size_t)rs_opt_double(argc, argv, "--pulse-start", 0.0)
+        };
         st = rs_read_cphd(in, &opts, &c);
         if (st != RS_OK) { rs_report_error("validate", st); return 1; }
 

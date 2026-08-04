@@ -84,7 +84,8 @@ said, not better) and item 7's line numbers.
 | 40 | superseded by 41 | the target can be moved off the grid origin at last, and the reported window follows it |
 | 41 | done | the 16 m offset is not geometry: overlapping windows track one scatterer and the centred one scores lowest |
 | 42 | done | the centroid over the agreeing cluster turns item 41's 16 m localisation bound into 0.1 m |
-| 43 | **the current state** | that 0.1 m is amplitude-dependent: 0.13 m at 2 mm, 2.24 m at 0.125 mm, linear in 1/amplitude |
+| 43 | done | that 0.1 m is amplitude-dependent: 0.13 m at 2 mm, 2.24 m at 0.125 mm, linear in 1/amplitude |
+| 44 | **the current state** | dwell truncation works and `validate` silently ignored the flag that does it |
 
 ---
 
@@ -4576,3 +4577,56 @@ can assume, and any background window that happened to agree would drag a
 uniform centroid while contributing nothing to an excess-weighted one. The
 robustness is worth the 0.13 m -- but uniform being exact on symmetric clusters
 is the proof that the residual is a weighting artefact and not geometry.
+
+
+## 44. The ICEYE dwell truncation works, and `validate` could not see it
+
+Item 36 screened ICEYE's Houston `dwell-precise` collect and it FAILED the
+observable band for a 2 Hz target -- because of the 15.345 s dwell rather than
+the collect, since long sub-apertures average the target away. Item 4's remedy
+is `--max-pulses`. `runs/screens/iceye/RUN-truncation.md`.
+
+```
+ dwell s   pulses  f_max @3.6%   df = 1/T     az res
+   15.35   100802       0.905Hz    0.0652Hz      1.00x   <- fails 2 Hz
+    6.14    40320       2.263Hz    0.1629Hz      2.50x   <- passes
+```
+
+**It works.** `validate --max-pulses 40320` turns the band from 1.509 Hz to
+3.771 Hz and the verdict from FAIL to WARN, with every figure matching the
+prediction to the digit.
+
+**Item 4 named the band and not the price.** Frequency resolution IS `1/T_dwell`
+and azimuth resolution scales the same way, so reaching 2 Hz costs 2.5x on both.
+The band and the resolution trade directly against each other, and any future
+truncation has to quote which one it bought.
+
+### The defect
+
+`validate` ACCEPTED `--max-pulses` AND IGNORED IT. Its reader options were
+`{ .rbin_window = 8 }`, with no `max_pulses` and no `pulse_first`, so it read the
+whole collect and answered about the untruncated dwell.
+
+The consequence is the worst available: truncation is the documented remedy for
+this exact failure, `validate` is the command a caller runs to decide whether the
+remedy will work, and it reported FAIL for a configuration that passes. A caller
+following the documentation would have concluded the collect was unusable.
+
+This is the "warn rather than silently degrade" rule failing in the command that
+exists to enforce it. Fixed; both flags are honoured and in the usage line.
+
+**No test covers the fix and none can as things stand.** `validate` reads real
+CPHD only and refuses `sim_cphd` output -- a known gap already recorded in the
+USER_GUIDE gotchas, and the reason this was never caught. It is verified against
+the real product only.
+
+### ICEYE signal read for the first time
+
+Item 36 recorded that no ICEYE signal sample had ever been read. 40320 pulses
+backprojected onto 1024x1024 at 2 m in 4 min 26 s give a recognisable Houston:
+street grid, building blocks, a circular structure, large parking areas. **The
+`CI4` decode works on this vendor.**
+
+Reading the whole product needs 38.7 GB against this machine's 25.8 GB. The
+reader refuses with the arithmetic and names `--rbins`, which is how that refusal
+should read.

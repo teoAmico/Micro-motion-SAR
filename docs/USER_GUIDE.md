@@ -1045,7 +1045,8 @@ here so the guide does not imply the set above is complete:
 | `--b-shift HZ` | `mmotion` | master/slave band separation; only `--reference pair` uses it |
 | `--null-trials N` | `mmotion` | trials for the shuffled-look floor, beside `--null-static` |
 | `--range-taps N` | `focus`, `mmotion` | range-interpolator width in the backprojection kernel |
-| `--pulse-start N` | `focus` | first pulse to read, with `--max-pulses` making the read a window |
+| `--pulse-start N` | `focus`, `validate` | first pulse to read, with `--max-pulses` making the read a window |
+| `--max-pulses N` | `validate` | shortens the dwell the checks are answered for — the remedy when a collect's sub-apertures are too long for the target frequency |
 | `--dyn-range DB` | `focus` | quicklook display range below the 99th percentile |
 | `--ccd-win N`, `--ccd-loading F` | `mmotion` | window and noise floor for the `--ccd-out` change-detection locator |
 | `--amplitude MM`, `--alpha F` | `validate` | target amplitude and aperture fraction to answer the checks for |
@@ -1062,6 +1063,11 @@ here so the guide does not imply the set above is complete:
   null.** The simulated motionless scene never focused — peak-to-mean 3.6 against
   93.7 — so the control was a field of noise rather than a scene. Fixed and
   tested; recompute anything quoted from before then. `FOLLOW-UPS.md` item 27.
+- **Truncating the dwell raises the observable band and costs resolution in the
+  same proportion.** `f_max` scales as `1/T_dwell` and so do the frequency
+  resolution and the azimuth resolution. On ICEYE's Houston collect, 15.3 s → 6.1 s
+  takes the band from 1.509 Hz to 3.771 Hz and the frequency resolution from
+  0.065 Hz to 0.163 Hz. Quote which one you bought. `FOLLOW-UPS.md` item 44.
 - **`validate` cannot read `sim_cphd` output.** `info`, `focus` and `mmotion`
   sniff the file magic and accept both real CPHD and the simulator's internal
   format; `validate` accepts real CPHD only and fails with *"does not begin with

@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 54 items and their status.
+an index of all 55 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -263,6 +263,15 @@ four orders of magnitude between 0.75 and 0.90 and fails at 0.95, on real data,
 withdrawing item 14's advice. **The local peak's control range on real Giza desert
 is 15.1-34.4 over nine disjoint grids** (item 49), so anything under ~35x there is
 inside what empty desert produces; nine controls give p_min = 0.10, not 0.05.
+
+**`rs_spectrum_local_window()` addresses COLOURED NOISE, not spurious peaks
+generally** (item 55). It was a large win on real Giza data — separation 3.3x to
+37x — and is a LOSS on the aspect fixture, recovering at 1 of 4 lobe widths where
+prominence gets 3 of 4, with the same 3-of-12 static false positives. Aspect
+dependence produces genuine sidebands rather than a coloured floor, and a local
+background cannot tell a real sideband from a real tone. **No policy here is fit
+for an aspect-dependent scene** — prominence is useful and unsafe, the local peak
+is worse, the PS selector refuses everything.
 
 **The noise floor is RED, so `prominence` is biased toward low frequencies** (item
 47). At `--overlap 0.90` adjacent sub-looks share nine tenths of their pulses, so

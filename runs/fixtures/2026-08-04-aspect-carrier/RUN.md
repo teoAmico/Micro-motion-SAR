@@ -62,3 +62,60 @@ Item 25's headline was two-part: the reported policy fails, and it fails
 unsafely. **The first part weakens and the second stands.** The policy is what
 item 25 concluded was at fault, and it still is -- `rs_spectrum_ps_window()` was
 the only one that behaved there, and nothing here changes that.
+
+---
+
+# Follow-on: all three policies on the same data
+
+The static false positives above are a POLICY failure, so the three selection
+policies were scored on identical spectra. `policy_sweep.c` and
+`policy_run.log` beside this file.
+
+```
+           | PROMINENCE (best_window)  | LOCAL PEAK (item 47)      | PS SELECTOR
+ lobe_frac |   slope     rms verdict   |   slope     rms verdict   |
+      1.00 |  1.0417  0.0333 RECOVERS  |  0.7500  0.2555 fails     | answered 0/5
+           | static in band 1/3        | static in band 2/3        | static 0/3
+      0.50 |  1.0417  0.0289 RECOVERS  |  1.0833  0.0527 fails     | answered 0/5
+           | static in band 0/3        | static in band 0/3        | static 0/3
+      0.25 |  1.2083  1.1252 fails     |  2.0833  0.8528 fails     | answered 0/5
+           | static in band 2/3        | static in band 0/3        | static 0/3
+      0.12 |  0.9583  0.0236 RECOVERS  |  0.9583  0.0289 RECOVERS  | answered 0/5
+           | static in band 0/3        | static in band 1/3        | static 0/3
+```
+
+**None of the three is both safe and useful here.**
+
+- **Prominence** recovers at three of four lobe widths and returns an in-band
+  frequency on 3 of 12 static scenes. Useful and unsafe.
+- **The local peak** recovers at ONE of four and is equally unsafe, 3 of 12. It
+  is strictly worse than prominence on this fixture.
+- **The PS selector** answers nothing at all -- 0 of 5 at every lobe width -- so
+  it has no false positives and no recall.
+
+## The local peak's scope, which this pins
+
+Item 47's local peak was a large win on the real Giza collect: the injected
+versus control separation went from 3.3x to 37x, because that failure was a RED
+NOISE FLOOR and a local background is exactly the right correction for one.
+
+**It is a loss here.** Aspect dependence does not produce a coloured noise floor;
+it produces genuine spectral content, because a facet lit over part of the
+aperture amplitude-modulates the return and a modulation has real sidebands. A
+local background cannot tell a real sideband from a real tone -- both stand above
+their neighbours -- so normalising by it removes the low-frequency bias without
+touching this failure, and costs recall.
+
+The two failures look alike in the output and are not alike, and the statistic
+built for one does not transfer.
+
+## What that leaves
+
+Item 25's reading is unchanged and now sharper: the PS selector is safe because
+it REFUSES, and at this configuration it refuses everything. Item 25 measured 6
+answers of 18 at `lobe_frac` 0.12; here no window meets `D_A <= 0.25` at any
+lobe width, so the recall it had is configuration-dependent and this
+configuration has none of it.
+
+**No policy here is fit for an aspect-dependent scene**, which is the scene type
+real structures produce.

@@ -95,7 +95,8 @@ said, not better) and item 7's line numbers.
 | 51 | done | the floor is a QUADRATIC phase residual the linear carrier removal leaves; a quadratic fit drops it 2000x |
 | 52 | done | quadratic carrier removal implemented: artefact down 38x, floor 0.125 -> 0.0156 mm |
 | 53 | done | cubic term added: artefact 171x down in total, floor 0.0039-0.0078 mm, returns now falling fast |
-| 54 | **the current state** | the carrier fix rescues item 25's recovery, 3 of 4 lobe widths, and NOT its static false positives |
+| 54 | done | the carrier fix rescues item 25's recovery, 3 of 4 lobe widths, and NOT its static false positives |
+| 55 | **the current state** | all three policies on the aspect fixture: none is both safe and useful, and item 47's local peak is a LOSS here |
 
 ---
 
@@ -5338,3 +5339,57 @@ unchanged rather than worse given the different seed counts.
 
 **Item 25's headline was two-part -- the reported policy fails, and it fails
 unsafely. The first part weakens; the second stands.**
+
+
+## 55. All three policies on the aspect fixture, and where the local peak does not reach
+
+Item 54 left the static false positives as a POLICY failure. So all three
+selection policies were scored on identical spectra.
+`runs/fixtures/2026-08-04-aspect-carrier/policy_run.log`.
+
+```
+           | PROMINENCE (best_window)  | LOCAL PEAK (item 47)      | PS SELECTOR
+ lobe_frac |   slope     rms verdict   |   slope     rms verdict   |
+      1.00 |  1.0417  0.0333 RECOVERS  |  0.7500  0.2555 fails     | answered 0/5
+           | static in band 1/3        | static in band 2/3        | static 0/3
+      0.50 |  1.0417  0.0289 RECOVERS  |  1.0833  0.0527 fails     | answered 0/5
+           | static in band 0/3        | static in band 0/3        | static 0/3
+      0.25 |  1.2083  1.1252 fails     |  2.0833  0.8528 fails     | answered 0/5
+           | static in band 2/3        | static in band 0/3        | static 0/3
+      0.12 |  0.9583  0.0236 RECOVERS  |  0.9583  0.0289 RECOVERS  | answered 0/5
+           | static in band 0/3        | static in band 1/3        | static 0/3
+```
+
+**None of the three is both safe and useful.** Prominence recovers at three of
+four and is in-band on 3 of 12 statics. The local peak recovers at ONE of four
+and is equally unsafe at 3 of 12 -- strictly worse than prominence here. The PS
+selector answers nothing at all, so it has no false positives and no recall.
+
+### This pins item 47's scope, and it is narrower than it looked
+
+The local peak was a large win on the real Giza collect -- injected-versus-control
+separation from 3.3x to 37x -- because THAT failure was a red noise floor, and a
+local background is the right correction for one.
+
+**It is a loss on this fixture.** Aspect dependence does not produce a coloured
+noise floor. It produces genuine spectral content: a facet lit over part of the
+aperture amplitude-modulates the return, and a modulation has real sidebands. A
+local background cannot tell a real sideband from a real tone -- both stand above
+their neighbours -- so normalising by it removes the low-frequency bias without
+touching this failure, and costs recall doing it.
+
+**The two failures look identical in the output and are not the same failure.**
+The statistic built for one does not transfer, and item 47 should be read as
+addressing coloured noise specifically rather than spurious peaks generally.
+
+### And the PS selector's recall is configuration-dependent
+
+Item 25 measured it answering 6 of 18 points, all correct, at `lobe_frac` 0.12.
+Here it answers nothing at any lobe width: no window meets `D_A <= 0.25`. Its
+safety is real and comes from refusing; how often it refuses depends on the
+configuration, and this one gets zero recall.
+
+**No policy in this codebase is fit for an aspect-dependent scene**, which is the
+scene type real structures produce. That is the same conclusion item 25 reached,
+now with the carrier residual eliminated as an explanation and the newest
+statistic tested and excluded as a remedy.

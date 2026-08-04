@@ -59,27 +59,102 @@ void rs_microm_params_default(rs_microm_params_t *params)
     params->no_optimize = 0;
 }
 
-/* Magnitude of the de-ramped phasor sum for one pixel at trial rate 'nu'.
+/* The trial carrier phase at look 'k', on a CENTRED and ORTHOGONALISED basis.
  *
- * |sum_k z[k] * exp(-i*nu*k)|, the objective the phase estimator maximises to
- * find the geometric carrier it must remove before wrapping. See the phase
- * branch of rs_microm_track() for why that removal is the whole ballgame.
+ *     kc = k - (N-1)/2                  zero mean over the record
+ *     q  = kc*kc - (N*N - 1)/12         zero mean, and sum(kc*q) = 0 by symmetry
+ *     phase = nu*kc + mu*q
+ *
+ * WHY NOT SIMPLY nu*k + mu*k*k. Because k and k*k are strongly correlated over a
+ * finite record, and the staged search below holds one parameter while scanning
+ * the other. Adding mu*k*k shifts the record's MEAN RATE by about mu*N, which at
+ * the curvature actually present on the Giza collect -- mu near 3.1e-4 at 128
+ * looks -- is 0.04 rad per look against a coarse step of 2*pi/128 = 0.049. Nearly
+ * a whole step. Scanning mu at the linear-only nu therefore made every trial
+ * WORSE rather than better, because the phasors dephased linearly faster than the
+ * curvature was removed, and the search returned mu = 0 every time.
+ *
+ * That is not a hypothetical. It is what the first version of this did: the
+ * artefact it was written to remove fell from 12,060x to 10,697x, a factor of
+ * 1.13 where fitting the same quadratic offline gave 2,000x. Centring makes the
+ * two terms orthogonal over the record, so scanning one at a fixed other is a
+ * valid stage.
+ *
+ * The constant offsets subtracted from each term do not matter to the result --
+ * each look's phase is measured against the series' own mean phasor, which
+ * absorbs any constant -- but they are what makes the basis orthogonal, so they
+ * matter to the SEARCH. */
+static double rs_carrier_phase(size_t k, size_t n_looks, double nu, double mu)
+{
+    const double nd = (double)n_looks;
+    const double kc = (double)k - 0.5 * (nd - 1.0);
+    const double q  = kc * kc - (nd * nd - 1.0) / 12.0;
+    return nu * kc + mu * q;
+}
+
+/* Magnitude of the de-ramped phasor sum for one pixel at trial rates 'nu' and
+ * 'mu', the linear and QUADRATIC parts of the carrier.
+ *
+ * |sum_k z[k] * exp(-i*(nu*k + mu*k*k))|, the objective the phase estimator
+ * maximises to find the geometric carrier it must remove. See the phase branch
+ * of rs_microm_track() for why that removal is the whole ballgame, and item 51
+ * for why one term is not enough.
+ *
+ * THE QUADRATIC TERM IS NOT OPTIONAL AND WAS NOT THERE. A scatterer's range
+ * history is quadratic in time, so its phase is, and fitting only a linear ramp
+ * leaves the curvature behind. Measured on the real Giza collect with a bright
+ * STATIC scatterer and zero injected motion, that residual reached 21,602 times
+ * its own spectral neighbourhood at the band floor -- an artefact bigger than
+ * any real signal below 0.125 mm, and the thing that set the sensitivity floor
+ * of item 50. Fitting and removing a quadratic drops it to 10.4.
  *
  * Squared magnitude is returned rather than magnitude: the maximiser is the
- * same and the square root is not free at N evaluations per golden-section
- * step. */
+ * same and the square root is not free at N evaluations per search step. */
 static double rs_phasor_mag(const rs_subap_stack_t *stack, size_t pa, size_t pr,
-                            size_t n_looks, double nu)
+                            size_t n_looks, double nu, double mu)
 {
     double sr = 0.0, si = 0.0;
     for (size_t k = 0; k < n_looks; k++) {
         const rs_slc_t *im = &stack->look[k];
         const float complex z = im->data[pa * im->n_rg + pr];
-        const double c = cos(nu * (double)k), s = sin(nu * (double)k);
+        const double ph = rs_carrier_phase(k, n_looks, nu, mu);
+        const double c = cos(ph), s = sin(ph);
         sr += (double)crealf(z) * c + (double)cimagf(z) * s;
         si += (double)cimagf(z) * c - (double)crealf(z) * s;
     }
     return sr * sr + si * si;
+}
+
+/* Golden-section maximum of rs_phasor_mag() along ONE axis, holding the other.
+ *
+ * The objective is unimodal inside a bracket one coarse step wide, which is
+ * what both callers pass. Forty iterations take the bracket far below the
+ * pi/N the residual must stay under -- the same argument the linear search
+ * already made, applied to each axis in turn. */
+static double rs_phasor_refine(const rs_subap_stack_t *stack, size_t pa, size_t pr,
+                               size_t n_looks, double lo, double hi,
+                               int quadratic, double fixed)
+{
+    const double gr = 0.6180339887498949;
+    double c1 = hi - gr * (hi - lo), c2 = lo + gr * (hi - lo);
+    double f1 = quadratic ? rs_phasor_mag(stack, pa, pr, n_looks, fixed, c1)
+                          : rs_phasor_mag(stack, pa, pr, n_looks, c1, fixed);
+    double f2 = quadratic ? rs_phasor_mag(stack, pa, pr, n_looks, fixed, c2)
+                          : rs_phasor_mag(stack, pa, pr, n_looks, c2, fixed);
+    for (int it = 0; it < 40; it++) {
+        if (f1 > f2) {
+            hi = c2; c2 = c1; f2 = f1;
+            c1 = hi - gr * (hi - lo);
+            f1 = quadratic ? rs_phasor_mag(stack, pa, pr, n_looks, fixed, c1)
+                           : rs_phasor_mag(stack, pa, pr, n_looks, c1, fixed);
+        } else {
+            lo = c1; c1 = c2; f1 = f2;
+            c2 = lo + gr * (hi - lo);
+            f2 = quadratic ? rs_phasor_mag(stack, pa, pr, n_looks, fixed, c2)
+                           : rs_phasor_mag(stack, pa, pr, n_looks, c2, fixed);
+        }
+    }
+    return 0.5 * (lo + hi);
 }
 
 /* Median of a scratch array, which this reorders. */
@@ -592,8 +667,13 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
                      * Doppler, and no processing downstream can recover what was
                      * not sampled. Fewer looks over a fixed dwell make it worse,
                      * since the platform travels further between them. */
-                    double nu = 0.0;
+                    double nu = 0.0, mu = 0.0;
                     {
+                        /* STAGE 1: the linear rate, coarse over the N Fourier
+                         * bins then refined. Unchanged from the linear-only
+                         * version, and it is the right starting point: the
+                         * curvature is small beside the ramp, so the linear
+                         * maximum is close to the joint one. */
                         double best_m = -1.0, nu_c = 0.0;
                         const double step = 2.0 * M_PI / (double)n_looks;
                         for (size_t b = 0; b < n_looks; b++) {
@@ -601,29 +681,54 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
                             const double v = step * ((b < n_looks / 2)
                                                    ? (double)b
                                                    : (double)b - (double)n_looks);
-                            const double mag = rs_phasor_mag(stack, pa, pr, n_looks, v);
+                            const double mag = rs_phasor_mag(stack, pa, pr,
+                                                             n_looks, v, 0.0);
                             if (mag > best_m) { best_m = mag; nu_c = v; }
                         }
-                        /* Golden section inside the winning bin. The objective
-                         * is unimodal there, and 40 iterations take the bracket
-                         * far below the pi/N the residual ramp must stay under. */
-                        double lo = nu_c - step, hi = nu_c + step;
-                        const double gr = 0.6180339887498949;
-                        double c1 = hi - gr * (hi - lo), c2 = lo + gr * (hi - lo);
-                        double f1 = rs_phasor_mag(stack, pa, pr, n_looks, c1);
-                        double f2 = rs_phasor_mag(stack, pa, pr, n_looks, c2);
-                        for (int it = 0; it < 40; it++) {
-                            if (f1 > f2) {
-                                hi = c2; c2 = c1; f2 = f1;
-                                c1 = hi - gr * (hi - lo);
-                                f1 = rs_phasor_mag(stack, pa, pr, n_looks, c1);
-                            } else {
-                                lo = c1; c1 = c2; f1 = f2;
-                                c2 = lo + gr * (hi - lo);
-                                f2 = rs_phasor_mag(stack, pa, pr, n_looks, c2);
-                            }
+                        nu = rs_phasor_refine(stack, pa, pr, n_looks,
+                                              nu_c - step, nu_c + step, 0, 0.0);
+
+                        /* STAGE 2: the QUADRATIC rate, holding nu.
+                         *
+                         * THE SEARCH RANGE IS DERIVED, NOT CHOSEN. The
+                         * instantaneous rate is nu + 2*mu*k, so a quadratic
+                         * term sweeps the rate by 2*mu*N across the record. A
+                         * sweep wider than the unambiguous +-pi per look is not
+                         * something this observable could have sampled, so
+                         * |mu| <= pi/(2N) covers everything reachable and
+                         * nothing that is not.
+                         *
+                         * THE STEP IS DERIVED TOO. An error d in mu leaves a
+                         * phase error d*N^2 at the end of the record, and the
+                         * requirement is the same one the linear search meets,
+                         * error << pi. So the coarse step is pi/N^2, which puts
+                         * N steps across the range -- the same count as the
+                         * linear pass, so the whole search stays O(N^2) per
+                         * window rather than becoming O(N^3). A two-dimensional
+                         * grid would have been the latter and is why this is
+                         * staged. */
+                        const double mu_max = M_PI / (2.0 * (double)n_looks);
+                        const double mu_step = 2.0 * mu_max / (double)n_looks;
+                        double best_q = rs_phasor_mag(stack, pa, pr, n_looks, nu, 0.0);
+                        double mu_c = 0.0;
+                        for (size_t b = 0; b <= n_looks; b++) {
+                            const double m = -mu_max + mu_step * (double)b;
+                            const double mag = rs_phasor_mag(stack, pa, pr,
+                                                             n_looks, nu, m);
+                            if (mag > best_q) { best_q = mag; mu_c = m; }
                         }
-                        nu = 0.5 * (lo + hi);
+                        mu = rs_phasor_refine(stack, pa, pr, n_looks,
+                                              mu_c - mu_step, mu_c + mu_step,
+                                              1, nu);
+
+                        /* STAGE 3: nu again, now that mu is known. The two
+                         * parameters are not orthogonal over a finite record --
+                         * k and k^2 correlate -- so the linear rate found at
+                         * mu = 0 is biased by whatever curvature was present.
+                         * One re-refinement is enough: the bracket is a coarse
+                         * step wide and the shift is far smaller than that. */
+                        nu = rs_phasor_refine(stack, pa, pr, n_looks,
+                                              nu - step, nu + step, 0, mu);
                     }
 
                     /* De-ramped phasors, and the reference they are measured
@@ -633,7 +738,8 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
                     for (size_t k = 0; k < n_looks; k++) {
                         const rs_slc_t *im = &stack->look[k];
                         const float complex z = im->data[pa * im->n_rg + pr];
-                        const double c_ = cos(nu * (double)k), s_ = sin(nu * (double)k);
+                        const double ph_ = rs_carrier_phase(k, n_looks, nu, mu);
+                        const double c_ = cos(ph_), s_ = sin(ph_);
                         ref_re += (double)crealf(z) * c_ + (double)cimagf(z) * s_;
                         ref_im += (double)cimagf(z) * c_ - (double)crealf(z) * s_;
                     }
@@ -641,7 +747,8 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
                     for (size_t k = 0; k < n_looks; k++) {
                         const rs_slc_t *im = &stack->look[k];
                         const float complex z = im->data[pa * im->n_rg + pr];
-                        const double c_ = cos(nu * (double)k), s_ = sin(nu * (double)k);
+                        const double ph_ = rs_carrier_phase(k, n_looks, nu, mu);
+                        const double c_ = cos(ph_), s_ = sin(ph_);
                         const double dr_ = (double)crealf(z) * c_ + (double)cimagf(z) * s_;
                         const double di_ = (double)cimagf(z) * c_ - (double)crealf(z) * s_;
                         /* arg(deramped * conj(reference)): the phase relative to

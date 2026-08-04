@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 51 items and their status.
+an index of all 52 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -228,7 +228,16 @@ different quantity. The shared `quality >= 0.5*q_max` gate is now INERT on real
 scenes — speckle alone scores 0.67 and real imagery 0.81-0.94 — which is a better
 failure than removing the signal but means a pass is not evidence.
 
-**The floor is a QUADRATIC PHASE RESIDUAL, not noise** (item 51). The carrier
+**The carrier removal fits a linear AND a quadratic rate, on a CENTRED basis**
+(item 52). Centring is not cosmetic: `k` and `k*k` correlate over a finite record,
+so an uncentred staged search shifts the mean rate as it scans curvature and
+returns `mu = 0` every time — measured, 1.13x artefact reduction against 38x
+centred. The floor fell from 0.125 mm to 0.0156 mm, eightfold. That is 0.011 mm
+RMS, NINE TIMES BELOW the published 0.10 mm, which is a reason for suspicion
+rather than celebration: the injected target is a perfectly coherent point source,
+cleaner than any real structure.
+
+**The floor was a QUADRATIC PHASE RESIDUAL, not noise** (item 51). The carrier
 removal fits only a linear ramp `exp(-i*v*k)`, but a scatterer's range history is
 quadratic in time, so the curvature survives and lands at the band floor. Fitting
 and removing a quadratic drops the worst window's artefact 2000x, from 21,602 to

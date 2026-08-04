@@ -158,15 +158,18 @@ inside US-port CPHD scenes, but AIS is presence/trajectory metadata rather than
 heave or vibration ground truth.  Full source details are tracked in
 `docs/GROUND_TRUTH_DATASETS.md`.
 
-Two genuine on-board sources are now prioritized for the next catalogue join.
-The *SA Agulhas II* SCALE Winter 2022 archive has UTC-named consecutive
-five-minute MATLAB batches at 9.99 Hz (derived from a 2048 Hz accelerometer
-array), making it dynamically compatible with the pipeline, but a separate
-11--31 July 2022 cruise track is required. NOAA Okeanos Explorer public SCS
-NetCDF trajectories already combine UTC, DGPS, roll, pitch and heave and span
-modern commercial-SAR years; they are ideal for automated footprint matching,
-but their approximately 1 Hz cadence restricts validation to motion below 0.5
-Hz. Neither source is yet a confirmed simultaneous CPHD pair.
+Two genuine on-board sources are now prioritized. The *SA Agulhas II* SCALE
+Winter 2022 archive has UTC-named five-minute MATLAB batches at 9.99 Hz, and a
+separate public Zenodo track package proves that four batches on 21--24 July
+bracket TerraSAR-X or COSMO-SkyMed acquisitions while the 134 m ship is inside
+their footprints. This is genuine synchronized onboard-motion/SAR data, but the
+public radar payload consists of detected `MGD`/`DGM` quicklooks; the named
+complex source products must be obtained from DLR/ASI/ESA before it can enter
+the pipeline. NOAA Okeanos Explorer public SCS NetCDF trajectories already
+combine UTC, DGPS, roll, pitch and heave across modern commercial-SAR years and
+are ideal for automated footprint matching, but their approximately 1 Hz
+cadence restricts validation to motion below 0.5 Hz. Neither is yet a confirmed
+simultaneous CPHD pair.
 
 ### Capella spotlight CPHD, ranked by what matters here
 
@@ -252,6 +255,34 @@ aqueduct is an *in-scene static reference*, which no simulated null can be.
 
 Screened with `validate --xml` it returns **WARN with no failures** for a 2 Hz
 target of 3 mm on the phase route; item 18 has the full finding and the caveats.
+
+The M2 bridge itself has a permanent SHM installation, which makes this scene a
+more concrete ground-truth lead than previously recorded. Published system
+descriptions list deck, pylon, stay-cable, swing-span, pier and ground
+accelerometers, four GPS receivers, displacement and tilt channels, all stored
+with source identifiers and timestamps at Metro Istanbul's operating centre.
+No public waveform endpoint or repository copy was found for the Capella time.
+Request only `2023-03-21 10:17:45--10:18:30 UTC` (preferably a few minutes of
+context) from Metro Istanbul/VCE, quoting the Capella product ID. Also request
+the 60-second night collect's sensor interval around
+`2023-09-07 22:38:49--22:39:49 UTC`: scheduled M2 service was not operating, so
+it can become a same-bridge ambient control after maintenance/train logs confirm
+no movement. Existing
+SAR-only on-bridge runs are not a detection: their best amplitude dispersion is
+0.391 against the 0.25 applicability threshold, so zero windows qualify.
+
+Temur's public 2019 ITU thesis confirms the data path and documents legacy test
+records, but does not attach their samples. It reports 32 accelerometers plus
+meteorological, temperature, tilt, displacement and GPS instruments, with raw
+records stored by Metro Istanbul and forwarded to VCE. Appendix B compares a
+roughly 300-second permanent-system record from **10 October 2018 around 17:00
+local** with a roughly 200-second, seven-channel **200 Hz** ITU deck test from
+**25 April 2019 around 17:00 local**. These do not overlap the 2023 SAR, but the
+dates are useful identifiers when requesting a legacy algorithm fixture. The
+PDF has no embedded data attachments. The separate 2024 seismic-SHM review
+concerns Istanbul's two Bosphorus suspension bridges, not Golden Horn, and adds
+no public dataset. Sources: [Temur thesis](https://web.itu.edu.tr/bariserkus/pdf/Temur2019_MSThesis.pdf),
+[review](https://doi.org/10.1007/s10518-023-01819-3).
 
 ### Screening before downloading
 

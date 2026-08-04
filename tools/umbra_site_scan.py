@@ -36,6 +36,8 @@ TARGETS = {
     "NREL Flatirons": (39.9106, -105.2347),
     "Punta Langosteira Port": (43.3577, -8.3871),
     "TigerRAY mooring": (47.679517, -122.230500),
+    "D1244 Stuttgart": (48.74871, 9.11152),
+    "Xiaolangdi Dam": (35.154, 112.390),
 }
 months=[]
 for y in ("2024","2025"):

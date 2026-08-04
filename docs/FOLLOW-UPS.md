@@ -92,7 +92,8 @@ said, not better) and item 7's line numbers.
 | 48 | **withdraws item 14** | high overlap is WRONG for the phase route on real data: separation collapses 4 orders of magnitude by 0.90 |
 | 49 | done | the local peak calibrated on nine disjoint grids of real desert: 15.1-34.4 |
 | 50 | done | sensitivity re-measured at the good overlap with a proper twin: floor is 0.0625-0.125 mm |
-| 51 | **the current state** | the floor is a QUADRATIC phase residual the linear carrier removal leaves; a quadratic fit drops it 2000x |
+| 51 | done | the floor is a QUADRATIC phase residual the linear carrier removal leaves; a quadratic fit drops it 2000x |
+| 52 | **the current state** | quadratic carrier removal implemented: artefact down 38x, floor 0.125 -> 0.0156 mm |
 
 ---
 
@@ -5141,3 +5142,70 @@ not.
 square root of 2,000** -- the amplitude at which signal matches artefact scales
 with the residual - which would put it near 0.003 mm before some other floor
 takes over. That is a prediction, and it is the reason to do it.
+
+
+## 52. Quadratic carrier removal: the floor falls eightfold
+
+Item 51 diagnosed the sensitivity floor as a quadratic phase residual the linear
+carrier removal leaves behind. Implemented.
+`runs/giza/2026-08-04-quadratic-floor/`.
+
+```
+  static bright scatterer, zero motion, REL 20
+    linear carrier only            12,060.1x at 0.092 Hz
+    quadratic, UNCENTRED basis     10,697.4x    -- 1.13x, a failure
+    quadratic, CENTRED basis          317.7x    -- 38x
+
+      amp mm   local peak    freq          verdict
+       2.0     1,311,807   0.153           signal
+       0.125      32,502   0.153           signal
+       0.0625      7,773   0.153           signal
+       0.03125     1,866   0.153           signal
+       0.015625      472   0.153           signal    <- last correct point
+       0.0078125     348   0.092   THE ARTEFACT (317.7)
+       0.00390625    347   0.092   THE ARTEFACT
+
+  floor 0.0078-0.0156 mm, against 0.0625-0.125 mm before -- EIGHTFOLD
+```
+
+The 2 mm signal is unchanged (1,311,807 against 1,207,566), so this removes
+artefact without touching signal, and discrimination improves 41x.
+
+### The bug, which is the useful part
+
+The first implementation used `nu*k + mu*k*k` directly and reduced the artefact
+by **1.13x**. `k` and `k*k` are strongly correlated over a finite record: adding
+`mu*k*k` shifts the mean rate by about `mu*N`, which at the curvature actually
+present is 0.04 rad per look against a coarse step of 0.049 -- nearly a whole
+step. Scanning `mu` while holding `nu` at the linear-only optimum therefore made
+every trial WORSE, and the search returned `mu = 0` in every window.
+
+Centring makes the terms orthogonal -- `kc = k - (N-1)/2`,
+`q = kc^2 - (N^2-1)/12`, with `sum(kc*q) = 0` by symmetry -- so a staged search
+is valid. That is the entire difference between 1.13x and 38x, and it was found
+by measuring the residual curvature still in the output rather than by reading
+the code.
+
+### The prediction was right and its number was wrong
+
+Item 51 predicted "toward 0.003 mm" from the offline fit's 2,000x reduction. The
+phasor search achieves 38x. `sqrt(38) = 6.2` gives `0.125/6.2 = 0.020 mm`
+against a measured 0.0156 -- so the reasoning held and the reduction it was
+applied to did not. **An offline least-squares fit to the displacement is not
+what maximising the phasor sum does**, and the gap between 2,000x and 38x is
+exactly that difference. A cubic term would presumably close some of the rest;
+the offline cubic gave a further 3.6x.
+
+### It now beats the literature by nine times, which is a caution
+
+0.0156 mm zero-to-peak is 0.011 mm RMS against Vattulainen et al.'s smallest
+confirmed 0.10 mm RMS. Item 50 had just brought this project into agreement with
+that figure and this puts it nine times below.
+
+Their 0.10 mm is a REAL vibrating object with synchronous ground truth, carrying
+every real-world effect. Ours is a synthetic tone injected into real clutter as a
+perfectly coherent point target -- brighter and cleaner than any real structure,
+at a frequency known in advance. The honest reading is that the INSTRUMENT's
+floor on this collect is 0.011 mm RMS, and that this says nothing about what a
+real structure would give. Item 39 flagged beating the published floor as a
+reason for suspicion and that still applies.

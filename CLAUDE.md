@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 50 items and their status.
+an index of all 51 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -227,6 +227,15 @@ longer `D_A <= 1-F`, and any phase-route `quality` quoted from before item 46 is
 different quantity. The shared `quality >= 0.5*q_max` gate is now INERT on real
 scenes — speckle alone scores 0.67 and real imagery 0.81-0.94 — which is a better
 failure than removing the signal but means a pass is not evidence.
+
+**The floor is a QUADRATIC PHASE RESIDUAL, not noise** (item 51). The carrier
+removal fits only a linear ramp `exp(-i*v*k)`, but a scatterer's range history is
+quadratic in time, so the curvature survives and lands at the band floor. Fitting
+and removing a quadratic drops the worst window's artefact 2000x, from 21,602 to
+10.4. It scales as `REL^2` and so does the signal, so the ratio is
+brightness-independent — a brighter target does NOT make smaller motion detectable.
+The fix is a second search dimension over `exp(-i(v*k + w*k^2))`; NOT implemented,
+and predicted to drop the floor toward 0.003 mm.
 
 **The sensitivity floor is 0.0625-0.125 mm** at overlap 0.5 with a zero-amplitude
 twin (item 50) — 0.088 mm RMS, which finally agrees with the published 0.10 mm

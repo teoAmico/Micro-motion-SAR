@@ -91,7 +91,8 @@ said, not better) and item 7's line numbers.
 | 47 | done | the noise floor is RED, so prominence prefers low frequencies; a local background fixes it |
 | 48 | **withdraws item 14** | high overlap is WRONG for the phase route on real data: separation collapses 4 orders of magnitude by 0.90 |
 | 49 | done | the local peak calibrated on nine disjoint grids of real desert: 15.1-34.4 |
-| 50 | **the current state** | sensitivity re-measured at the good overlap with a proper twin: floor is 0.0625-0.125 mm |
+| 50 | done | sensitivity re-measured at the good overlap with a proper twin: floor is 0.0625-0.125 mm |
+| 51 | **the current state** | the floor is a QUADRATIC phase residual the linear carrier removal leaves; a quadratic fit drops it 2000x |
 
 ---
 
@@ -5061,3 +5062,82 @@ sensitivity figure here has passed.
 The frequency was known in advance, the target was ours, and the scene contains
 nothing known to move. What is bounded is recoverability, with a proper control
 for the first time.
+
+
+## 51. What sets the sensitivity floor: a quadratic phase residual
+
+Item 50's floor at 0.125 mm is not noise. It is the zero-amplitude twin: a bright
+STATIC scatterer produces 12,060x at the band floor and the real signal loses to
+it below 0.125 mm. `runs/giza/2026-08-04-static-artefact/`.
+
+### It scales as brightness squared, and saturates
+
+```
+  REL     local peak at the band floor
+    1                            37.9     <- empty desert is 15.1-34.4 (item 49)
+    5                           963.7
+   20                        12,060.1
+   50                        38,991.6
+  100                        44,697.8
+```
+
+Square-law up to 20, saturating between 50 and 100. That is what a fixed FRACTION
+of the scatterer's own energy leaking into one bin looks like: the artefact's
+power tracks the scatterer's while the clutter around it does not. **At REL = 1 it
+is 37.9, barely outside empty desert** -- this is a problem of bright scatterers
+specifically, which is also why it will matter on real scenes with towers,
+corners and ships in them.
+
+**Signal and artefact both scale as REL^2, so their ratio does not depend on
+brightness.** A brighter target does not make smaller motion detectable. Item
+50's floor is a real limit on amplitude and cannot be bought down with a brighter
+target. What it depends on is the residual phase.
+
+### It is the curvature the carrier removal leaves behind
+
+The estimator removes the geometric carrier by finding the LINEAR ramp maximising
+the de-ramped phasor sum. What survives:
+
+```
+  window 8, static bright scatterer, zero injected motion
+  phase rms 0.4153 rad -- well inside (-pi, pi], so nothing is wrapping
+
+  after fitting and removing:   residual rms      bin-3 local ratio
+    linear (what ships)           1.0347 mm             21,601.9
+    quadratic                     0.0902 mm                 10.4
+    cubic                         0.0054 mm                  2.9
+
+  worst of 25 windows: 21,602 -> 10.4 on removing a quadratic
+```
+
+**A quadratic removes it, by a factor of 2,000.** A scatterer's range history is
+quadratic in time, so its phase is quadratic, and a de-ramp fitting only
+`exp(-i*v*k)` leaves the curvature. This is not item 11's sawtooth -- nothing is
+wrapping at 0.42 rad rms -- it is the term below it that item 14's carrier
+removal was never designed to reach.
+
+**I read this backwards first**, and wrote that no polynomial removes it, having
+looked at residual rms rather than at the bin the artefact occupies. The rms
+falls 11x where the artefact falls 2,000x: the artefact is a small part of the
+total spread and almost all of the bin-3 power. Recorded because the wrong
+reading was the natural one.
+
+### The fix, measured but NOT implemented
+
+**Extend the carrier search to a quadratic term** -- maximise
+`|sum_k z[k] exp(-i(v*k + w*k^2))|` over both. That removes GEOMETRY, which is
+what the residual is, and leaves the signal alone. It costs a second search
+dimension, and the coarse pass is already O(N^2) per window, so it needs a staged
+or alternating search rather than a 2-D grid.
+
+The cheaper alternative -- raising the detrend order on the displacement series --
+is a much smaller change and `rs_detrend_t` already exists, but `microm.h` argues
+against precisely this: under a resonance reading the lowest frequencies are the
+DEEPEST structure, so a quadratic detrend attenuates what that model calls real.
+A 0.163 Hz tone is five cycles and safe; a genuine signal near the band floor is
+not.
+
+**If the carrier fix works, the sensitivity floor should drop by roughly the
+square root of 2,000** -- the amplitude at which signal matches artefact scales
+with the residual - which would put it near 0.003 mm before some other floor
+takes over. That is a prediction, and it is the reason to do it.

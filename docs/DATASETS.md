@@ -158,6 +158,16 @@ inside US-port CPHD scenes, but AIS is presence/trajectory metadata rather than
 heave or vibration ground truth.  Full source details are tracked in
 `docs/GROUND_TRUTH_DATASETS.md`.
 
+Two genuine on-board sources are now prioritized for the next catalogue join.
+The *SA Agulhas II* SCALE Winter 2022 archive has UTC-named consecutive
+five-minute MATLAB batches at 9.99 Hz (derived from a 2048 Hz accelerometer
+array), making it dynamically compatible with the pipeline, but a separate
+11--31 July 2022 cruise track is required. NOAA Okeanos Explorer public SCS
+NetCDF trajectories already combine UTC, DGPS, roll, pitch and heave and span
+modern commercial-SAR years; they are ideal for automated footprint matching,
+but their approximately 1 Hz cadence restricts validation to motion below 0.5
+Hz. Neither source is yet a confirmed simultaneous CPHD pair.
+
 ### Capella spotlight CPHD, ranked by what matters here
 
 **Long dwell is no longer the selection criterion.** `FOLLOW-UPS.md` item 32

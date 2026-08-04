@@ -1,0 +1,20 @@
+########## static scatterer at 1x the median sample magnitude
+  amplitude dispersion: best 0.239, median 0.606; 2 of 25 windows meet D_A <= 0.25
+  local peak: 0.092 Hz in window 8 stands 37.9x its own neighbourhood
+strongest peak in window 8: 0.092 Hz, prominence 33.9, quality 0.964, peak-to-peak velocity 1.6 mm/s (UNCALIBRATED)
+########## static scatterer at 5x the median sample magnitude
+  amplitude dispersion: best 0.241, median 0.607; 2 of 25 windows meet D_A <= 0.25
+  local peak: 0.092 Hz in window 8 stands 963.7x its own neighbourhood
+strongest peak in window 8: 0.092 Hz, prominence 54.7, quality 0.992, peak-to-peak velocity 0.9 mm/s (UNCALIBRATED)
+########## static scatterer at 20x the median sample magnitude
+  amplitude dispersion: best 0.241, median 0.607; 2 of 25 windows meet D_A <= 0.25
+  local peak: 0.092 Hz in window 8 stands 12060.1x its own neighbourhood
+strongest peak in window 16: 0.092 Hz, prominence 56.3, quality 0.997, peak-to-peak velocity 0.8 mm/s (UNCALIBRATED)
+########## static scatterer at 50x the median sample magnitude
+  amplitude dispersion: best 0.242, median 0.607; 2 of 25 windows meet D_A <= 0.25
+  local peak: 0.092 Hz in window 8 stands 38991.6x its own neighbourhood
+strongest peak in window 16: 0.092 Hz, prominence 56.4, quality 0.998, peak-to-peak velocity 0.8 mm/s (UNCALIBRATED)
+########## static scatterer at 100x the median sample magnitude
+  amplitude dispersion: best 0.242, median 0.607; 2 of 25 windows meet D_A <= 0.25
+  local peak: 0.092 Hz in window 8 stands 44697.8x its own neighbourhood
+strongest peak in window 16: 0.092 Hz, prominence 56.4, quality 0.998, peak-to-peak velocity 0.8 mm/s (UNCALIBRATED)

@@ -945,6 +945,87 @@ resonarsat_status_t rs_spectrum_ps_window_opts(const rs_spectrum_t *spec,
 /* Defined below, beside the scene-derived null that also needs it. */
 static double rs_median_inplace(double *v, size_t n);
 
+/* Strongest peak against its own neighbourhood. See microm.h on why the plain
+ * prominence is biased toward low frequencies on a red noise floor. */
+resonarsat_status_t rs_spectrum_local_window(const rs_spectrum_t *spec,
+                                             rs_local_peak_t *out)
+{
+    if (!out) {
+        rs_set_error("local peak: no output structure");
+        return RS_ERR_ARG;
+    }
+    memset(out, 0, sizeof *out);
+    if (!spec || !spec->psd || !spec->freq || spec->n_win == 0 ||
+        spec->n_freq == 0) {
+        rs_set_error("local peak: spectrum has no power density");
+        return RS_ERR_ARG;
+    }
+    out->bin = spec->n_freq;
+
+    const size_t n_freq = spec->n_freq;
+    const size_t k_lo = RS_SPECTRUM_LEAKAGE_BINS;
+    if (n_freq <= k_lo + RS_LOCAL_GUARD_BINS + 1) {
+        rs_set_error("local peak: %zu bins is too few to estimate a local "
+                     "background above bin %zu", n_freq, k_lo);
+        return RS_ERR_RANGE;
+    }
+
+    double *ref = malloc((2 * RS_LOCAL_HALF_BINS + 1) * sizeof *ref);
+    if (!ref) {
+        rs_set_error("local peak: out of memory");
+        return RS_ERR_ALLOC;
+    }
+
+    double best = -1.0;
+    size_t n_searched = 0;
+
+    for (size_t w = 0; w < spec->n_win; w++) {
+        const double *P = spec->psd + w * n_freq;
+        for (size_t k = k_lo; k < n_freq; k++) {
+            /* The neighbourhood is clipped to the admissible band, so a
+             * candidate near either end is scored against fewer bins rather
+             * than against bins that do not exist or must not be read. */
+            const size_t lo = (k > k_lo + RS_LOCAL_HALF_BINS)
+                            ? k - RS_LOCAL_HALF_BINS : k_lo;
+            const size_t hi = (k + RS_LOCAL_HALF_BINS + 1 < n_freq)
+                            ? k + RS_LOCAL_HALF_BINS + 1 : n_freq;
+            size_t n_ref = 0;
+            for (size_t j = lo; j < hi; j++) {
+                const size_t d = (j > k) ? j - k : k - j;
+                if (d <= RS_LOCAL_GUARD_BINS) continue;
+                ref[n_ref++] = P[j];
+            }
+            /* Fewer than four reference bins is a background estimated from
+             * noise, not an estimate of noise. */
+            if (n_ref < 4) continue;
+            const double med = rs_median_inplace(ref, n_ref);
+            if (!(med > 0.0)) continue;
+
+            n_searched++;
+            const double ratio = P[k] / med;
+            if (ratio > best) {
+                best = ratio;
+                out->window = w;
+                out->bin = k;
+                out->freq_hz = spec->freq[k];
+                out->ratio = ratio;
+                out->ref_median = med;
+                out->n_ref = n_ref;
+            }
+        }
+    }
+    free(ref);
+
+    if (n_searched == 0) {
+        memset(out, 0, sizeof *out);
+        out->bin = spec->n_freq;
+        rs_set_error("local peak: no bin had a usable neighbourhood");
+        return RS_ERR_RANGE;
+    }
+    out->n_searched = n_searched;
+    return RS_OK;
+}
+
 /* Centre of mass of the windows agreeing with a seed. See microm.h on why a
  * single window index cannot be the answer at 50 percent overlap. */
 resonarsat_status_t rs_spectrum_centroid(const rs_spectrum_t *spec,

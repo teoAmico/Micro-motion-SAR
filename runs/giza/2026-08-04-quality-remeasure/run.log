@@ -1,0 +1,29 @@
+########## 2.0 mm
+  scene-derived null: window 12 at 0.163 Hz stands 5.28 robust deviations above
+  located at window (2.00, 2.01) of (4, 4) -- pixel (47.5, 47.6) --
+strongest peak in window 17: 0.163 Hz, prominence 38.5, quality 0.992, peak-to-peak velocity 7.5 mm/s (UNCALIBRATED)
+########## 1.0 mm
+  scene-derived null: window 12 at 0.163 Hz stands 5.43 robust deviations above
+  located at window (2.00, 2.02) of (4, 4) -- pixel (47.6, 47.8) --
+strongest peak in window 8: 0.163 Hz, prominence 40.7, quality 0.997, peak-to-peak velocity 2.5 mm/s (UNCALIBRATED)
+########## 0.5 mm
+  scene-derived null: window 12 at 0.163 Hz stands 5.34 robust deviations above
+  located at window (2.01, 2.04) of (4, 4) -- pixel (47.6, 48.1) --
+strongest peak in window 8: 0.163 Hz, prominence 41.6, quality 0.997, peak-to-peak velocity 1.5 mm/s (UNCALIBRATED)
+########## 0.25 mm
+  scene-derived null: window 13 at 0.163 Hz stands 5.47 robust deviations above
+  located at window (2.02, 2.07) of (4, 4) -- pixel (47.8, 48.6) --
+strongest peak in window 8: 0.163 Hz, prominence 42.9, quality 0.997, peak-to-peak velocity 1.1 mm/s (UNCALIBRATED)
+########## 0.125 mm
+  scene-derived null: window 13 at 0.163 Hz stands 5.99 robust deviations above
+  located at window (2.04, 2.14) of (4, 4) -- pixel (48.1, 49.8) --
+strongest peak in window 8: 0.163 Hz, prominence 45.3, quality 0.997, peak-to-peak velocity 0.9 mm/s (UNCALIBRATED)
+########## 0.0625 mm
+  scene-derived null: window 13 at 0.163 Hz stands 6.38 robust deviations above
+  located at window (2.08, 2.30) of (4, 4) -- pixel (48.7, 52.3) --
+strongest peak in window 8: 0.163 Hz, prominence 48.9, quality 0.997, peak-to-peak velocity 0.8 mm/s (UNCALIBRATED)
+########## uninjected control
+  scene-derived null: window 8 at 0.130 Hz stands 1.39 robust deviations above
+  located at window (1.00, 1.00) of (4, 4) -- pixel (31.5, 31.5) --
+  DISAGREEMENT: seeded from the scene-derived null instead, the target is at
+strongest peak in window 6: 0.130 Hz, prominence 22.1, quality 0.704, peak-to-peak velocity 124.8 mm/s (UNCALIBRATED)

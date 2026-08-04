@@ -1457,6 +1457,97 @@ resonarsat_status_t rs_spectrum_prominence_at(const rs_spectrum_t *spec,
                                               double *out_psd,
                                               double *out_prom);
 
+/* What a locally-normalised search found. See rs_spectrum_local_window(). */
+typedef struct {
+    size_t window;        /* the window holding the strongest local peak */
+    size_t bin;           /* its bin; n_freq if nothing qualified */
+    double freq_hz;
+    double ratio;         /* peak power over the median of its own neighbourhood */
+    double ref_median;    /* that median */
+    size_t n_ref;         /* reference bins behind it */
+    size_t n_searched;    /* window-bin pairs scored -- the family size */
+} rs_local_peak_t;
+
+/* Guard bins excluded either side of a candidate when estimating its own
+ * background. A Hann main lobe is four bins wide, so a real peak deposits power
+ * two bins each way and would otherwise inflate the background it is measured
+ * against. Same derivation as RS_SPECTRUM_LEAKAGE_BINS. */
+#define RS_LOCAL_GUARD_BINS 2u
+
+/* Half-width of the neighbourhood the background is taken from, in bins. Wide
+ * enough that a median over roughly twenty bins is stable, narrow enough that a
+ * red noise floor is locally flat across it. Not derived; see the measured
+ * sensitivity in FOLLOW-UPS item 47. */
+#define RS_LOCAL_HALF_BINS 12u
+
+/* Find the strongest peak measured against ITS OWN neighbourhood rather than
+ * against the whole spectrum.
+ *
+ * WHY THE ORDINARY PROMINENCE IS BIASED, AND IT IS NOT SUBTLE. `prominence` is a
+ * bin's power over the mean of every other bin, which is the right statistic
+ * only if the noise is white. On this data it is emphatically not. Measured on
+ * the real ICEYE Houston collect with nothing injected, 25 windows averaged:
+ *
+ *     bin  1  0.174 Hz   15.1x the median bin
+ *     bin  2  0.349 Hz   18.7x
+ *     bin  3  0.523 Hz   15.7x
+ *     bin  9  1.569 Hz    5.1x
+ *     bin 32  5.580 Hz    0.8x
+ *
+ * Bins 1-4 carry 24 TIMES the power of the band above Nyquist/2. The noise is
+ * red, and the cause is in the processing rather than the scene: at
+ * `--overlap 0.90` adjacent sub-looks share nine tenths of their pulses, so
+ * their phase errors are correlated and the error series is smooth.
+ *
+ * That is the trend items 37 and 45 kept reporting. It is not a polynomial --
+ * a linear detrend removes 1.4 percent of the spread and a cubic only 17 -- so
+ * detrending cannot reach it and excluding the lowest bins only moves the
+ * reported answer to the first bin that remains. Against a global mean, ANY
+ * low-frequency bin of pure noise scores highly, so an uninjected scene reliably
+ * reports the band floor.
+ *
+ * THE UNCOMFORTABLE PART: item 14 recommends high overlap for this estimator,
+ * because overlap is what buys sub-look coherence on a real collect. The same
+ * setting manufactures the correlated noise that beats the signal. Items 13 and
+ * 14 traded overlap against the response ceiling; this is a third cost neither
+ * accounted for.
+ *
+ * WHAT THIS DOES INSTEAD. Each bin is scored against the median of the bins
+ * around it, excluding RS_LOCAL_GUARD_BINS either side so that a real peak does
+ * not raise its own background. A median rather than a mean because a second
+ * genuine tone inside the neighbourhood would drag an average. That is a
+ * frequency-domain CFAR, and it makes the score comparable across frequencies
+ * on a coloured floor.
+ *
+ * MEASURED, on ICEYE Houston, searching from RS_SPECTRUM_LEAKAGE_BINS upward:
+ *
+ *                       against the global mean   against the local median
+ *     no injection      26.2 at 0.523 Hz          47.5 at 1.221 Hz
+ *     1.0 Hz injected   87.4 at 1.046 Hz        1757.2 at 1.046 Hz
+ *
+ * The control stops preferring the band floor, and the separation between the
+ * injected run and the control widens from 3.3x to 37x.
+ *
+ * IT FAILS ON A STEEP ENOUGH FLOOR, which the test found rather than the
+ * design anticipating it. Against a random walk -- power falling as 1/f^2 --
+ * the slope across a +-RS_LOCAL_HALF_BINS neighbourhood is itself large, so a
+ * bin at the bottom of the band still beats its own background and the bias
+ * survives. This works because the real floor is not that steep: the ICEYE
+ * measurement above is 24x across the whole band, and overlap-induced
+ * correlation is a MOVING AVERAGE over shared pulses rather than an
+ * integration, so its power rolls off as sinc^2 and is locally flat over twenty
+ * bins. A collect whose floor is steeper than that would need a narrower
+ * neighbourhood or a fitted slope, and neither is implemented.
+ *
+ * IT DOES NOT MAKE THE CONTROL SILENT. Pure noise still produces a best local
+ * ratio -- 47.5 above -- because this takes a maximum over every window and
+ * every bin, so the look-elsewhere cost is inside it. The number to compare
+ * against is another scene's maximum, exactly as for rs_spectrum_scene_null().
+ *
+ * 'out' is cleared on any non-OK return. */
+resonarsat_status_t rs_spectrum_local_window(const rs_spectrum_t *spec,
+                                             rs_local_peak_t *out);
+
 /* Where a target sits, to better than one window. See rs_spectrum_centroid(). */
 typedef struct {
     size_t seed;          /* the window the centroid was grown from */

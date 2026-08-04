@@ -87,7 +87,8 @@ said, not better) and item 7's line numbers.
 | 43 | done | that 0.1 m is amplitude-dependent: 0.13 m at 2 mm, 2.24 m at 0.125 mm, linear in 1/amplitude |
 | 44 | done | dwell truncation works and `validate` silently ignored the flag that does it |
 | 45 | done | first ICEYE measurement: urban misses the PS precondition too, and the quality gate discards the true positive |
-| 46 | **the current state** | the phase route's quality is now spatial dominance, which fixes item 45 and leaves the gate inert |
+| 46 | done | the phase route's quality is now spatial dominance, which fixes item 45 and leaves the gate inert |
+| 47 | **the current state** | the noise floor is RED, so prominence prefers low frequencies; a local background fixes it |
 
 ---
 
@@ -4817,3 +4818,78 @@ two questions and were being reported as one.
 Anything quoting a phase-route `quality` from before this change is quoting a
 different quantity. `d_a` is untouched, so items 19, 20, 23 and 45's dispersion
 figures all stand.
+
+
+## 47. The noise floor is red, and that is why controls report the band floor
+
+Item 37 called the thing that wins on an uninjected scene a trend, and excluded
+the first three bins. Item 45 found it again on ICEYE at the first bin that
+remained. Neither asked what it is.
+
+**It is not a trend.** On the real ICEYE series a linear detrend removes 1.4
+percent of the spread, a quadratic 9.4 more and a cubic 6.4 more -- 83 percent
+survives a cubic fit, so no polynomial describes it and no detrend can reach it.
+
+**The noise is RED.** Mean power spectrum over all 25 windows with nothing
+injected:
+
+```
+   bin  1  0.174 Hz   15.1x the median bin
+   bin  2  0.349 Hz   18.7x
+   bin  3  0.523 Hz   15.7x
+   bin  9  1.569 Hz    5.1x
+   bin 32  5.580 Hz    0.8x
+
+   bins 1-4 carry 24x the power of the band above Nyquist/2
+```
+
+The cause is in the processing, not the scene: **at `--overlap 0.90` adjacent
+sub-looks share nine tenths of their pulses**, so their phase errors are
+correlated and the error series is a moving average rather than white noise.
+
+`prominence` is a bin's power over the mean of every other bin, which is correct
+only for a white floor. On a red one every low bin of pure noise scores well,
+which is exactly why an uninjected scene reliably reports the lowest admissible
+frequency and why excluding bins only moves the answer to the first one left.
+
+**This is a third cost of overlap that items 13 and 14 did not account for.**
+Item 14 recommends high overlap for the phase route because overlap buys
+sub-look coherence; the same setting manufactures the correlated noise that
+beats the signal.
+
+### The fix: score each bin against its own neighbourhood
+
+`rs_spectrum_local_window()` compares a bin's power to the MEDIAN of the bins
+around it, excluding two either side so a real peak cannot raise its own
+background -- a frequency-domain CFAR. Median rather than mean so a second
+genuine tone inside the neighbourhood cannot drag it.
+
+```
+                       against the global mean   against the local median
+  ICEYE, no injection  26.2 at 0.523 Hz          47.5 at 1.221 Hz
+  ICEYE, 1.0 Hz in     87.4 at 1.046 Hz        1757.2 at 1.046 Hz
+  Giza,  no injection                            39.2 at 0.163 Hz
+  Giza,  2 mm at 0.163                          431.8 at 0.163 Hz
+```
+
+The control stops preferring the band floor, and the separation between an
+injected run and its control widens from 3.3x to 37x on ICEYE and to 11x on
+Giza. Reported beside the other policies; it gates nothing.
+
+**It does not make a control silent.** Pure noise still yields a best local ratio
+-- 47.5 on ICEYE, 39.2 on Giza -- because the maximum is taken over every window
+and every bin, so the look-elsewhere cost is inside the statistic. The number to
+compare against is another scene's maximum, as with the scene-derived null.
+
+### The limit, which the test found rather than the design anticipating
+
+Against a random walk -- power falling as 1/f^2 -- the slope across a 25-bin
+neighbourhood is itself steep, so a bin at the bottom of the band still beats its
+own background and the bias survives. The first version of the regression test
+used exactly that and the method failed it.
+
+This works because the real floor is not that steep. Overlap-induced correlation
+is a MOVING AVERAGE over shared pulses, so its power rolls off as sinc^2 and is
+locally flat over twenty bins; the fixture now models that. A collect with a
+steeper floor would need a narrower neighbourhood or a fitted slope, and neither
+is implemented.

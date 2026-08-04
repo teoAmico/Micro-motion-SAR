@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 46 items and their status.
+an index of all 47 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -227,6 +227,20 @@ longer `D_A <= 1-F`, and any phase-route `quality` quoted from before item 46 is
 different quantity. The shared `quality >= 0.5*q_max` gate is now INERT on real
 scenes — speckle alone scores 0.67 and real imagery 0.81-0.94 — which is a better
 failure than removing the signal but means a pass is not evidence.
+
+**The noise floor is RED, so `prominence` is biased toward low frequencies** (item
+47). At `--overlap 0.90` adjacent sub-looks share nine tenths of their pulses, so
+their errors are correlated: bins 1-4 carry 24x the power of the band above
+Nyquist/2 on real data. `prominence` divides by the mean of all other bins, which
+is right only for a white floor, so an uninjected scene reliably reports the lowest
+admissible frequency — and it is NOT a trend, since 83% of it survives a cubic fit.
+`rs_spectrum_local_window()` scores each bin against the median of its own
+neighbourhood instead and widens the injected-versus-control separation from 3.3x
+to 37x. This is a third cost of overlap that items 13-14 did not account for: the
+setting item 14 recommends for the phase route manufactures the noise that beats
+the signal. **Prominence is also not comparable across `--fmin` settings** — it is
+measured against the admissible band, so changing the floor changes the number
+while the reported window and frequency stay put.
 
 **But a null only calibrates against noise its own model can produce** (item 37).
 Below 2 mm the Giza sweep reported bin 1 instead of the injected frequency, with

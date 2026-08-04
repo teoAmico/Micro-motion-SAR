@@ -1992,6 +1992,29 @@ static int rs_cmd_mmotion(int argc, char **argv)
         }
     }
 
+    /* The locally-normalised search, reported beside the others and gating
+     * nothing. It exists because the ordinary prominence assumes a white noise
+     * floor and this one is red -- at high overlap adjacent sub-looks share most
+     * of their pulses, so their errors are correlated and the lowest admissible
+     * bin wins on any scene with nothing in it. See rs_spectrum_local_window(). */
+    {
+        rs_local_peak_t lp;
+        if (rs_spectrum_local_window(&spec, &lp) == RS_OK) {
+            printf("  local peak: %.3f Hz in window %zu stands %.1fx its own "
+                   "neighbourhood\n"
+                   "           (median %.4g over %zu bins, guard %u, from %zu "
+                   "window-bin pairs).\n"
+                   "           Comparable across frequency where 'prominence' is "
+                   "not; compare it\n"
+                   "           against another scene's maximum, not against a "
+                   "threshold.\n",
+                   lp.freq_hz, lp.window, lp.ratio, lp.ref_median, lp.n_ref,
+                   RS_LOCAL_GUARD_BINS, lp.n_searched);
+        } else {
+            printf("  local peak: not computed -- %s\n", rs_last_error());
+        }
+    }
+
     /* The scene-derived null. Unlike --null-static this needs no extra
      * processing and carries the collect's own trends by construction, which is
      * exactly what item 37 showed the simulated null could not. It gates

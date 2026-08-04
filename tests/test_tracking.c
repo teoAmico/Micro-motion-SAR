@@ -2235,6 +2235,98 @@ int main(void)
      * slightly LOWEST -- which is what was measured on the real collect, 38.56
      * against 39.14. argmax then names a corner of the block; the centre of
      * mass names the middle, which is where the target is. */
+    /* A RED NOISE FLOOR MAKES THE ORDINARY PROMINENCE PREFER LOW FREQUENCIES.
+     *
+     * Measured on the real ICEYE collect: bins 1-4 carry 24 times the power of
+     * the band above Nyquist/2, because at 0.90 overlap adjacent sub-looks share
+     * nine tenths of their pulses and their errors are correlated. Against a
+     * global mean any low bin of pure noise then scores well, which is why an
+     * uninjected scene reliably reports the band floor.
+     *
+     * The fixture reproduces that: red noise from a running sum, plus a small
+     * tone well up the band. The tone is deliberately WEAKER in absolute power
+     * than the low-frequency noise, so the two statistics must disagree. */
+    RS_CASE("a local background finds a tone the global mean buries under red noise");
+    {
+        const size_t nw = 4, nlk = 128;
+        rs_microm_t m;
+        memset(&m, 0, sizeof m);
+        m.n_looks = nlk; m.n_win = nw; m.n_win_az = nw; m.n_win_rg = 1;
+        m.win_az = m.win_rg = 8; m.stride_az = m.stride_rg = 8;
+        m.dt = 0.25; m.az_spacing_m = m.rg_spacing_m = 1.0;
+        m.disp_az  = calloc(nw * nlk, sizeof *m.disp_az);
+        m.disp_rg  = calloc(nw * nlk, sizeof *m.disp_rg);
+        m.disp_los = calloc(nw * nlk, sizeof *m.disp_los);
+        m.vel_los  = calloc(nw * nlk, sizeof *m.vel_los);
+        m.quality  = calloc(nw, sizeof *m.quality);
+        m.d_a      = calloc(nw, sizeof *m.d_a);
+        RS_CHECK(m.disp_az && m.disp_rg && m.disp_los && m.vel_los && m.quality && m.d_a);
+
+        const size_t tone_bin = 40;          /* well above the leakage floor */
+        for (size_t w = 0; w < nw; w++) {
+            m.quality[w] = 1.0; m.d_a[w] = 0.3;
+            /* THE NOISE IS A MOVING AVERAGE, which is what overlap actually
+             * does: at 0.90 each sub-look shares nine tenths of its pulses with
+             * its neighbour, so the error series is a running mean over roughly
+             * ten independent chunks. Power then rolls off as sinc^2 with its
+             * first null near bin nlk/AVG.
+             *
+             * A running SUM was tried first and is the wrong model. That is a
+             * random walk, 1/f^2, so steep that the slope across a +-12-bin
+             * neighbourhood is itself large and the local ratio at the bottom of
+             * the band stays high -- the method under test fails on it, and the
+             * header records that as its limit. The real floor measured on ICEYE
+             * is 24x across the whole band, not 1/f^2. */
+            const size_t AVG = 10;
+            for (size_t k = 0; k < nlk; k++) {
+                double e = 0.0;
+                for (size_t j = 0; j < AVG; j++) e += rs_test_noise(w, k + j);
+                double v = e / (double)AVG;
+                if (w >= 2)
+                    v += 0.05 * sin(2.0 * M_PI * (double)tone_bin * (double)k / (double)nlk);
+                m.vel_los[w * nlk + k] = v;
+                m.disp_los[w * nlk + k] = v;
+            }
+        }
+
+        rs_spectrum_t sr;
+        RS_CHECK_OK(rs_spectrum_compute(&m, RS_SPEC_DISPLACEMENT, &sr));
+
+        /* The premise, asserted rather than assumed: the floor really is red. */
+        double lo = 0.0, hi = 0.0;
+        for (size_t k = RS_SPECTRUM_LEAKAGE_BINS; k < RS_SPECTRUM_LEAKAGE_BINS + 4; k++)
+            lo += sr.psd[k];
+        for (size_t k = sr.n_freq / 2; k < sr.n_freq; k++) hi += sr.psd[k];
+        lo /= 4.0; hi /= (double)(sr.n_freq - sr.n_freq / 2);
+        printf("    low bins carry %.0fx the power of the upper band\n", lo / hi);
+        RS_CHECK(lo > 10.0 * hi);
+
+        rs_local_peak_t lp;
+        RS_CHECK_OK(rs_spectrum_local_window(&sr, &lp));
+        printf("    global prominence picks %.4f Hz (window 0, red noise); "
+               "local picks %.4f Hz\n", sr.dominant_freq[0], lp.freq_hz);
+        printf("    local ratio %.1f over %zu reference bins, %zu pairs searched\n",
+               lp.ratio, lp.n_ref, lp.n_searched);
+
+        /* The tone-free windows have their dominant at the bottom of the band,
+         * which is the bias this exists to remove ... */
+        RS_CHECK(sr.dominant_freq[0] < sr.freq[tone_bin] * 0.5);
+        /* ... and the locally-normalised search finds the tone instead. */
+        RS_CHECK_NEAR(lp.freq_hz, sr.freq[tone_bin], 1e-9);
+        RS_CHECK(lp.window >= 2);            /* one of the windows holding it */
+        RS_CHECK(lp.ratio > 5.0);
+        RS_CHECK(lp.n_ref >= 4 && lp.n_searched > 0);
+        RS_CHECK(lp.bin == tone_bin);
+
+        /* Contract. */
+        RS_CHECK_ERR(rs_spectrum_local_window(NULL, &lp), RS_ERR_ARG);
+        RS_CHECK(lp.n_searched == 0);
+        RS_CHECK_ERR(rs_spectrum_local_window(&sr, NULL), RS_ERR_ARG);
+
+        rs_spectrum_free(&sr);
+        rs_microm_free(&m);
+    }
+
     RS_CASE("the centroid resolves a target argmax puts a whole window away");
     {
         const size_t naz = 6, nrg = 6, nw = naz * nrg, nlk = 64;

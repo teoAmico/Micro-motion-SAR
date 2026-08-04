@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 52 items and their status.
+an index of all 53 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -228,8 +228,13 @@ different quantity. The shared `quality >= 0.5*q_max` gate is now INERT on real
 scenes — speckle alone scores 0.67 and real imagery 0.81-0.94 — which is a better
 failure than removing the signal but means a pass is not evidence.
 
-**The carrier removal fits a linear AND a quadratic rate, on a CENTRED basis**
-(item 52). Centring is not cosmetic: `k` and `k*k` correlate over a finite record,
+**The carrier removal fits linear, QUADRATIC and CUBIC rates on an ORTHOGONAL
+basis** (items 52-53): `kc = k-(N-1)/2`, `q = kc^2-(N^2-1)/12`,
+`c = kc^3-kc*(3N^2-7)/20`. The constants are not decoration — `c` and `kc` are both
+odd, so parity does not separate them, and an uncentred staged search returns zero
+for the higher terms every time (measured: 1.13x reduction against 38x). Artefact
+down 171x in total, floor from 0.125 mm to 0.0039-0.0078 mm. Returns are falling
+fast — 38x then 4.5x — so a quartic is not worth a fourth O(N^2) pass. Centring is not cosmetic: `k` and `k*k` correlate over a finite record,
 so an uncentred staged search shifts the mean rate as it scans curvature and
 returns `mu = 0` every time — measured, 1.13x artefact reduction against 38x
 centred. The floor fell from 0.125 mm to 0.0156 mm, eightfold. That is 0.011 mm

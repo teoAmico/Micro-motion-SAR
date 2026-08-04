@@ -93,7 +93,8 @@ said, not better) and item 7's line numbers.
 | 49 | done | the local peak calibrated on nine disjoint grids of real desert: 15.1-34.4 |
 | 50 | done | sensitivity re-measured at the good overlap with a proper twin: floor is 0.0625-0.125 mm |
 | 51 | done | the floor is a QUADRATIC phase residual the linear carrier removal leaves; a quadratic fit drops it 2000x |
-| 52 | **the current state** | quadratic carrier removal implemented: artefact down 38x, floor 0.125 -> 0.0156 mm |
+| 52 | done | quadratic carrier removal implemented: artefact down 38x, floor 0.125 -> 0.0156 mm |
+| 53 | **the current state** | cubic term added: artefact 171x down in total, floor 0.0039-0.0078 mm, returns now falling fast |
 
 ---
 
@@ -5209,3 +5210,74 @@ at a frequency known in advance. The honest reading is that the INSTRUMENT's
 floor on this collect is 0.011 mm RMS, and that this says nothing about what a
 real structure would give. Item 39 flagged beating the published floor as a
 reason for suspicion and that still applies.
+
+
+## 53. The cubic term: 171x in total, and the returns are falling
+
+Item 51 measured that a cubic fit removed a further 3.6x of the static-scatterer
+artefact after the quadratic. Item 52 implemented the quadratic. This adds the
+cubic. `runs/giza/2026-08-04-cubic-floor/`.
+
+```
+  kc = k - (N-1)/2
+  q  = kc^2 - (N^2-1)/12          orthogonal to kc by parity
+  c  = kc^3 - kc*(3N^2-7)/20      orthogonal to BOTH
+```
+
+**The cubic's constant is not decoration.** `c` and `kc` are both ODD, so parity
+does not separate them the way it separates `q` from `kc`. The coefficient is
+`sum(kc^4)/sum(kc^2) = (3N^2-7)/20` for `k = 0..N-1`, verified to machine
+precision at N = 16, 64, 128 and 512. Without it the cubic stage would have
+failed exactly as item 52's uncentred quadratic did.
+
+```
+  static bright scatterer, zero motion, REL 20
+    linear only                 12,060.1x
+    + quadratic                    317.7x     38x
+    + cubic                         70.7x     a further 4.5x, 171x in total
+
+  2 mm signal   1,207,566 -> 1,311,807 -> 1,277,488   unchanged within 3%
+
+      amp mm   local peak    freq          verdict
+       0.015625      556   0.153           signal
+       0.0078125     144   0.153           signal    <- last correct point
+       0.00390625     72   0.092   THE ARTEFACT (70.7)
+       0.001953125    71   0.092   THE ARTEFACT
+
+  floor 0.0039-0.0078 mm against 0.0078-0.0156 with the quadratic alone
+```
+
+Item 51's offline cubic predicted 3.6x; the search delivers 4.5x, and
+`sqrt(4.5) = 2.1` predicts the floor halving, which is what happens. Unlike item
+52, where the offline number was 50x optimistic, the offline cubic transferred.
+
+### Where this stops being worth doing
+
+```
+                floor mm          artefact   gain
+  linear      0.0625 - 0.125      12,060.1     --
+  quadratic   0.0078 - 0.0156        317.7    38x
+  cubic       0.0039 - 0.0078         70.7   4.5x
+```
+
+Each stage is another O(N^2) pass per window and the returns are falling fast.
+A quartic looks worth about a factor of two for a fourth pass. **Not added**, and
+the sequence above is the reason rather than a preference.
+
+### Eighteen times below the published floor, which is now a real concern
+
+0.0078 mm zero-to-peak is 0.0055 mm RMS against Vattulainen et al.'s smallest
+confirmed 0.10 mm RMS. Item 50 had this project in agreement with that figure,
+item 52 put it 9x below, and this puts it 18x.
+
+**That gap is not evidence of a better instrument. It is evidence that the
+injected target is not like a real one.** `rs_simulate_inject_vibrator()` writes
+a perfectly coherent point scatterer with analytically exact phase, present in
+every pulse, at a frequency known in advance. A real structure decorrelates, is
+aspect-dependent, and is never a point -- and items 24-25 measured what aspect
+dependence alone does to this estimator, which was not small.
+
+The defensible claim is narrow: **the instrument's own floor on this collect is
+0.0055 mm RMS**, measured against the only control that applies to an injected
+run. Anything about real structures needs a real structure, which remains the
+thing this project does not have.

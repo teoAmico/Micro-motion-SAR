@@ -1,0 +1,15 @@
+########## 0.015625 mm
+  local peak: 0.153 Hz in window 16 stands 555.9x its own neighbourhood
+strongest peak in window 16: 0.153 Hz, prominence 27.6, quality 0.997, peak-to-peak velocity 0.2 mm/s (UNCALIBRATED)
+########## 0.0078125 mm
+  local peak: 0.153 Hz in window 16 stands 143.6x its own neighbourhood
+strongest peak in window 16: 0.153 Hz, prominence 16.7, quality 0.997, peak-to-peak velocity 0.1 mm/s (UNCALIBRATED)
+########## 0.00390625 mm
+  local peak: 0.092 Hz in window 6 stands 71.7x its own neighbourhood
+strongest peak in window 6: 0.092 Hz, prominence 9.2, quality 0.995, peak-to-peak velocity 0.8 mm/s (UNCALIBRATED)
+########## 0.001953125 mm
+  local peak: 0.092 Hz in window 6 stands 71.2x its own neighbourhood
+strongest peak in window 6: 0.092 Hz, prominence 9.2, quality 0.995, peak-to-peak velocity 0.8 mm/s (UNCALIBRATED)
+########## 0.0009765625 mm
+  local peak: 0.092 Hz in window 6 stands 71.0x its own neighbourhood
+strongest peak in window 6: 0.092 Hz, prominence 9.2, quality 0.995, peak-to-peak velocity 0.8 mm/s (UNCALIBRATED)

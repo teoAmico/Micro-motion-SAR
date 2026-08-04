@@ -573,31 +573,48 @@ typedef struct {
      * produced a shift. That is the reading this field had for its first two
      * years and is what --coherence was written to mask on.
      *
-     * PHASE: amplitude STABILITY of the window's dominant pixel, 1 - sigma_A/mu_A
-     * -- because scoring a phase window by how constant its phase is would reward
-     * exactly the windows where nothing moves. rs_microm_track() argues that at
-     * the point it is computed.
+     * PHASE: SPATIAL DOMINANCE of the window's brightest pixel over its own
+     * window, 1 - mean/peak on the reference look -- the same measure
+     * RS_MICROM_EST_ARGMAX uses.
      *
-     * SO ON THE PHASE ROUTE THIS IS EXACTLY 1 - d_a. Both are computed from the
-     * same pixel -- the argmax of the reference-look patch -- over the same
-     * amplitudes, so they are complements to machine precision, confirmed on real
-     * collects (docs/CODE-REVIEW.md finding 1). Three consequences that are not
-     * obvious from either field alone:
+     * IT WAS AMPLITUDE STABILITY, 1 - sigma_A/mu_A, AND THAT WAS A DEFECT.
+     * Scoring a phase window by how constant its PHASE is would reward the
+     * windows where nothing moves; the old measure avoided that and then made
+     * the same mistake one level down. A scatterer vibrating at 2 mm is not
+     * amplitude-stable across sub-looks, because that is what the motion does to
+     * it. Measured on ICEYE Houston (item 45): six windows carried the injected
+     * frequency at the highest prominence in the scene and every one failed the
+     * shared gate at 0.21-0.24 against a trend artefact's 0.54, so the tool
+     * reported the artefact. The gate preferred targets that did not move.
      *
-     *   - `--coherence F` on the phase route IS the criterion D_A <= 1 - F. The
-     *     default 0.4 is therefore D_A <= 0.60, a looser form of the same test
-     *     rs_spectrum_ps_window() applies at RS_PS_DA_MAX.
-     *   - The shared gate every selection policy applies, quality >= 0.5*q_max,
-     *     is on this route a SCENE-RELATIVE amplitude-dispersion gate.
-     *   - rs_spectrum_ps_window() is presented as the policy that reads different
-     *     evidence from the others. Against the correlation route it does; against
-     *     the phase route it reads the same evidence at a tighter threshold.
+     * The precondition being proxied is item 15's -- one dominant scatterer per
+     * SUB-LOOK RESOLUTION CELL -- which is a statement about space, and a
+     * vibrating dominant is still dominant. After the change the same run
+     * reports the injected frequency at quality 0.994.
      *
-     * None of that is a defect -- amplitude stability is the right precondition
-     * proxy for an observable that reads one scatterer's phase. It is recorded
-     * because a reader comparing a `quality` map against a `d_a` map on a phase
-     * run is looking at one measurement twice, and FOLLOW-UPS.md items 17 and 19
-     * report both halves as though they were separate diagnostics. */
+     * THIS IS NO LONGER 1 - d_a. They were complements computed from the same
+     * amplitudes, so a `quality` map and a `d_a` map on a phase run were one
+     * measurement shown twice; that is what docs/CODE-REVIEW.md finding 1
+     * recorded and it no longer holds. `quality` now answers "is there a
+     * dominant scatterer here" and `d_a` answers "is it a persistent one".
+     * `--coherence F` is likewise no longer the criterion D_A <= 1 - F.
+     *
+     * THE SHARED GATE IS NOW INERT ON REAL SCENES, and that is measured rather
+     * than suspected. Fully developed speckle over a 1024-pixel window already
+     * scores 1 - mean/peak = 0.673 (mean over 20000 realisations, 5th-95th
+     * 0.633-0.718), real sub-look imagery runs 0.81-0.94, and a dominant reaches
+     * 0.995. The shared gate is quality >= 0.5*q_max, which sits near 0.50 when
+     * the max is 0.99, so nothing is removed: 25 of 25 windows pass on every
+     * ICEYE run measured. The discriminating range is roughly [0.75, 1.0] and
+     * the threshold is far below it.
+     *
+     * That is a strictly better failure than the old one -- an inert gate
+     * removes nothing, where the old gate removed the signal -- but it means the
+     * RELATIVE form of the threshold is wrong for this quantity, not the
+     * quantity. A floor derived from the speckle expectation above would
+     * discriminate; none is imposed here, because this project does not fit
+     * constants to two scenes. See FOLLOW-UPS item 46.
+     */
     double *quality;            /* [n_win] */
 
     /* [n_win] mean correlation-surface SNR, and the value that same surface

@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 45 items and their status.
+an index of all 46 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -216,14 +216,17 @@ window's is positive — but the pairing must differ in NOTHING BUT amplitude:
 paired against the uninjected run instead of the zero-amplitude one, the increment
 is LARGER than a real 0.5 mm signal, because it is then measuring the scatterer.
 
-**The quality gate discards vibrating targets on the phase route** (item 45). On
-that route `quality` IS amplitude stability, the same quantity as `D_A`, and a
-scatterer vibrating at 2 mm is not amplitude-stable — so the persistent-scatterer
-criterion and the signal being measured are in direct conflict at large amplitude.
-Measured on ICEYE Houston: six windows carry the injected frequency at the scene's
-highest prominence and all six fail the gate, so the tool reported a trend
-artefact instead. Item 37 found the complement — a barely-moving scatterer has LOW
-`D_A` and passes. The gate prefers targets that do not move.
+**On the phase route `quality` is SPATIAL DOMINANCE, `1 - mean/peak`, and no longer
+`1 - D_A`** (items 45-46). It was amplitude stability, which rejected vibrating
+targets because a scatterer vibrating at 2 mm is not amplitude-stable — six ICEYE
+windows carried the injected frequency at the scene's highest prominence and all
+six failed the gate. The precondition being proxied is item 15's, one dominant per
+sub-look resolution cell, which is spatial; a vibrating dominant is still dominant.
+Consequences: `quality` and `d_a` are no longer complements, `--coherence F` is no
+longer `D_A <= 1-F`, and any phase-route `quality` quoted from before item 46 is a
+different quantity. The shared `quality >= 0.5*q_max` gate is now INERT on real
+scenes — speckle alone scores 0.67 and real imagery 0.81-0.94 — which is a better
+failure than removing the signal but means a pass is not evidence.
 
 **But a null only calibrates against noise its own model can produce** (item 37).
 Below 2 mm the Giza sweep reported bin 1 instead of the injected frequency, with

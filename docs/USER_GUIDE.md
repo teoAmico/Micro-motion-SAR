@@ -1019,13 +1019,22 @@ reach, so every real-data run recorded here passes `--coherence 0`. Why it canno
 be tested is `FOLLOW-UPS.md` item 12f.
 
 **It masks a different quantity under `--estimator phase`**, which reads one
-pixel's phase and forms no correlation surface at all. There `quality` is
-amplitude *stability*, so `--coherence F` is exactly the criterion
-`D_A <= 1 − F`: the 0.40 default is `D_A <= 0.60`, a looser form of the same
-persistent-scatterer test the `persistent scatterers` line applies at 0.25. The
-two are complements to machine precision on that route, so a `quality` map and a
-`d_a` map from a phase run are one measurement shown twice, and the two output
-lines are not independent evidence. See `rs_microm_t.quality` in `microm.h`.
+pixel's phase and forms no correlation surface at all. There `quality` is the
+**spatial dominance** of the window's brightest pixel over its own window,
+`1 − mean/peak` — the same measure `argmax` uses, and the thing item 15's
+precondition actually names.
+
+It used to be amplitude *stability*, which made `--coherence F` exactly the
+criterion `D_A <= 1 − F` and made a `quality` map and a `d_a` map one measurement
+shown twice. **That was a defect**, not a curiosity: a vibrating scatterer is not
+amplitude-stable, so the gate rejected moving targets (`FOLLOW-UPS.md` items 45–46).
+The two are now independent — `quality` asks whether there is a dominant
+scatterer, `d_a` whether it is a persistent one.
+
+**The shared `quality >= 0.5 × max` gate is inert on real scenes** as a result:
+speckle alone scores about 0.67 on a 1024-pixel window and real imagery 0.81–0.94,
+so a threshold near 0.50 removes nothing. An inert gate is better than one that
+removed the signal, but do not read a pass as evidence. See `rs_microm_t.quality`.
 
 `--no-optimize` is an audit baseline, not a better measurement: it searches the
 whole upsampled correlation surface rather than the neighbourhood of the integer

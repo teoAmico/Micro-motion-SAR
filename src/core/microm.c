@@ -455,13 +455,21 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
                      * series follows one scatterer rather than wandering to
                      * whichever happens to be brightest in each look. */
                     size_t best_i = 0;
-                    double best_a = -1.0;
+                    double best_a = -1.0, ref_mean = 0.0;
                     for (size_t i = 0; i < win_az * win_rg; i++) {
                         const double a = (double)cabsf(pref[i]);
+                        ref_mean += a;
                         if (a > best_a) { best_a = a; best_i = i; }
                     }
+                    ref_mean /= (double)(win_az * win_rg);
                     const size_t pa = az0 + best_i / win_rg;
                     const size_t pr = rg0 + best_i % win_rg;
+
+                    /* SPATIAL dominance of that pixel over its own window, which
+                     * is this window's quality. See below on why it is not the
+                     * temporal amplitude stability it used to be. */
+                    const double dominance = (best_a > 0.0)
+                                           ? 1.0 - ref_mean / best_a : 0.0;
 
                     /* PHASE AGAINST THE MEAN PHASOR, NOT ACCUMULATED FORWARD.
                      *
@@ -503,15 +511,15 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
                      * that was unbounded in principle and swamped in practice.
                      * Use the correlation estimator for motion larger than
                      * that; it has no ambiguity at all. */
-                    double amp_sum = 0.0, amp_sq = 0.0;
+                    /* The pixel has to exist in every look before anything
+                     * reads it. This loop accumulated the amplitude sums the old
+                     * temporal-stability quality needed; that quality is now
+                     * spatial and taken from the reference patch, so only the
+                     * bounds check remains. */
                     int ok = 1;
-
-                    for (size_t k = 0; k < n_looks && ok; k++) {
+                    for (size_t k = 0; k < n_looks; k++) {
                         const rs_slc_t *im = &stack->look[k];
                         if (pa >= im->n_az || pr >= im->n_rg) { ok = 0; break; }
-                        const double a = (double)cabsf(im->data[pa * im->n_rg + pr]);
-                        amp_sum += a;
-                        amp_sq  += a * a;
                     }
 
                     if (!ok) goto next_window;
@@ -660,24 +668,45 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
                                           / stack->dt;
                     }
 
-                    /* Quality is amplitude STABILITY, not phase stability.
-                     * Scoring a window by how constant its phase is would
+                    /* QUALITY IS SPATIAL DOMINANCE, NOT TEMPORAL STABILITY.
+                     *
+                     * Scoring a phase window by how constant its PHASE is would
                      * reward exactly the windows where nothing moves, and the
-                     * gate would then select static ground. A persistent bright
-                     * scatterer is the precondition for the phase meaning
-                     * anything, and that is what this measures. */
-                    const double mean_a = amp_sum / (double)n_looks;
-                    double q = 0.0;
-                    if (mean_a > 0.0) {
-                        const double var = amp_sq / (double)n_looks - mean_a * mean_a;
-                        const double cv = (var > 0.0) ? sqrt(var) / mean_a : 0.0;
-                        q = 1.0 - cv;
-                        if (q < 0.0) q = 0.0;
-                        if (q > 1.0) q = 1.0;
-                    }
-                    out->quality[w] = q;
+                     * gate would then select static ground. That argument is
+                     * still right and it is why this is not phase stability.
+                     *
+                     * It used to be amplitude stability, 1 - sigma_A/mu_A over
+                     * the looks -- the complement of d_a on the same pixel. That
+                     * has the same defect one level down, and item 45 measured
+                     * it on ICEYE Houston: a scatterer vibrating at 2 mm is NOT
+                     * amplitude-stable across sub-looks, because that is what
+                     * the motion does to it. Six windows carried the injected
+                     * frequency at the highest prominence in the scene and every
+                     * one of them failed the gate at quality 0.21-0.24 against a
+                     * reported artefact's 0.54, so the tool reported a trend
+                     * instead. The gate preferred targets that did not move.
+                     *
+                     * The precondition this is meant to be a proxy for is item
+                     * 15's: ONE DOMINANT SCATTERER PER SUB-LOOK RESOLUTION CELL.
+                     * That is a statement about space, not time -- and a
+                     * vibrating dominant is still dominant. So the measure is
+                     * the peak's contrast against its own window,
+                     * 1 - mean/peak, which is what RS_MICROM_EST_ARGMAX already
+                     * uses and which the motion does not degrade.
+                     *
+                     * Taken on the REFERENCE look only, not averaged over the
+                     * stack. That is the look the pixel was chosen from, and it
+                     * keeps the estimator reading one pixel per look rather than
+                     * a whole patch -- the cost argument in rs_phasor_mag()'s
+                     * comment depends on it.
+                     *
+                     * d_a is unchanged and still reports amplitude dispersion,
+                     * so the two are no longer complements: quality now answers
+                     * "is there a dominant scatterer here" and d_a answers "is
+                     * it a persistent one". Those were one number and are two. */
+                    out->quality[w] = dominance;
 
-                    if (params->coherence_min > 0.0 && q < params->coherence_min) {
+                    if (params->coherence_min > 0.0 && dominance < params->coherence_min) {
                         for (size_t k = 0; k < n_looks; k++) {
                             const size_t idx = (size_t)w * n_looks + k;
                             out->disp_los[idx] = out->vel_los[idx] = 0.0;

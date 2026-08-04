@@ -86,7 +86,8 @@ said, not better) and item 7's line numbers.
 | 42 | done | the centroid over the agreeing cluster turns item 41's 16 m localisation bound into 0.1 m |
 | 43 | done | that 0.1 m is amplitude-dependent: 0.13 m at 2 mm, 2.24 m at 0.125 mm, linear in 1/amplitude |
 | 44 | done | dwell truncation works and `validate` silently ignored the flag that does it |
-| 45 | **the current state** | first ICEYE measurement: urban misses the PS precondition too, and the quality gate discards the true positive |
+| 45 | done | first ICEYE measurement: urban misses the PS precondition too, and the quality gate discards the true positive |
+| 46 | **the current state** | the phase route's quality is now spatial dominance, which fixes item 45 and leaves the gate inert |
 
 ---
 
@@ -4739,3 +4740,80 @@ finds most unusual. Resolving it silently would destroy that.
 the same function returns that window, 2.50 windows from the target.
 
 Nothing in this scene is known to move. The 1.047 Hz is ours.
+
+
+## 46. The phase route's quality: spatial dominance, and an inert gate
+
+Item 45 measured the defect: on the phase route `quality` was amplitude
+stability, `1 - sigma_A/mu_A`, and a scatterer vibrating at 2 mm is not
+amplitude-stable because that is what the motion does to it. Six ICEYE windows
+carried the injected frequency at the scene's highest prominence and all six
+failed the shared gate, so `mmotion` reported a trend artefact instead.
+
+**The fix is to measure the precondition that is actually claimed.** Item 15's
+condition is ONE DOMINANT SCATTERER PER SUB-LOOK RESOLUTION CELL -- a statement
+about space. A vibrating dominant is still dominant. `quality` on the phase route
+is now `1 - mean/peak` of the reference-look patch, the same measure
+`RS_MICROM_EST_ARGMAX` already used, taken on the reference look so the estimator
+still reads one pixel per look rather than a whole patch.
+
+```
+ICEYE Houston, 1.0 Hz injected at 2 mm
+
+  before   strongest peak in window  0: 0.524 Hz, prominence 25.4, quality 0.543
+           located at window (0.00, 0.00)          <- a trend artefact
+  after    strongest peak in window  6: 1.047 Hz, prominence 35.8, quality 0.994
+           located at window (1.99, 1.99)          <- the injected window
+```
+
+Truth is the grid origin at window (2.00, 2.00). The reported answer moves from
+the wrong frequency in the wrong place to the injected frequency 0.16 m from the
+target, and the DISAGREEMENT line of item 45 disappears because both seeds now
+agree.
+
+**Discrimination now appears in the reported answer**, where before it existed
+only inside the scene-derived null:
+
+```
+  injected          1.047 Hz     zero-amplitude twin   0.524 Hz
+  no injection      0.524 Hz
+```
+
+Both controls report the band-floor trend; only the injection reports the
+injected frequency.
+
+Giza is unaffected and slightly better: `--estimator phase` still recovers
+0.163 Hz, and the centroid now reads (2.00, 2.01) against a truth of (2.00, 2.00).
+
+### The gate is now inert, which is measured and stated rather than hidden
+
+```
+  fully developed speckle, 1024-pixel window, 20000 realisations
+      1 - mean/peak    mean 0.673,  5th-95th 0.633-0.718
+  real sub-look imagery (ICEYE, 32x32 windows)     0.81 - 0.94
+  a dominant injected scatterer                    0.994 - 0.995
+```
+
+The shared gate is `quality >= 0.5 * q_max`, which sits near 0.50 when the max is
+0.99. **25 of 25 windows pass on every ICEYE run measured.** The discriminating
+range is roughly [0.75, 1.0] and the threshold is far below it.
+
+That is a strictly better failure than the one it replaces -- an inert gate
+removes nothing, where the old gate removed the signal -- but it says the
+RELATIVE form of the threshold is wrong for this quantity, not the quantity. A
+floor derived from the speckle expectation above would discriminate. **None is
+imposed here**, because fitting a constant to two scenes is what this project
+keeps having to undo, and because the verdict is supposed to come from the null
+control rather than from a gate.
+
+### What this breaks, deliberately
+
+`quality` and `d_a` were complements to machine precision on this route --
+`docs/CODE-REVIEW.md` finding 1, and the reason `--coherence F` was exactly the
+criterion `D_A <= 1 - F`. That identity is gone. `quality` now answers "is there
+a dominant scatterer here" and `d_a` answers "is it a persistent one", which are
+two questions and were being reported as one.
+
+Anything quoting a phase-route `quality` from before this change is quoting a
+different quantity. `d_a` is untouched, so items 19, 20, 23 and 45's dispersion
+figures all stand.

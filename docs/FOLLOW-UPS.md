@@ -81,7 +81,8 @@ said, not better) and item 7's line numbers.
 | 37 | done | bin 1 outscored the truth below 2 mm and every gate endorsed it; the first three bins are now unreportable, which relocates a trend rather than removing it |
 | 38 | done | a ZERO-amplitude injection outscores every real one, so the p-value measured the scatterer being added, not it moving |
 | 39 | done | the paired increment at a nominated frequency answers item 38: the scene gains exactly zero, the target gains |
-| 40 | **the current state** | the target can be moved off the grid origin at last, and the reported window follows it 4 of 5 |
+| 40 | superseded by 41 | the target can be moved off the grid origin at last, and the reported window follows it |
+| 41 | **the current state** | the 16 m offset is not geometry: overlapping windows track one scatterer and the centred one scores lowest |
 
 ---
 
@@ -4326,15 +4327,17 @@ against a 0.051 m azimuth resolution -- mean that the largest probe response
 finds a ghost as readily as the target. Ground truth has to come from the
 injection geometry, which is independent of the measurement.
 
-### The absolute position is NOT verified
+### The absolute position is NOT verified -- and the numbers above are WRONG
 
-The reference above is empirical: a zero-offset injection lands in window
-`(1, 3)` where the window grid's geometric centre is `(2, 2)`. That is a
-systematic offset of one window in each axis, 16 m, between the ENU frame
-`--inject-at` addresses and where the target focuses. Every placement shares it,
-so relative displacement is what was tested. A height assumption, a geolocation
-offset, or an off-by-one in the window-centre convention would all look exactly
-like this, and it should be chased before anyone reads a position off this tool.
+**Item 41 supersedes this section and the table above it.** The scoring used the
+window a zero-offset injection reports as the origin of the mapping. That window
+is itself one off, so "4 of 5 exact" is measuring against a displaced reference.
+
+Rescored against the geometry, measured independently by differencing two
+focused images: **0 of 5 exact for both policies, 5 of 5 within one window.**
+Localisation is good to one window and systematically not better. See item 41
+for why, which is neither a height assumption nor a geolocation offset nor an
+off-by-one -- the injection lands where it is asked to, sub-pixel.
 
 ### And it is still not detection
 
@@ -4348,3 +4351,91 @@ Most importantly the policies were searching a scene that certainly contains a
 loud injected target. Locating a target known to exist is strictly easier than
 deciding whether one does, and the run that matters -- a scene where nothing is
 known to move -- still returns a null.
+
+
+## 41. The 16 m offset chased: the geometry is exact, the selection is not
+
+Item 40 left a systematic one-window offset unexplained and listed three
+candidates -- a height assumption, a geolocation offset, an off-by-one in the
+window convention. **All three are wrong.**
+`runs/giza/2026-08-04-offset-chase/`.
+
+### The target lands exactly where it is asked to
+
+Two `focus` runs over the same collect and grid, identical but for
+`--inject-vib`, differenced. Independent of tracking, windows, spectra and every
+selection policy:
+
+```
+max change 1.584e+04 at azimuth px 47, range px 48
+grid origin is at pixel 47.5 in both axes   (focus.c:193, (n-1)/2 with n = 96)
+  -> the target is -0.5 m azimuth, +0.5 m range from the origin
+```
+
+Sub-pixel exact: the origin lies between pixels 47 and 48 and the energy
+straddles them. `rs_grid_t`, `--inject-at`, the backprojector and the window
+convention all agree. Window centres are at `15.5 + 16k`, so window (2,2) is
+centred on 47.5 and IS the target's window.
+
+### The selection picks a neighbour, and always will
+
+Per-window prominence, zero-offset 2 mm run:
+
+```
+      irg=0     1       2       3       4
+iaz=1  14.8   38.6    38.6    39.1     5.5
+iaz=2  14.8   38.6   [38.6]   39.1    17.6     <- (2,2) is the target's window
+iaz=3   8.8   38.5    39.1    39.1    15.5
+```
+
+Six windows lie between 38.5 and 39.1 -- **1.5 percent apart** -- and thirteen
+pairs are BIT-IDENTICAL across `dominant_hz`, `prominence`, `quality` and
+`probe_psd` simultaneously.
+
+That is not overlap similarity, it is the same series. At `win 32` on
+`stride 16` the windows overlap by half; they all contain the injected dominant
+scatterer; and **the phase estimator tracks one dominant scatterer's phase**,
+which is its documented precondition (item 15). Several windows tracking the
+same physical scatterer produce the same displacement series, hence the same
+spectrum and the same prominence.
+
+**The correctly-centred window scores LOWEST of the cluster**, 38.56 against
+39.14. Which neighbour wins turns on 1.5 percent, and item 37 already recorded
+that winner moving with injected amplitude.
+
+The image is not the cause: all 96 azimuth rows and all 96 range columns of the
+focused scene are distinct, with no periodicity at any shift.
+
+### What localisation is actually worth
+
+```
+ offset m | true win |  best_window  |  scene null
+ -32, -32 | (0,0)    | (0,1)  d = 1  | (0,1)  d = 1
+ -16, +16 | (1,3)    | (0,4)  d = 1  | (1,4)  d = 1
+  +0, -32 | (2,0)    | (1,1)  d = 1  | (1,1)  d = 1
+ +16, +32 | (3,4)    | (4,4)  d = 1  | (2,4)  d = 1
+ +32,  +0 | (4,2)    | (3,3)  d = 1  | (3,3)  d = 1
+
+EXACT 0/5 and 0/5.   WITHIN ONE WINDOW 5/5 and 5/5.
+```
+
+Never exact, never worse than one window. **Item 40's "4 of 5 exact" is
+withdrawn**; it was scored against a reference that was itself displaced. The
+correct claim is that this tool locates a strong injected target to within one
+window -- 16 m at these settings -- and systematically no better.
+
+That bound is a property of the window geometry rather than of the estimator: at
+50 percent overlap a target at one window's centre also sits inside four
+windows, and nothing in the current selection prefers the one it is centred in.
+A centroid over the tied cluster, or a preference for the window whose centre is
+nearest the energy, would plausibly recover the missing window. Not attempted.
+
+### The harness caught this project again
+
+The first attempt built the command as `EXTRA="--inject-vib ..."` and passed
+`$EXTRA` unquoted. **zsh does not word-split unquoted parameters**, so it arrived
+as a single argument, the option was never matched, and the differenced images
+showed `max |difference| = 0` -- which reads as "the injection never reaches
+focus", a dramatic and entirely false finding. `CLAUDE.md` documents this exact
+trap because it already cost a wrong diagnosis about `--max-pulses`. Documenting
+it was not enough to prevent it.

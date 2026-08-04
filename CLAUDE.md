@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 40 items and their status.
+an index of all 41 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -185,11 +185,18 @@ positive control that has no zero-amplitude run beside it.
 **Injections land on the grid origin unless `--inject-at DX,DY` says otherwise**
 (item 40). Every experiment before that put the target at the exact centre of the
 analysis grid, so localisation scored perfectly without being tested. Off-centre,
-the reported window follows the target 4 of 5 against 4% chance — but score it on
-the INJECTION GEOMETRY, never on "the window with the most energy at the injected
-frequency": the aliasing ghosts carry that frequency too, and scoring on them gave
-a different and wrong answer. Absolute position is unverified — a zero-offset
-injection lands one window off the grid's geometric centre in each axis.
+the reported window is within ONE window of the target in 5 of 5 placements and
+exactly right in 0 of 5 (item 41). Localisation is good to 16 m at these settings
+and systematically no better: at 50% overlap the target sits in four windows at
+once, they track the same dominant scatterer and return BIT-IDENTICAL series, and
+the window it is centred in scores LOWEST of the cluster.
+
+Score localisation on the INJECTION GEOMETRY — measure where the target lands by
+differencing two `focus` runs that differ only in `--inject-vib`. Do not score on
+"the window with the most energy at the injected frequency" (the aliasing ghosts
+carry it too) and do not score against the window a zero-offset run reports (it is
+itself one off). Both gave wrong answers here, and the second produced a published
+"4 of 5 exact" that had to be withdrawn.
 
 `--probe-hz F` is how that twin is compared (item 39): it adds `probe_psd` and
 `probe_prominence` at ONE nominated frequency to `PREFIX_windows.csv`, so two runs

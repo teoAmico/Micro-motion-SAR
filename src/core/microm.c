@@ -226,6 +226,7 @@ void rs_microm_free(rs_microm_t *m)
     free(m->vel_los);
     free(m->disp_los);
     free(m->phase);
+    free(m->amp);
     free(m->quality);
     free(m->snr);
     free(m->sigma_px);
@@ -304,6 +305,7 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
     out->vel_los  = calloc(n_win * n_looks, sizeof *out->vel_los);
     out->disp_los = calloc(n_win * n_looks, sizeof *out->disp_los);
     out->phase    = calloc(n_win * n_looks, sizeof *out->phase);
+    out->amp      = calloc(n_win * n_looks, sizeof *out->amp);
     out->quality  = calloc(n_win, sizeof *out->quality);
     out->snr      = calloc(n_win, sizeof *out->snr);
     out->sigma_px = calloc(n_win, sizeof *out->sigma_px);
@@ -803,6 +805,10 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
 
                         const size_t idx = (size_t)w * n_looks + k;
                         out->phase[idx] = psi;
+                        /* The tracked pixel's amplitude, kept look by look so
+                         * rs_spectrum_am_check() can ask whether a peak is
+                         * amplitude modulation rather than motion. */
+                        if (out->amp) out->amp[idx] = (double)cabsf(z);
                         /* Line-of-sight displacement from phase: one wavelength
                          * of two-way path is 4*pi of phase. */
                         out->disp_los[idx] = -psi * lambda / (4.0 * M_PI);

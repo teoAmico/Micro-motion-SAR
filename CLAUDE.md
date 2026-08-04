@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 55 items and their status.
+an index of all 56 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -263,6 +263,16 @@ four orders of magnitude between 0.75 and 0.90 and fails at 0.95, on real data,
 withdrawing item 14's advice. **The local peak's control range on real Giza desert
 is 15.1-34.4 over nine disjoint grids** (item 49), so anything under ~35x there is
 inside what empty desert produces; nine controls give p_min = 0.10, not 0.05.
+
+**Two ideas have now failed against item 25's unsafe failure, for the same reason**
+(items 55-56): `rs_spectrum_local_window()` and `rs_spectrum_am_check()` both test
+the SPECTRUM, and the failure is not in the spectrum. The aspect lobe makes the
+tracked pixel FADE, and the pixel is chosen once from the reference look, so its
+phase is noise-dominated during the fade — the series is NON-STATIONARY, and the
+spectrum of that has structure at no particular frequency. A test for
+non-stationarity is what this needs and none exists here. Amplitude dispersion is
+the closest thing, which is why `rs_spectrum_ps_window()` is still the only safe
+policy.
 
 **`rs_spectrum_local_window()` addresses COLOURED NOISE, not spurious peaks
 generally** (item 55). It was a large win on real Giza data — separation 3.3x to

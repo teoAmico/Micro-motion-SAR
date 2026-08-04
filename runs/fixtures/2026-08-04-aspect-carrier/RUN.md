@@ -119,3 +119,52 @@ configuration has none of it.
 
 **No policy here is fit for an aspect-dependent scene**, which is the scene type
 real structures produce.
+
+---
+
+# Follow-on 2: the AM/PM discriminator, which does not work
+
+Item 55 left the failure isolated to the selection stage. The physics suggested
+a discriminator: a VIBRATION modulates phase and not brightness; ASPECT
+DEPENDENCE modulates brightness and not range. So a frequency present in both
+the displacement and the amplitude spectrum should be brightness, and one
+present only in displacement should be motion.
+
+`rs_spectrum_am_check()` implements it. `am_sweep.c` and `am_run.log` beside
+this file.
+
+```
+  lobe   injected AM ratio    static AM ratio    in-band statics rejected
+  1.00        0.4 - 36.8          8.7 - 12.7                1 of 1
+  0.50        1.1 - 97.5         26.8 - 444.6               0 of 0
+  0.25        0.6 - 28.1          0.7 - 7.8                 0 of 2
+  0.12        0.3 - 12.2          0.7 - 13.2                0 of 0
+```
+
+**It does not separate them.** The ranges overlap at every lobe width, the
+static ratios EXCEED the injected ones at lobe 0.50, and one of the three
+in-band false positives is caught. No threshold on this quantity works.
+
+## Why, which is the part worth keeping
+
+**The false positives are not amplitude modulation at the reported frequency.**
+At lobe 0.25 the two in-band statics have ratios of 0.7 to 7.8 -- no amplitude
+peak at all where the displacement peaked.
+
+The mechanism is different from the one assumed. The aspect lobe makes the
+tracked pixel FADE over part of the aperture, and the pixel is chosen once from
+the reference look, so during the fade its phase is noise-dominated. The series
+is then non-stationary -- good phase for part of the record, noise for the rest
+-- and the spectrum of that has structure at no particular frequency. The
+amplitude signature is a smooth ENVELOPE at the bottom of the band, not a tone
+where the displacement peaked.
+
+## What it re-derives
+
+The right question is **"does this window's brightness vary at all"**, not "does
+it vary at this frequency". That question is amplitude dispersion, which is what
+`rs_spectrum_ps_window()` applies and why item 25 found it the only safe policy.
+
+This function reaches item 25's conclusion the long way round. The threshold and
+the rejection flag were removed after the measurement; it reports a ratio and
+gates nothing.

@@ -945,6 +945,100 @@ resonarsat_status_t rs_spectrum_ps_window_opts(const rs_spectrum_t *spec,
 /* Defined below, beside the scene-derived null that also needs it. */
 static double rs_median_inplace(double *v, size_t n);
 
+/* Does a displacement peak also appear in the amplitude spectrum? See microm.h,
+ * which records that this does NOT separate the two on the fixture it was built
+ * for, and why. Reported as a diagnostic; there is no threshold. */
+resonarsat_status_t rs_spectrum_am_check(const rs_microm_t *m,
+                                         size_t window, double freq_hz,
+                                         rs_am_check_t *out)
+{
+    if (!out) {
+        rs_set_error("am check: no output structure");
+        return RS_ERR_ARG;
+    }
+    memset(out, 0, sizeof *out);
+    if (!m || !m->amp) {
+        rs_set_error("am check: this estimator keeps no per-look amplitude, so "
+                     "there is nothing to test a peak against");
+        return RS_ERR_ARG;
+    }
+    if (window >= m->n_win) {
+        rs_set_error("am check: window %zu of %zu", window, m->n_win);
+        return RS_ERR_ARG;
+    }
+    const size_t n = m->n_looks;
+    if (n < 8 || !(m->dt > 0.0) || !(freq_hz >= 0.0)) {
+        rs_set_error("am check: %zu looks at dt %g cannot be asked about %g Hz",
+                     n, m->dt, freq_hz);
+        return RS_ERR_ARG;
+    }
+
+    const size_t n_freq = n / 2 + 1;
+    const double df = 1.0 / ((double)n * m->dt);
+    size_t k = (size_t)(freq_hz / df + 0.5);
+    if (k >= n_freq) k = n_freq - 1;
+
+    double *win = malloc(n * sizeof *win);
+    float complex *buf = malloc(n * sizeof *buf);
+    double *P = malloc(n_freq * sizeof *P);
+    double *ref = malloc(n_freq * sizeof *ref);
+    rs_fft_plan *plan = NULL;
+    resonarsat_status_t st = RS_OK;
+    if (!win || !buf || !P || !ref ||
+        (st = rs_fft_plan_create(n, &plan)) != RS_OK) {
+        free(win); free(buf); free(P); free(ref); rs_fft_plan_destroy(plan);
+        rs_set_error("am check: out of memory for %zu looks", n);
+        return (st == RS_OK) ? RS_ERR_ALLOC : st;
+    }
+
+    /* Same Hann window the displacement spectrum uses, so the two are
+     * comparable bin for bin, and the MEAN removed first -- a bright window
+     * would otherwise put all its power at DC and flatten every ratio. */
+    double wp = 0.0, mean = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        win[i] = 0.5 * (1.0 - cos(2.0 * M_PI * (double)i / (double)(n - 1)));
+        wp += win[i] * win[i];
+        mean += m->amp[window * n + i];
+    }
+    if (wp <= 0.0) wp = 1.0;
+    mean /= (double)n;
+
+    for (size_t i = 0; i < n; i++)
+        buf[i] = (float complex)((m->amp[window * n + i] - mean) * win[i]);
+    rs_fft_forward(plan, buf);
+    for (size_t j = 0; j < n_freq; j++) {
+        const double mag = (double)cabsf(buf[j]);
+        P[j] = mag * mag / wp;
+    }
+
+    const size_t k_lo = RS_SPECTRUM_LEAKAGE_BINS;
+    const size_t lo = (k > k_lo + RS_LOCAL_HALF_BINS) ? k - RS_LOCAL_HALF_BINS : k_lo;
+    const size_t hi = (k + RS_LOCAL_HALF_BINS + 1 < n_freq)
+                    ? k + RS_LOCAL_HALF_BINS + 1 : n_freq;
+    size_t n_ref = 0;
+    for (size_t j = lo; j < hi; j++) {
+        const size_t d = (j > k) ? j - k : k - j;
+        if (d <= RS_LOCAL_GUARD_BINS) continue;
+        ref[n_ref++] = P[j];
+    }
+    if (n_ref >= 4) {
+        const double med = rs_median_inplace(ref, n_ref);
+        if (med > 0.0) {
+            out->am_ratio = P[k] / med;
+            out->ref_median = med;
+        }
+    }
+    out->bin = k;
+    out->n_ref = n_ref;
+
+    free(win); free(buf); free(P); free(ref); rs_fft_plan_destroy(plan);
+    if (n_ref < 4) {
+        rs_set_error("am check: only %zu reference bins around bin %zu", n_ref, k);
+        return RS_ERR_RANGE;
+    }
+    return RS_OK;
+}
+
 /* Strongest peak against its own neighbourhood. See microm.h on why the plain
  * prominence is biased toward low frequencies on a red noise floor. */
 resonarsat_status_t rs_spectrum_local_window(const rs_spectrum_t *spec,

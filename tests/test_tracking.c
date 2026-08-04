@@ -2246,6 +2246,57 @@ int main(void)
      * The fixture reproduces that: red noise from a running sum, plus a small
      * tone well up the band. The tone is deliberately WEAKER in absolute power
      * than the low-frequency noise, so the two statistics must disagree. */
+    /* THE AMPLITUDE SERIES IS KEPT AND CAN BE ASKED ABOUT A FREQUENCY.
+     *
+     * Item 56 measured that this does not separate motion from aspect
+     * dependence on the fixture it was built for, and it is kept as a
+     * diagnostic. What IS worth pinning is the contract and the arithmetic:
+     * a window whose brightness genuinely oscillates at a frequency must show
+     * a high ratio there, and one with flat brightness must not. Without that
+     * the number would be untrustworthy as well as insufficient. */
+    RS_CASE("the amplitude spectrum answers about the frequency it is given");
+    {
+        const size_t nw = 2, nlk = 64;
+        rs_microm_t m;
+        memset(&m, 0, sizeof m);
+        m.n_looks = nlk; m.n_win = nw; m.n_win_az = nw; m.n_win_rg = 1;
+        m.win_az = m.win_rg = 8; m.stride_az = m.stride_rg = 8;
+        m.dt = 0.25; m.az_spacing_m = m.rg_spacing_m = 1.0;
+        m.disp_los = calloc(nw * nlk, sizeof *m.disp_los);
+        m.vel_los  = calloc(nw * nlk, sizeof *m.vel_los);
+        m.amp      = calloc(nw * nlk, sizeof *m.amp);
+        RS_CHECK(m.disp_los && m.vel_los && m.amp);
+
+        const size_t bin = 9;
+        const double df = 1.0 / ((double)nlk * m.dt);
+        for (size_t k = 0; k < nlk; k++) {
+            const double t = 2.0 * M_PI * (double)bin * (double)k / (double)nlk;
+            /* Window 0 fades at the tone frequency; window 1 is flat with a
+             * little uncorrelated ripple. */
+            m.amp[0 * nlk + k] = 10.0 + 4.0 * sin(t);
+            m.amp[1 * nlk + k] = 10.0 + 0.02 * rs_test_noise(1, k);
+        }
+        rs_am_check_t a0, a1;
+        RS_CHECK_OK(rs_spectrum_am_check(&m, 0, (double)bin * df, &a0));
+        RS_CHECK_OK(rs_spectrum_am_check(&m, 1, (double)bin * df, &a1));
+        printf("    amplitude oscillating at the bin: ratio %.1f; flat: ratio %.2f\n",
+               a0.am_ratio, a1.am_ratio);
+        RS_CHECK(a0.bin == bin && a1.bin == bin);
+        RS_CHECK(a0.am_ratio > 100.0 * a1.am_ratio);
+        RS_CHECK(a0.n_ref >= 4);
+
+        /* Contract: no amplitude series is an error rather than a zero, since a
+         * caller must not read "no modulation" out of "not measured". */
+        double *keep = m.amp; m.amp = NULL;
+        RS_CHECK_ERR(rs_spectrum_am_check(&m, 0, (double)bin * df, &a0), RS_ERR_ARG);
+        RS_CHECK(a0.am_ratio == 0.0);
+        m.amp = keep;
+        RS_CHECK_ERR(rs_spectrum_am_check(&m, nw, (double)bin * df, &a0), RS_ERR_ARG);
+        RS_CHECK_ERR(rs_spectrum_am_check(NULL, 0, 1.0, &a0), RS_ERR_ARG);
+
+        rs_microm_free(&m);
+    }
+
     RS_CASE("a local background finds a tone the global mean buries under red noise");
     {
         const size_t nw = 4, nlk = 128;

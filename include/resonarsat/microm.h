@@ -566,6 +566,26 @@ typedef struct {
      * longer an accumulated total: consecutive values are independent. */
     double *phase;              /* [n_win][n_looks], radians in (-pi, pi] */
 
+    /* [n_win][n_looks] AMPLITUDE of the tracked pixel, look by look. Filled by
+     * the estimators that follow one pixel -- phase and argmax -- and NULL for
+     * the others, which have no single pixel to report.
+     *
+     * WHY IT IS KEPT RATHER THAN REDUCED TO d_a. Amplitude dispersion is one
+     * number per window and throws the time structure away. That structure is
+     * the only thing separating the two failures this project keeps confusing:
+     *
+     *   a VIBRATION modulates PHASE -- the target's range changes and its
+     *   brightness does not;
+     *   ASPECT DEPENDENCE modulates AMPLITUDE -- a facet lit over part of the
+     *   aperture fades and its range never changes.
+     *
+     * Both put a peak in the displacement spectrum, because amplitude
+     * modulation corrupts a phase estimate, and item 25 measured the result:
+     * static aspect-dependent scenes returning in-band frequencies. Only the
+     * amplitude series says which mechanism produced a given peak. See
+     * rs_spectrum_am_check(). */
+    double *amp;                /* [n_win][n_looks], NULL when not applicable */
+
     /* [n_win] tracking quality in [0,1] -- BUT IT IS A DIFFERENT QUANTITY PER
      * ESTIMATOR, and on one route it is not independent of 'd_a' below.
      *
@@ -1456,6 +1476,69 @@ resonarsat_status_t rs_spectrum_prominence_at(const rs_spectrum_t *spec,
                                               size_t *out_bin,
                                               double *out_psd,
                                               double *out_prom);
+
+/* What the amplitude series says about a peak. See rs_spectrum_am_check(). */
+typedef struct {
+    double am_ratio;      /* amplitude-spectrum power at the bin, over its own
+                           * local background -- the same statistic
+                           * rs_spectrum_local_window() applies to displacement */
+    double ref_median;    /* that background */
+    size_t bin;           /* the bin tested */
+    size_t n_ref;         /* reference bins behind it */
+} rs_am_check_t;
+
+/* Ask whether a peak in the DISPLACEMENT spectrum also appears in the AMPLITUDE
+ * spectrum of the same window at the same frequency.
+ *
+ * THE IDEA, AND IT DOES NOT WORK. A vibrating scatterer modulates PHASE: its
+ * range changes and its brightness does not. An aspect-dependent static
+ * scatterer modulates AMPLITUDE: a facet lit over part of the aperture fades,
+ * and its range never changes. Both produce a peak in the displacement
+ * spectrum, because amplitude modulation corrupts a phase estimate. So a
+ * frequency present in BOTH spectra should be brightness, and one present only
+ * in displacement should be motion.
+ *
+ * MEASURED ON THE ASPECT FIXTURE, WHICH IS THE CASE IT WAS BUILT FOR, IT DOES
+ * NOT SEPARATE (item 56):
+ *
+ *     lobe   injected AM ratio    static AM ratio    in-band statics rejected
+ *     1.00        0.4 - 36.8          8.7 - 12.7                1 of 1
+ *     0.50        1.1 - 97.5         26.8 - 444.6               0 of 0
+ *     0.25        0.6 - 28.1          0.7 - 7.8                 0 of 2
+ *     0.12        0.3 - 12.2          0.7 - 13.2                0 of 0
+ *
+ * The ranges overlap at every lobe width, the static ratios EXCEED the injected
+ * ones at 0.50, and one of three in-band false positives is caught. No threshold
+ * on this quantity does the job.
+ *
+ * WHY, WHICH IS THE USEFUL PART. The false positives are not amplitude
+ * modulation AT THE REPORTED FREQUENCY -- at lobe 0.25 the two in-band statics
+ * have ratios of 0.7 to 7.8, which is no amplitude peak at all. The aspect lobe
+ * makes the tracked pixel FADE across part of the aperture, and the pixel is
+ * chosen once from the reference look, so during the fade its phase is
+ * noise-dominated. The series is then non-stationary -- good phase for part of
+ * the record and noise for the rest -- and the spectrum of that has structure
+ * at no particular frequency. The amplitude signature is a smooth ENVELOPE at
+ * the bottom of the band, not a tone where the displacement peaked.
+ *
+ * So the right question is "does this window's brightness vary at all", not
+ * "does it vary at this frequency" -- and that question is amplitude dispersion,
+ * which is what rs_spectrum_ps_window() already applies and why item 25 found it
+ * the only safe policy. This function re-derives that conclusion the long way.
+ *
+ * KEPT AS A DIAGNOSTIC, reporting the ratio and nothing else. There is no
+ * threshold and no flag, because the measurement above does not support one.
+ *
+ * The statistic is rs_spectrum_local_window()'s applied to the amplitude
+ * periodogram: the bin's power over the median of its neighbourhood, guard bins
+ * excluded, with the mean amplitude removed first so a bright window does not
+ * put all its power at DC.
+ *
+ * Requires 'm->amp', so it applies to the phase and argmax estimators and
+ * returns RS_ERR_ARG for the others. 'out' is cleared on any non-OK return. */
+resonarsat_status_t rs_spectrum_am_check(const rs_microm_t *m,
+                                         size_t window, double freq_hz,
+                                         rs_am_check_t *out);
 
 /* What a locally-normalised search found. See rs_spectrum_local_window(). */
 typedef struct {

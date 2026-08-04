@@ -96,7 +96,8 @@ said, not better) and item 7's line numbers.
 | 52 | done | quadratic carrier removal implemented: artefact down 38x, floor 0.125 -> 0.0156 mm |
 | 53 | done | cubic term added: artefact 171x down in total, floor 0.0039-0.0078 mm, returns now falling fast |
 | 54 | done | the carrier fix rescues item 25's recovery, 3 of 4 lobe widths, and NOT its static false positives |
-| 55 | **the current state** | all three policies on the aspect fixture: none is both safe and useful, and item 47's local peak is a LOSS here |
+| 55 | done | all three policies on the aspect fixture: none is both safe and useful, and item 47's local peak is a LOSS here |
+| 56 | **the current state** | the AM/PM discriminator does NOT work: the false positives are not amplitude modulation at the reported frequency |
 
 ---
 
@@ -5393,3 +5394,58 @@ configuration, and this one gets zero recall.
 scene type real structures produce. That is the same conclusion item 25 reached,
 now with the carrier residual eliminated as an explanation and the newest
 statistic tested and excluded as a remedy.
+
+
+## 56. The AM/PM discriminator does not work, and what that says about the mechanism
+
+Item 55 isolated the failure to the selection stage. The physics suggested a
+discriminator, and it is a good idea that does not survive measurement.
+
+A VIBRATION modulates PHASE -- the target's range changes, its brightness does
+not. ASPECT DEPENDENCE modulates AMPLITUDE -- a facet lit over part of the
+aperture fades, its range never changes. Both put a peak in the displacement
+spectrum, because amplitude modulation corrupts a phase estimate. So a frequency
+present in BOTH spectra should be brightness and one present only in displacement
+should be motion. `rs_spectrum_am_check()` implements exactly that.
+
+```
+  lobe   injected AM ratio    static AM ratio    in-band statics rejected
+  1.00        0.4 - 36.8          8.7 - 12.7                1 of 1
+  0.50        1.1 - 97.5         26.8 - 444.6               0 of 0
+  0.25        0.6 - 28.1          0.7 - 7.8                 0 of 2
+  0.12        0.3 - 12.2          0.7 - 13.2                0 of 0
+```
+
+**It does not separate them.** Ranges overlap at every lobe width, the static
+ratios EXCEED the injected ones at 0.50, and one of three in-band false
+positives is caught. No threshold on this quantity works, so the threshold and
+the rejection flag were removed and it reports a ratio and gates nothing.
+
+### The mechanism is not the one assumed
+
+**The false positives are not amplitude modulation at the reported frequency.**
+At lobe 0.25 the two in-band statics have AM ratios of 0.7 to 7.8 -- no amplitude
+peak at all where the displacement peaked.
+
+What the aspect lobe does is make the tracked pixel FADE across part of the
+aperture. The pixel is chosen ONCE from the reference look, so during the fade
+its phase is noise-dominated: the series is non-stationary, good phase for part
+of the record and noise for the rest, and the spectrum of that has structure at
+no particular frequency. The amplitude signature is a smooth ENVELOPE at the
+bottom of the band, not a tone where the displacement peaked.
+
+That is a different failure from amplitude modulation and it needs a different
+test.
+
+### It re-derives item 25's conclusion the long way
+
+The right question is **"does this window's brightness vary at all"** rather than
+"does it vary at this frequency". That is amplitude dispersion, which
+`rs_spectrum_ps_window()` already applies, and it is why item 25 found the PS
+selector the only safe policy.
+
+Two ideas have now been tried against item 25's unsafe failure and both have
+failed: item 47's local peak (item 55) and this. Both failed for the same
+underlying reason -- they test the SPECTRUM, and the failure is not in the
+spectrum but in the tracked series being non-stationary. **A test for
+non-stationarity is what this needs**, and none exists here.

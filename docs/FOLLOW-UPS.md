@@ -80,7 +80,8 @@ said, not better) and item 7's line numbers.
 | 36 | done | Umbra and ICEYE read correctly; the per-vendor SGN override is confirmed right |
 | 37 | done | bin 1 outscored the truth below 2 mm and every gate endorsed it; the first three bins are now unreportable, which relocates a trend rather than removing it |
 | 38 | done | a ZERO-amplitude injection outscores every real one, so the p-value measured the scatterer being added, not it moving |
-| 39 | **the current state** | the paired increment at a nominated frequency answers item 38: the scene gains exactly zero, the target gains |
+| 39 | done | the paired increment at a nominated frequency answers item 38: the scene gains exactly zero, the target gains |
+| 40 | **the current state** | the target can be moved off the grid origin at last, and the reported window follows it 4 of 5 |
 
 ---
 
@@ -4279,3 +4280,71 @@ this validates the INJECTION EXPERIMENTS and transfers nothing to the field
 problem. The recoverability/detectability gap of item 38 is unchanged; what has
 been fixed is that the injection experiments can now be trusted to be measuring
 motion.
+
+
+## 40. Blind localisation: the reported window follows the target
+
+The README has said for a long time that "automatically locating an unknown
+vibrating target among hundreds of windows remains untested". It was untested
+because it was untestable: `rs_simulate_inject_vibrator()` has always taken a
+`centre`, but `main.c` passed the grid origin and nothing else, so every
+injection this project ever ran landed on the same spot -- the exact centre of
+the analysis grid. A policy that always looked at the middle would have scored
+perfectly without locating anything.
+
+`--inject-at DX,DY` offsets the scatterer in metres along the grid axes. The
+library needed no change. `runs/giza/2026-08-04-blind-localisation/`.
+
+Five placements, 2 mm at 0.163 Hz, 96 m grid giving a 5x5 window grid at 16 m
+per window. **Ground truth is the injection geometry**: an offset of `(dx, dy)`
+moves the target `(dx/16, dy/16)` windows from where a zero-offset injection
+lands. Scored on the exact window.
+
+```
+ offset m |          expected |      best_window |       scene null
+ -32, -32 | (0,1)  CLIPPED    | win  1 (0,1) hit | win  1 (0,1) hit
+ -16, +16 | (0,4)             | win  4 (0,4) hit | win  9 (1,4) MISS
+  +0, -32 | (1,1)             | win  6 (1,1) hit | win  6 (1,1) hit
+ +16, +32 | (2,4)  CLIPPED    | win 24 (4,4) MISS| win 14 (2,4) hit
+ +32,  +0 | (3,3)             | win 18 (3,3) hit | win 18 (3,3) hit
+
+EXACT window: best_window 4/5, scene-derived null 4/5
+```
+
+Chance of naming one window in 25 is 4 percent. Both are far above it, they fail
+on different placements, and **the plain prominence policy does as well as the
+scene-derived null built in item 38** -- which is worth saying plainly, because
+the null was the more sophisticated instrument and it did not win.
+
+### A scoring mistake worth recording
+
+The first scoring used "the window with the largest probe prominence at
+0.163 Hz" as ground truth, and gave best_window 4/5 against the null's 3/5 with
+different placements failing. It was wrong. The aliasing ghosts item 39 found --
+five contiguous windows all carrying the injected frequency, from a 1.0 m cell
+against a 0.051 m azimuth resolution -- mean that the largest probe response
+finds a ghost as readily as the target. Ground truth has to come from the
+injection geometry, which is independent of the measurement.
+
+### The absolute position is NOT verified
+
+The reference above is empirical: a zero-offset injection lands in window
+`(1, 3)` where the window grid's geometric centre is `(2, 2)`. That is a
+systematic offset of one window in each axis, 16 m, between the ENU frame
+`--inject-at` addresses and where the target focuses. Every placement shares it,
+so relative displacement is what was tested. A height assumption, a geolocation
+offset, or an off-by-one in the window-centre convention would all look exactly
+like this, and it should be chased before anyone reads a position off this tool.
+
+### And it is still not detection
+
+Five points, one collect, one frequency, and one amplitude at the strong end of
+the sweep -- item 37 showed the reported window moving with amplitude even at a
+fixed position, so nothing here says this survives at 0.125 mm. Two of the five
+placements put the target outside the window grid, which makes them weaker tests
+than interior ones; that is a design error in the placements.
+
+Most importantly the policies were searching a scene that certainly contains a
+loud injected target. Locating a target known to exist is strictly easier than
+deciding whether one does, and the run that matters -- a scene where nothing is
+known to move -- still returns a null.

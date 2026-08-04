@@ -1,0 +1,25 @@
+########## injected at -32,-32 m from the grid origin
+POSITIVE CONTROL: injected a 0.1630 Hz scatterer at -32.0,-32.0 m from the grid origin,
+  scene-derived null: window 1 at 0.163 Hz stands 4.43 robust deviations above
+strongest peak in window 1: 0.163 Hz, prominence 39.1, quality 0.419, peak-to-peak velocity 7.8 mm/s (UNCALIBRATED)
+  backed by 5 windows, largest touching block 5
+########## injected at -16,16 m from the grid origin
+POSITIVE CONTROL: injected a 0.1630 Hz scatterer at -16.0,+16.0 m from the grid origin,
+  scene-derived null: window 9 at 0.163 Hz stands 5.68 robust deviations above
+strongest peak in window 4: 0.163 Hz, prominence 39.1, quality 0.419, peak-to-peak velocity 7.6 mm/s (UNCALIBRATED)
+  backed by 11 windows, largest touching block 11
+########## injected at 0,-32 m from the grid origin
+POSITIVE CONTROL: injected a 0.1630 Hz scatterer at +0.0,-32.0 m from the grid origin,
+  scene-derived null: window 6 at 0.163 Hz stands 4.93 robust deviations above
+strongest peak in window 6: 0.163 Hz, prominence 39.2, quality 0.419, peak-to-peak velocity 7.8 mm/s (UNCALIBRATED)
+  backed by 8 windows, largest touching block 8
+########## injected at 16,32 m from the grid origin
+POSITIVE CONTROL: injected a 0.1630 Hz scatterer at +16.0,+32.0 m from the grid origin,
+  scene-derived null: window 14 at 0.163 Hz stands 6.60 robust deviations above
+strongest peak in window 24: 0.163 Hz, prominence 39.1, quality 0.430, peak-to-peak velocity 7.8 mm/s (UNCALIBRATED)
+  backed by 9 windows, largest touching block 6
+########## injected at 32,0 m from the grid origin
+POSITIVE CONTROL: injected a 0.1630 Hz scatterer at +32.0,+0.0 m from the grid origin,
+  scene-derived null: window 18 at 0.163 Hz stands 6.44 robust deviations above
+strongest peak in window 18: 0.163 Hz, prominence 39.1, quality 0.420, peak-to-peak velocity 7.5 mm/s (UNCALIBRATED)
+  backed by 6 windows, largest touching block 6

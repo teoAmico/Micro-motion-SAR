@@ -1010,6 +1010,7 @@ here so the guide does not imply the set above is complete:
 
 | flag | command | what it does |
 |---|---|---|
+| `--inject-at DX,DY` | `mmotion` | offsets the injected scatterer in metres from the grid origin, which is otherwise where it always lands |
 | `--fmin HZ` | `mmotion` | raises the peak-picking floor above the always-excluded first three bins; it cannot lower it |
 | `--probe-hz HZ` | `mmotion` | adds `probe_psd` and `probe_prominence` at one nominated frequency, so two runs can be differenced there |
 | `--no-detrend` | `mmotion` | skip the least-squares line removal before the periodogram |
@@ -1043,6 +1044,13 @@ here so the guide does not imply the set above is complete:
   wrote. If you have code holding an `img->r0`, it will fail to compile — that
   is the point of the rename. Anything indexing range bins against it must
   offset from the CENTRE bin. See `docs/FOLLOW-UPS.md` item 5.
+- **The velocity beside a reported frequency is not a calibrated amplitude.** It
+  is the raw peak-to-peak of the tracked series before detrending, so it carries
+  the trend and the noise: a motionless Giza scene prints 124.8 mm/s through that
+  same line, and across an amplitude sweep it flattened at 0.8–1.1 mm/s while the
+  true amplitude fell sixteenfold. `mmotion` now labels it `UNCALIBRATED` and adds
+  `AT THE TRACKING FLOOR` when the excursion is within twice the quantisation.
+  Read the frequency; do not quote the velocity as an amplitude.
 - **`--probe-hz F` is the only honest way to compare two runs.** It adds
   `probe_psd` and `probe_prominence` at one nominated frequency to every row of
   `PREFIX_windows.csv`. The dominant-peak columns cannot be differenced between

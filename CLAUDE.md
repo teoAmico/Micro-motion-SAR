@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 39 items and their status.
+an index of all 40 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -181,6 +181,15 @@ measured that a scatterer was ADDED, not that it moved. Keep RECOVERABILITY (a
 frequency put in comes back out -- established) apart from DETECTABILITY (deciding
 something moved without knowing the answer -- not established), and never quote a
 positive control that has no zero-amplitude run beside it.
+
+**Injections land on the grid origin unless `--inject-at DX,DY` says otherwise**
+(item 40). Every experiment before that put the target at the exact centre of the
+analysis grid, so localisation scored perfectly without being tested. Off-centre,
+the reported window follows the target 4 of 5 against 4% chance — but score it on
+the INJECTION GEOMETRY, never on "the window with the most energy at the injected
+frequency": the aliasing ghosts carry that frequency too, and scoring on them gave
+a different and wrong answer. Absolute position is unverified — a zero-offset
+injection lands one window off the grid's geometric centre in each axis.
 
 `--probe-hz F` is how that twin is compared (item 39): it adds `probe_psd` and
 `probe_prominence` at ONE nominated frequency to `PREFIX_windows.csv`, so two runs

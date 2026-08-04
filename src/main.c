@@ -1260,6 +1260,7 @@ static int rs_cmd_mmotion(int argc, char **argv)
                "                          [--null-scatterers N] [--null-alpha F]\n"
                "                          [--pulse-start N] [--max-pulses N]\n"
                "                          [--inject-vib FREQ_HZ[,AMP_MM[,REL]]]\n"
+               "                          [--inject-at DX,DY]\n"
                "                          [--stream N]\n"
                "                          [--estimator correlation|phase|splitband|argmax]\n"
                "                          [--shuffle-looks SEED] [--null-trials N]\n"
@@ -1404,13 +1405,48 @@ static int rs_cmd_mmotion(int argc, char **argv)
                             "got '%s'\n", inject);
             rs_cphd_free(&c); return 1;
         }
-        const double origin[2] = { grid.origin[0], grid.origin[1] };
+        /* WHERE THE TARGET GOES, AND WHY THAT IS NOW A CHOICE.
+         *
+         * Every injection this project ran before item 40 landed on the grid
+         * origin -- the exact centre of the analysis grid. That makes the
+         * frequency answerable and LOCALISATION unanswerable: a statistic that
+         * always looks at the middle scores perfectly without locating
+         * anything, and the README's standing gap, "automatically locating an
+         * unknown vibrating target among hundreds of windows remains untested",
+         * could not be closed because the tooling could not put the target
+         * anywhere else.
+         *
+         * --inject-at DX,DY offsets it in metres along the grid's own axes, so
+         * the injected window is no longer the centre one and argmax over
+         * windows becomes a real question. */
+        double inj_dx = 0.0, inj_dy = 0.0;
+        const char *inject_at = rs_opt(argc, argv, "--inject-at");
+        if (inject_at && sscanf(inject_at, "%lf,%lf", &inj_dx, &inj_dy) != 2) {
+            fprintf(stderr, "mmotion: --inject-at wants DX,DY in metres, "
+                            "got '%s'\n", inject_at);
+            rs_cphd_free(&c); return 1;
+        }
+        /* rs_grid_t is axis-aligned in a local east-north-up frame, x along
+         * azimuth and y across it, so the offset is a plain displacement in
+         * the same frame the grid origin is expressed in. */
+        const double origin[2] = { grid.origin[0] + inj_dx,
+                                   grid.origin[1] + inj_dy };
         rs_inject_report_t rep;
         st = rs_simulate_inject_vibrator(&c, origin, f_inj, amp_mm * 1e-3, rel,
                                          &rep);
         if (st != RS_OK) {
             rs_report_error("mmotion", st); rs_cphd_free(&c); return 1;
         }
+        if (inject_at)
+            printf("POSITIVE CONTROL: injected a %.4f Hz scatterer at %+.1f,%+.1f m "
+                   "from the grid origin,\n"
+                   "  %.3f mm vertical displacement, %.1fx the scene's median non-zero\n"
+                   "  sample magnitude (%.4g).\n"
+                   "  deposited into %zu of %zu pulses, range bins %.1f to %.1f of %zu\n",
+                   f_inj, inj_dx, inj_dy, amp_mm, rel, rep.scale_ref,
+                   rep.n_deposited, rep.n_pulse, rep.fbin_min, rep.fbin_max,
+                   c.n_rbin);
+        else
         printf("POSITIVE CONTROL: injected a %.4f Hz scatterer at the grid origin,\n"
                "  %.3f mm vertical displacement, %.1fx the scene's median non-zero\n"
                "  sample magnitude (%.4g).\n"
@@ -2179,9 +2215,33 @@ static int rs_cmd_mmotion(int argc, char **argv)
                p_emp, null_alpha, nge, s_trials, prom, best,
                spec.dominant_freq[best], spec.quality[best], pp * 1e3);
     } else {
+        /* THE VELOCITY IS NOT A CALIBRATED MOTION ESTIMATE, and printing it
+         * unqualified beside a frequency invites it to be read as one. It is
+         * the peak-to-peak of the RAW tracked series -- before detrending, by
+         * design, since the question it answers is what the tracker resolved --
+         * so it carries the trend and the noise as well as any motion.
+         *
+         * Measured on the real Giza collect with NOTHING injected: 124.8 mm/s
+         * peak-to-peak on motionless desert. And across an amplitude sweep it
+         * flattened at 0.8-1.1 mm/s while the true amplitude fell sixteenfold,
+         * so below about 1 mm it is reporting the tracking floor rather than
+         * the target. FOLLOW-UPS.md items 37 and 39.
+         *
+         * The floor it is compared against is the quantisation of the tracked
+         * shift, which is what rs_spectrum_best_window() already gates on. */
+        const double exc_px = spec.excursion_px ? spec.excursion_px[best] : 0.0;
+        const int vel_at_floor = (spec.quant_px > 0.0) &&
+                                 (exc_px <= 2.0 * spec.quant_px);
         printf("strongest peak in window %zu: %.3f Hz, prominence %.1f, "
-               "quality %.3f, peak-to-peak velocity %.1f mm/s\n",
-               best, spec.dominant_freq[best], prom, spec.quality[best], pp * 1e3);
+               "quality %.3f, peak-to-peak velocity %.1f mm/s (UNCALIBRATED%s)\n",
+               best, spec.dominant_freq[best], prom, spec.quality[best], pp * 1e3,
+               vel_at_floor ? " and AT THE TRACKING FLOOR" : "");
+        printf("           The frequency is the measurement. The velocity is the "
+               "raw tracked\n"
+               "           excursion including trend and noise -- a motionless "
+               "Giza scene gives\n"
+               "           124.8 mm/s through this same line. Do not quote it as "
+               "an amplitude.\n");
         printf("  backed by %zu windows, largest touching block %zu\n",
                rep_agree, rep_block);
         if (null_decides) {

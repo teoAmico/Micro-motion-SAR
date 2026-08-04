@@ -1,0 +1,36 @@
+########## 2.0 mm
+  local peak: 0.153 Hz in window 16 stands 1207566.1x its own neighbourhood
+  located at window (2.00, 2.01) of (4, 4) -- pixel (47.5, 47.6) --
+strongest peak in window 8: 0.153 Hz, prominence 36.8, quality 0.997, peak-to-peak velocity 3.8 mm/s (UNCALIBRATED)
+########## 1.0 mm
+  local peak: 0.153 Hz in window 16 stands 630065.7x its own neighbourhood
+  located at window (2.00, 2.01) of (4, 4) -- pixel (47.5, 47.7) --
+strongest peak in window 8: 0.153 Hz, prominence 37.1, quality 0.997, peak-to-peak velocity 2.2 mm/s (UNCALIBRATED)
+########## 0.5 mm
+  local peak: 0.153 Hz in window 16 stands 372534.6x its own neighbourhood
+  located at window (2.01, 2.03) of (4, 4) -- pixel (47.6, 47.9) --
+strongest peak in window 8: 0.153 Hz, prominence 37.3, quality 0.997, peak-to-peak velocity 1.5 mm/s (UNCALIBRATED)
+########## 0.25 mm
+  local peak: 0.153 Hz in window 16 stands 111497.5x its own neighbourhood
+  located at window (2.01, 2.05) of (4, 4) -- pixel (47.7, 48.3) --
+strongest peak in window 8: 0.153 Hz, prominence 36.7, quality 0.997, peak-to-peak velocity 1.1 mm/s (UNCALIBRATED)
+########## 0.125 mm
+  local peak: 0.153 Hz in window 8 stands 35164.2x its own neighbourhood
+  located at window (2.02, 2.10) of (4, 4) -- pixel (47.9, 49.2) --
+strongest peak in window 8: 0.153 Hz, prominence 32.6, quality 0.997, peak-to-peak velocity 0.9 mm/s (UNCALIBRATED)
+########## 0.0625 mm
+  local peak: 0.092 Hz in window 8 stands 12147.4x its own neighbourhood
+  located at window (1.98, 1.98) of (4, 4) -- pixel (47.2, 47.2) --
+strongest peak in window 8: 0.092 Hz, prominence 30.7, quality 0.997, peak-to-peak velocity 0.9 mm/s (UNCALIBRATED)
+########## 0.03125 mm
+  local peak: 0.092 Hz in window 8 stands 11737.4x its own neighbourhood
+  located at window (1.98, 1.99) of (4, 4) -- pixel (47.2, 47.3) --
+strongest peak in window 8: 0.092 Hz, prominence 47.0, quality 0.997, peak-to-peak velocity 0.9 mm/s (UNCALIBRATED)
+########## 0.015625 mm
+  local peak: 0.092 Hz in window 8 stands 10891.7x its own neighbourhood
+  located at window (1.98, 1.99) of (4, 4) -- pixel (47.3, 47.3) --
+strongest peak in window 8: 0.092 Hz, prominence 53.8, quality 0.997, peak-to-peak velocity 0.8 mm/s (UNCALIBRATED)
+########## 0.0078125 mm
+  local peak: 0.092 Hz in window 8 stands 10453.9x its own neighbourhood
+  located at window (1.99, 1.99) of (4, 4) -- pixel (47.3, 47.3) --
+strongest peak in window 8: 0.092 Hz, prominence 55.7, quality 0.997, peak-to-peak velocity 0.8 mm/s (UNCALIBRATED)

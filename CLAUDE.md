@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 49 items and their status.
+an index of all 50 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -227,6 +227,13 @@ longer `D_A <= 1-F`, and any phase-route `quality` quoted from before item 46 is
 different quantity. The shared `quality >= 0.5*q_max` gate is now INERT on real
 scenes — speckle alone scores 0.67 and real imagery 0.81-0.94 — which is a better
 failure than removing the signal but means a pass is not evidence.
+
+**The sensitivity floor is 0.0625-0.125 mm** at overlap 0.5 with a zero-amplitude
+twin (item 50) — 0.088 mm RMS, which finally agrees with the published 0.10 mm
+rather than beating it 2x. Below 0.125 mm the answer becomes the twin's artefact,
+whose ratio plateaus and stops responding to amplitude. **Use the twin, not item
+49's empty-desert range, to judge an injected run**: desert has no bright scatterer,
+so 34.4 against an injected run's 12,060 would have called 0.0078 mm a detection.
 
 **Do not raise `--overlap` for the phase route** (item 48): separation collapses
 four orders of magnitude between 0.75 and 0.90 and fails at 0.95, on real data,

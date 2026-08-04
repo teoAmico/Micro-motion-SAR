@@ -13,6 +13,7 @@ GEO, DGM and SIDD are not substitutes.
 | [Umbra](https://registry.opendata.aws/umbra-open-data/) | CPHD, SICD | Public AWS bucket; no account | Creative Commons | Large spotlight archive with repeat observations at several sites |
 | [ICEYE](https://www.iceye.com/open-data-initiative) | Mostly SLC; selected CPHD and SICD | Public AWS bucket; no account | CC BY 4.0 | Selected phase-history scenes include Bratislava, Houston, Vienna, Paris, Mexico City and Vandenberg |
 | [AFRL Gotcha](https://www.sdms.afrl.af.mil/index.php?collection=gotcha) | X-band phase history | Available by request | Check request terms | Airborne circular collection with calibration targets; useful for tomography and focusing tests |
+| [ESA TPM OADS](https://tpm-ds.eo.esa.int/oads/access/collection) | Currently JERS-1 SAR SLC and Seasat are the relevant radar entries; mostly optical/meteorological legacy collections otherwise | ESA EO Sign In required for download; catalogue browsing is public | Collection-specific TPM terms | The user's authenticated view on 2026-08-04 shows the reduced legacy list; ICEYE, PAZ, TerraSAR-X, COSMO-SkyMed and Radarsat-2 are not currently exposed |
 
 Catalogue links:
 
@@ -21,6 +22,51 @@ Catalogue links:
 - [Umbra STAC catalogue](https://stacindex.org/catalogs/umbra-open-sar-data)
 - [ICEYE documentation](https://sar.iceye.com/6.0.6/opendata/opendata/)
 - [ICEYE STAC collection](https://iceye-open-data-catalog.s3.amazonaws.com/collections/iceye-sar.json)
+- [ESA Third Party Missions OADS](https://tpm-ds.eo.esa.int/oads/access/collection)
+
+### ESA TPM/OADS availability and search priorities
+
+The user's authenticated ESA view on 4 August 2026 contains AVHRR, IKONOS,
+Image 2006/2007, IRS-1C/1D, JERS-1, Kompsat-1/2, MOS-1A/1B, QuickBird-2,
+Seasat, SPOT and Tropforest.  Of these, only **JERS-1 SAR SLC** and **Seasat
+SAR** preserve radar information potentially relevant here.  Both are old
+L-band, conventional imaging archives with no known synchronized structural or
+ship-motion sensors, so neither is a credible positive micro-motion benchmark.
+ALOS PALSAR is linked through a separate portal and may provide complex L-band
+products, but has the same illumination and synchronization limitations.
+
+The following remains the priority list **if the temporarily suspended modern
+TPM collections return**:
+
+1. **ICEYE ESA archive** for exact dates at Hardanger Bridge, Punta Langosteira,
+   TigerRAY and the published Trento/Glasgow experimental sites.
+2. **TerraSAR-X and PAZ** high-resolution spotlight products at those sites and
+   at Panama, Rotterdam and instrumented rail/telecom structures.
+3. **COSMO-SkyMed** spotlight/enhanced-spotlight products for older sensor
+   campaigns, especially Punta Langosteira's 2015--2022 ship records.
+4. **Radarsat-2** fine/spotlight complex products where its acquisition interval
+   and resolution are adequate.
+
+OADS access does not by itself make these products native inputs to the current
+pipeline.  The archive normally distributes focused mission formats (complex
+SLC/SSC), whereas this implementation's end-to-end measurement path consumes
+CPHD pulse history.  A positive OADS cross-match is therefore evidence worth
+preserving and may justify a mission reader or SICD conversion path, but product
+level, complex/detected status, acquisition start/stop times and target
+illumination duration must be recorded before download.  The service currently
+warns that some TPM collections were temporarily suspended on 30 June 2026, so
+availability must be checked per collection.
+
+ESA's closure notice confirms this is a migration rather than a licence or
+account problem.  New requests for the affected collections stopped on 26 June
+2026 and previously approved downloads expired at the end of June.  The modern
+archives, including ICEYE, PAZ, TerraSAR-X, COSMO-SkyMed and RADARSAT-2, are
+being transferred to a replacement service with S3-style access, ordering and
+direct downloads.  ESA says further process and reopening-schedule information
+will be announced around Q4 2026; it does not promise that downloads themselves
+will resume at the start of Q4.  Publicly indexed product-list pages may still
+be mined now for spatial/temporal cross-matches, allowing a download shortlist
+to be ready when the replacement service opens.
 
 The Capella Giza spotlight collect is a known CPHD example:
 
@@ -81,6 +127,36 @@ figures come from its `capella-open-data-cphd` collection.
 | **Umbra** | CPHD on selected tasks | Older task folders can carry `*_CPHD.cphd` beside GEC/SICD/SIDD. Do not trust an empty STAC asset as proof: a 2025 Kourou item advertises `MM.cphd`, but its anonymous S3 folder contains only GEC, SICD and SIDD. 81 named sites plus 1314 ad-hoc collects. Real CPHD declares `SGN = -1`, ships `CF8`, and omits `AmpSF`. | **Reads correctly, verified against the vendor's own GEC** (item 36). No override needed — its honest `SGN` produces the same transform Capella's override does. Focused a Panama Canal collect; not mirrored. Never run through the measurement chain. |
 | **ICEYE** | **6 CPHD** of 374 open items | Includes `dwell-precise` and `dwell-fine` **long-stare modes** — Houston, Vandenberg, Vienna and Mexico City — plus spot-fine at Paris and **Bratislava**. `tools/iceye_cphd_survey.py` extracts their footprints and direct CPHD URLs from the live catalogue. Declares `SGN = -1`, ships `CI4`, carries `AmpSF`. | **Read and focused.** Best phase floor of any collect screened here (0.2017 mm/look). Its 15.3 s dwell puts a 2 Hz target above the band; **truncating to 40320 pulses (6.14 s) fixes it** — band 1.509 → 3.771 Hz, verdict FAIL → WARN — at a cost of 2.5× coarser frequency and azimuth resolution (item 44). Whole product needs 38.7 GB, so `--rbins` is mandatory. **First measurement run done** (item 45): urban does NOT meet the `D_A <= 0.25` precondition either — best 0.444 against Giza's 0.381 — because the 2.89 m sub-look cell holds many scatterers even in a city. |
 | **AFRL Gotcha** | X-band phase history | By request. | Airborne circular; useful for focusing and tomography checks, not for this measurement. |
+
+### Port and moored-target cross-match status
+
+The public CPHD catalogues currently do not produce a **synchronized**
+port-motion positive, but Capella does provide a useful Panama Canal CPHD:
+`CAPELLA_C02_SM_CPHD_HH_20210211192550_20210211192602` (11 February 2021,
+19:25:50--19:26:02 UTC).  It is a 3.12 GB HH stripmap phase-history file with
+121808 vectors, a 9.65 GHz centre frequency, 181 MHz bandwidth, 39.3-degree
+incidence, and a 71.8 by 5.2 km image grid spanning the canal.  Capella's own
+gallery identifies a vessel being guided through a lock.  This is a genuine
+moving-vessel scene and is small enough for the external SSD, but stripmap
+illumination is target-dependent and no synchronized ship IMU/heave record has
+yet been found.  The Panama Canal Authority's authenticated Operations API can
+recover historical vessel-arrival/transit context; it is not vibration truth.
+There is also a delivery-level clock discrepancy to resolve: STAC gives a
+19:25:56.5278 midpoint and the identifier implies 19:25:50--19:26:02, whereas
+the embedded CPHD XML declares `CollectionStart=19:26:02` followed by 11.9286 s
+of transmit time.  Do not use this scene for second-level synchronization until
+the intended time origin is verified against Capella or another product.
+
+Punta Langosteira has real instrumented cargo-ship records from
+2015--2022, but no Capella spotlight or Umbra 2024--2025 scene covers the port
+and its public tables are hourly statistics rather than raw motion waveforms.
+TigerRAY near Seattle has public 40--100 Hz UTC-timestamped motion channels from
+January--March 2024; the nearest Capella CPHD centre is about 209 km away.  Three
+Umbra footprints pass 2--6 km west of the mooring in March 2025, after the
+deployment ended.  NOAA historical AIS remains useful for identifying vessels
+inside US-port CPHD scenes, but AIS is presence/trajectory metadata rather than
+heave or vibration ground truth.  Full source details are tracked in
+`docs/GROUND_TRUTH_DATASETS.md`.
 
 ### Capella spotlight CPHD, ranked by what matters here
 

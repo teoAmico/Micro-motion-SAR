@@ -90,7 +90,8 @@ said, not better) and item 7's line numbers.
 | 46 | done | the phase route's quality is now spatial dominance, which fixes item 45 and leaves the gate inert |
 | 47 | done | the noise floor is RED, so prominence prefers low frequencies; a local background fixes it |
 | 48 | **withdraws item 14** | high overlap is WRONG for the phase route on real data: separation collapses 4 orders of magnitude by 0.90 |
-| 49 | **the current state** | the local peak calibrated on nine disjoint grids of real desert: 15.1-34.4 |
+| 49 | done | the local peak calibrated on nine disjoint grids of real desert: 15.1-34.4 |
+| 50 | **the current state** | sensitivity re-measured at the good overlap with a proper twin: floor is 0.0625-0.125 mm |
 
 ---
 
@@ -4994,3 +4995,69 @@ what empty desert produces.**
 It is one collect, one setting, one grid size. The control maximum is a maximum
 over every window and every bin, so it grows with the number of windows searched
 and does not transfer to a larger grid.
+
+
+## 50. Sensitivity re-measured where the instrument works, with the right control
+
+Items 37 and 43 measured sensitivity at `--overlap 0.90`, which item 48 has since
+shown to be the worst setting tested. Re-swept at 0.5, and extended downward
+because the 2 mm point now sits five orders of magnitude above an empty-desert
+control. `runs/giza/2026-08-04-amplitude-lowoverlap/`.
+
+```
+    amp mm   local peak    freq   vs zero-amp twin  verdict
+       2.0    1,207,566   0.153            100.13x  signal
+       1.0      630,066   0.153             52.24x  signal
+       0.5      372,535   0.153             30.89x  signal
+      0.25      111,498   0.153              9.25x  signal
+     0.125       35,164   0.153              2.92x  signal
+    0.0625       12,147   0.092              1.01x  THE MACHINERY
+   0.03125       11,737   0.092              0.97x  THE MACHINERY
+  0.015625       10,892   0.092              0.90x  THE MACHINERY
+ 0.0078125       10,454   0.092              0.87x  THE MACHINERY
+
+  zero-amplitude twin   12,060 at 0.092 Hz
+```
+
+`df` is 0.0306, so bin 5 is 0.153 Hz and the injected 0.163 sits within half a
+bin; 0.092 Hz is bin 3, the band floor.
+
+**The floor is bracketed between 0.0625 and 0.125 mm.** Below 0.125 the reported
+answer stops being the injection and becomes the twin: the ratio plateaus at
+10,400-12,100 and stops responding to amplitude across a sixteen-fold change,
+which is what an artefact does, and the twin sits at 12,060 in the middle of it.
+
+### The control that matters is not the one item 49 measured
+
+Item 49 calibrated empty desert at 15.1-34.4 over nine disjoint grids, and every
+point above -- including the pure-machinery ones -- clears that by two to three
+orders of magnitude.
+
+**Empty desert is the right control for an uninjected scene and the wrong one
+for an injected experiment.** An injected run contains a scatterer at 20x the
+median sample magnitude that empty desert does not, and that scatterer alone
+produces 12,060x. The only valid control for an injected run is its own
+zero-amplitude twin -- item 38's rule, confirmed here at a different overlap.
+
+Both numbers are real and answer different questions. **Quoting item 49's 34.4
+against an injected run would have called 0.0078 mm a detection**, which is the
+mistake this arrangement is designed to prevent and which nothing but the twin
+catches.
+
+### It agrees with the literature now, where it did not before
+
+Items 37 and 43 reported recovery to 0.0625 mm at overlap 0.90 with no
+zero-amplitude twin at that setting. Item 38 had already shown the twin
+outscoring real injections there, so the figure was never safe.
+
+0.125 mm zero-to-peak is 0.088 mm RMS against Vattulainen et al.'s smallest
+confirmed radial RMS displacement of 0.10 mm. Item 39 flagged the earlier
+0.0625 mm as a reason for suspicion precisely because it beat the published floor
+by 2x. It no longer does, and the agreement is the first external check any
+sensitivity figure here has passed.
+
+### Still recoverability, not detection
+
+The frequency was known in advance, the target was ours, and the scene contains
+nothing known to move. What is bounded is recoverability, with a proper control
+for the first time.

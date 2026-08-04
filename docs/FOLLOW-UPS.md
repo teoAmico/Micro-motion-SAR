@@ -100,7 +100,8 @@ said, not better) and item 7's line numbers.
 | 56 | done | the AM/PM discriminator does NOT work: the false positives are not amplitude modulation at the reported frequency |
 | 57 | done | KSTL read: ADS-B is a PROXY, no ground aircraft, and 11 seismic stations in the box are all outside the strip |
 | 58 | done | STRIPMAP cannot support this measurement at all: per-target observation is 0.71 s, df 1.4 Hz |
-| 59 | **the current state** | 315 synchronised instrument measurements found in the Capella spotlight archive, including Oroville Dam |
+| 59 | done | 315 synchronised instrument measurements found in the Capella spotlight archive, including Oroville Dam |
+| 60 | **the current state** | Oroville Dam moved 0.5-0.8 um, 7-11x BELOW the floor: not a positive control, but the first PROVEN-STATIC scene |
 
 ---
 
@@ -5664,3 +5665,74 @@ dataselect` answers correctly and gives 315.
 The same shape as item 12's zsh word-splitting and item 33's defocused null: **a
 negative result from an unverified harness is not a negative result.** Assert a
 known-good control before believing a zero.
+
+
+## 60. Oroville Dam: 7 to 11 times below the floor, and worth having anyway
+
+Item 59 found `BK.ORV`, a seismic station on Oroville Dam, inside a 30.4 s
+Capella spotlight footprint with 168 KB of waveform spanning the aperture -- the
+strongest candidate in the archive. The waveform was measured BEFORE spending
+32 GB on the CPHD. `runs/oroville/2026-08-04-first/`.
+
+```
+  ground displacement, 0.03-3 Hz, instrument response removed
+
+   channel          rms   peak-to-peak
+       HHE    0.7024 um      2.1772 um
+       HHN    0.3349 um      1.1421 um
+       HHZ    0.7837 um      2.4332 um
+       HNE    0.0132 um      0.0653 um     (accelerometer, less sensitive at low f)
+```
+
+Cross-checked on HHZ by a second route -- stage-zero sensitivity plus
+frequency-domain integration instead of full response removal -- giving
+0.5050 um against 0.7837 um. Two different treatments of the response agree to
+36%, which settles the order of magnitude, and the order of magnitude is what
+the conclusion rests on.
+
+**Item 53's floor is 5.5 um RMS. The dam moved 7 to 11 times below it.** The SAR
+could not have seen this, so Oroville is not a positive control and does not test
+detection.
+
+### What it is instead, which this project has never had
+
+`USER_GUIDE` section 7 item 0 states the problem plainly: a null on real data
+means nothing, because "nothing moved" and "this chain cannot see motion in this
+data" produce identical output. Every real-data null in items 17 through 50 is
+uninterpretable for that reason.
+
+**Here an independent instrument separates them.**
+
+```
+  pipeline reports NO frequency  ->  a null that is CORRECT, and provably so
+  pipeline reports A frequency   ->  a FALSE POSITIVE, and provably so
+```
+
+Items 25 and 55 measured static aspect-dependent FIXTURES returning confident
+in-band frequencies, and item 55 concluded that no policy here is fit for that
+scene type. Oroville is the same test on real data, on a real structure, with
+independent proof that the structure was static -- which is the only way this
+project has ever been able to interpret a real-data null.
+
+### Two service notes
+
+**`service.iris.edu/irisws/timeseries` does not hold BK data.** It returned 404
+for every `BK.ORV` request including uncorrected ones, while the documented
+`IU.ANMO` example returns 29000 bytes through the identical syntax. The control
+is what separates "wrong request" from "no such data", and running it turned a
+suspected syntax error into a holdings fact: BK is Berkeley, archived at NCEDC,
+and `service.ncedc.org/fdsnws/dataselect` serves it.
+
+**The location code is `00`, not empty.** `loc=--` returns 404 at this station.
+Read it from the station service rather than assuming.
+
+### Open
+
+The CPHD download is running. The waveform was measured first because it decides
+what the eventual result will MEAN, and it changed this from a positive-control
+attempt into a negative-control one before any of the 32 GB was spent.
+
+The wider search should now look for a hit where the instrument shows motion
+ABOVE 5.5 um -- a site during an earthquake, or a structure under load. The 315
+hits in `runs/screens/sensor-join/measurement_hits.csv` have not been screened
+that way, and screening them costs one waveform request each.

@@ -1,0 +1,15 @@
+Error 404: Not Found
+
+The Timeseries webservice was unable to find any data for your request. No data found for:BK,ORV,--,HNZ,2024-08-03T00:46:41.000,2024-08-03T00:47:31.000
+
+Usage details are available from http://service.iris.edu/irisws/timeseries/1
+
+Request:
+https://service.earthscope.org/irisws/timeseries/1/query?net=BK&sta=ORV&cha=HNZ&loc=--&starttime=2024-08-03T00:46:41&endtime=2024-08-03T00:47:31&demean=true&deconvolve=true&units=dis&output=ascii1
+
+Request Submitted:
+2026/08/04 19:55:12.171 GMT
+
+Service Version:
+ws-timeseries:1.6.2
+li4:84

@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 59 items and their status.
+an index of all 60 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -126,6 +126,15 @@ That cost a wrong diagnosis here: `--max-pulses` was reported as unimplemented i
 test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
+
+**OROVILLE DAM IS A PROVEN-STATIC SCENE** (item 60): its seismometer records
+0.5-0.8 um RMS during the aperture, 7-11x BELOW item 53's 5.5 um floor. That makes
+it useless as a positive control and valuable as the first real-data scene where a
+null is INTERPRETABLE — USER_GUIDE section 7 item 0 says a real-data null means
+nothing because "nothing moved" and "the chain cannot see" look identical, and here
+an instrument separates them. A reported frequency there is a PROVEN false
+positive. **Screen the 315 hits for an instrument showing motion ABOVE 5.5 um**
+before downloading any more of them; that is one waveform request each.
 
 **315 SYNCHRONISED MEASUREMENTS EXIST IN THE CAPELLA ARCHIVE** (item 59) —
 station-collect pairs where an FDSN instrument was recording inside the footprint

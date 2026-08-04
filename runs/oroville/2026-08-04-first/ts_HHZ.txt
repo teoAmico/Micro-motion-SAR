@@ -1,0 +1,15 @@
+Error 404: Not Found
+
+The Timeseries webservice was unable to find any data for your request. No data found for:BK,ORV,00,HHZ,2024-08-03T00:46:51.000,2024-08-03T00:47:21.000
+
+Usage details are available from http://service.iris.edu/irisws/timeseries/1
+
+Request:
+http://service.iris.edu/irisws/timeseries/1/query?net=BK&sta=ORV&loc=00&cha=HHZ&starttime=2024-08-03T00:46:51&endtime=2024-08-03T00:47:21&demean=true&correct=true&freqlimits=0.01-0.03-3.0-5.0&units=DIS&format=ascii1
+
+Request Submitted:
+2026/08/04 19:58:25.520 GMT
+
+Service Version:
+ws-timeseries:1.6.2
+li2:84

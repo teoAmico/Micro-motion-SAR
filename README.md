@@ -157,44 +157,20 @@ null control.
 
 ## Current research status
 
-The detailed measurements and failed hypotheses are recorded in
-[`docs/FOLLOW-UPS.md`](docs/FOLLOW-UPS.md). The short version is:
+The tool can recover known vibration frequencies added to test data, including a
+0.163 Hz signal smaller than one millimetre. Repeated tests confirm that the
+recovered signal comes from the added motion, not merely from adding a bright
+object to the scene.
 
-- The complete reading, focusing, sub-aperture, tracking and spectrum pipeline
-  exists, together with 21 automated tests.
-- The phase estimator accurately recovers swept injected frequencies on simple
-  synthetic scenes.
-- That recovery collapses when scatterer brightness changes with viewing angle,
-  a property expected in real structures.
-- A known 0.163 Hz vibration injected into real Giza clutter was recovered
-  correctly at every amplitude from 2 mm down to 0.0625 mm.
-- **That recovery is of the frequency only.** Running the same injection at ZERO
-  amplitude — a bright scatterer added to the phase history that does not move —
-  produces a LARGER peak than any real injection, and it clears the same 19
-  motionless controls. The `p = 0.05` this project previously reported therefore
-  measured that a scatterer had been added, not that it vibrated. Only the
-  reported frequency separates the two: zero amplitude answers at the band
-  floor, a real injection answers at the injected value (item 38).
-- Comparing a run against its zero-amplitude twin **at one nominated frequency**
-  (`--probe-hz`) does separate them: the median window gains exactly `+0.00`
-  while the injected window gains, so the injection machinery contributes nothing
-  and what remains is the motion. This makes the injection experiments
-  trustworthy and transfers nothing to a real target, which has no twin to
-  subtract (item 39).
-- Earlier injected signals were measured in the correct patch but rejected by
-  scene-wide selection rules; the current verdict instead uses the null control.
-- The injected patch and frequency were known in advance. Automatically locating
-  an unknown vibrating target among hundreds of windows remains untested.
-- No available collect contains independently confirmed natural vibration, so
-  the current results do not establish real-world sensitivity.
-- The distinction that matters is between **recoverability** — a frequency put in
-  comes back out, which is established — and **detectability** — deciding
-  something moved without already knowing the answer, which is not.
+This does **not** yet prove that the tool can find unknown vibration in real-world
+data. A still scene can produce a strong false peak, and the available real data
+does not contain vibration confirmed by an independent sensor. The location and
+frequency were also known before the tests were run.
 
-The project considers a frequency-recovery experiment successful only when a
-sweep produces a fitted slope near 1 with RMS error below half a spectral bin,
-pooled over independent clutter realizations and accompanied by static controls.
-One matching frequency is not enough.
+In short: recovering a known test signal works; reliably deciding that an unknown
+real target is vibrating remains an open problem. Detailed results, failed tests
+and open questions are recorded in
+[`docs/FOLLOW-UPS.md`](docs/FOLLOW-UPS.md).
 
 ## Documentation
 

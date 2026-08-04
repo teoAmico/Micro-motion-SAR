@@ -23,3 +23,6 @@ data/*
 !runs/**/*.csv
 !runs/**/*.log
 !runs/**/*.md
+
+# Local survey of restricted or request-only ground-truth collections.
+docs/GROUND_TRUTH_DATASETS.md

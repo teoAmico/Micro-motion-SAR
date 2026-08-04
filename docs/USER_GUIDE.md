@@ -1047,8 +1047,9 @@ here so the guide does not imply the set above is complete:
 - **Read the `located at` line, not the window index, for position.** The window
   named by `strongest peak in window N` is wrong by exactly one window every time
   at 50% overlap — the target sits in four windows and the one it is centred in
-  scores lowest. The `located at` centroid beside it is accurate to 0.008 windows
-  (0.1 m), finer than the grid cell. If it says `CLIPPED at the grid edge`, the
+  scores lowest. The `located at` centroid beside it is accurate to 0.13 m on a
+  2 mm target, finer than the grid cell — but that scales with signal strength,
+  reaching 2.24 m at 0.125 mm, so quote it with the amplitude. If it says `CLIPPED at the grid edge`, the
   target is at the boundary with half its footprint off the grid: move the grid.
   `FOLLOW-UPS.md` items 41–42.
 - **The velocity beside a reported frequency is not a calibrated amplitude.** It

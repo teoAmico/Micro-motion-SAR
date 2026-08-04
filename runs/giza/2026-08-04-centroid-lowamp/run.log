@@ -1,0 +1,15 @@
+########## 0.125 mm at 0,0 m
+  located at window (2.04, 2.14) of (4, 4) -- pixel (48.1, 49.7) --
+strongest peak in window 8: 0.163 Hz, prominence 38.7, quality 0.884, peak-to-peak velocity 0.9 mm/s (UNCALIBRATED)
+########## 0.125 mm at -16,-16 m
+  located at window (1.04, 1.16) of (4, 4) -- pixel (32.2, 34.0) --
+strongest peak in window 2: 0.163 Hz, prominence 38.5, quality 0.884, peak-to-peak velocity 0.9 mm/s (UNCALIBRATED)
+########## 0.125 mm at -16,0 m
+  located at window (1.04, 2.13) of (4, 4) -- pixel (32.1, 49.6) --
+strongest peak in window 3: 0.163 Hz, prominence 38.6, quality 0.883, peak-to-peak velocity 0.9 mm/s (UNCALIBRATED)
+########## 0.125 mm at 0,16 m
+  located at window (2.04, 3.13) of (4, 4) -- pixel (48.1, 65.7) --
+strongest peak in window 9: 0.163 Hz, prominence 38.4, quality 0.883, peak-to-peak velocity 0.9 mm/s (UNCALIBRATED)
+########## 0.125 mm at 16,-16 m
+  located at window (3.03, 1.14) of (4, 4) -- pixel (64.0, 33.7) --
+strongest peak in window 12: 0.163 Hz, prominence 38.9, quality 0.883, peak-to-peak velocity 0.8 mm/s (UNCALIBRATED)

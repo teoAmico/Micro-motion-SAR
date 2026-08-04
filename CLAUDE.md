@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 42 items and their status.
+an index of all 43 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -193,8 +193,11 @@ the window it is centred in scores LOWEST of the cluster.
 
 `rs_spectrum_centroid()` fixes that (item 42): the centre of mass of the agreeing
 4-connected cluster, weighted by prominence ABOVE THE SCENE MEDIAN, locates the
-target to 0.008 windows — 0.1 m, finer than the grid cell — where argmax is wrong
-by exactly one window every time. Item 41's bound was a property of reporting an
+target to 0.008 windows — 0.13 m, finer than the grid cell — where argmax is wrong
+by exactly one window every time. **Quote that with its amplitude** (item 43): it
+is 0.13 m at 2 mm and 2.24 m at 0.125 mm, linear in 1/amplitude, because the error
+is set by the target's excess over the background gradient. argmax stays at
+exactly one window at every amplitude, being quantised to an integer index. Item 41's bound was a property of reporting an
 integer index, not of the measurement.
 
 Score localisation on the INJECTION GEOMETRY — measure where the target lands by

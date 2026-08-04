@@ -83,7 +83,8 @@ said, not better) and item 7's line numbers.
 | 39 | done | the paired increment at a nominated frequency answers item 38: the scene gains exactly zero, the target gains |
 | 40 | superseded by 41 | the target can be moved off the grid origin at last, and the reported window follows it |
 | 41 | done | the 16 m offset is not geometry: overlapping windows track one scatterer and the centred one scores lowest |
-| 42 | **the current state** | the centroid over the agreeing cluster turns item 41's 16 m localisation bound into 0.1 m |
+| 42 | done | the centroid over the agreeing cluster turns item 41's 16 m localisation bound into 0.1 m |
+| 43 | **the current state** | that 0.1 m is amplitude-dependent: 0.13 m at 2 mm, 2.24 m at 0.125 mm, linear in 1/amplitude |
 
 ---
 
@@ -4508,3 +4509,70 @@ a scene where nothing is known to move still returns a null. One collect, one
 frequency, five placements, all at 2 mm -- the strong end, where item 37 showed
 the reported window moving with amplitude. This needs repeating at 0.125 mm
 before 0.1 m localisation is claimed generally.
+
+
+## 43. Item 42's 0.1 m is amplitude-dependent, and the +0.01 bias explained
+
+Item 42 quoted 0.1 m localisation from five placements **all at 2 mm**. Item 37
+had already shown the reported window moving with amplitude at a fixed position,
+so the claim needed the weak end before it could stand.
+`runs/giza/2026-08-04-centroid-lowamp/`.
+
+```
+ offset m |  truth | 2 mm centroid       | 0.125 mm centroid | argmax @0.125
+   +0, +0 | (2,2)  | (2.002,2.008) 0.008 | (2.04,2.14) 0.140 | win8  (1,3) 1
+  -16,-16 | (1,1)  | (1.002,1.009) 0.009 | (1.04,1.16) 0.160 | win2  (0,2) 1
+  -16, +0 | (1,2)  | (1.002,2.008) 0.008 | (1.04,2.13) 0.130 | win3  (0,3) 1
+   +0,+16 | (2,3)  | (2.002,3.008) 0.008 | (2.04,3.13) 0.130 | win9  (1,4) 1
+  +16,-16 | (3,1)  | (3.002,1.009) 0.009 | (3.03,1.14) 0.140 | win12 (2,2) 1
+
+  centroid @ 2.000 mm : 0.0084 windows = 0.13 m
+  centroid @ 0.125 mm : 0.1400 windows = 2.24 m
+  argmax   @ 0.125 mm : 1.0000 windows = 16.00 m
+```
+
+**A 16x weaker signal costs 17x the error** -- linear in 1/amplitude to within
+the measurement. The error is background-limited rather than a fixed bias: what
+sets it is the target's excess prominence against the background gradient, and
+that ratio scales with amplitude. Item 42's figure is not wrong; it was quoted
+as though it were a constant.
+
+**argmax stays at exactly 1.000 windows at both amplitudes**, because it is
+quantised to an integer index and always lands on a neighbour. The centroid is
+still 7.1x better at the weak end.
+
+### The +0.01 bias is a weighting artefact, not an off-by-something
+
+A half-window or half-pixel convention error would give exactly 0.5. This is
+0.008, and it traces to the weights: the cluster is a symmetric 3x3 block
+centred on the truth whose members agree to about 1.5 percent, with a monotone
+gradient toward higher indices.
+
+```
+offset 0,0, scene median 14.84
+  azimuth marginal weight:  1: 71.72   2: 71.72   3: 72.20
+  range   marginal weight:  1: 71.05   2: 71.73   3: 72.85
+```
+
+That is item 41's 1.5 percent spread -- windows tracking the same scatterer
+scoring almost but not exactly alike -- propagating through the centre of mass.
+Range carries the steeper gradient, which is why the bias appears there. At
+0.125 mm it grows to +0.13, seventeen-fold, as the background-limited reading
+predicts.
+
+### Uniform weighting is exact and not usable
+
+Weighting every cluster member equally is EXACT when the cluster is symmetric
+about the target, and it is on four of five:
+
+```
+  excess-weighted  0.008  0.009  0.008  0.008  0.009   mean 0.0083 = 0.13 m
+  uniform          0.000  0.000  0.200  0.000  0.000   mean 0.0400 = 0.64 m
+```
+
+The one failure is the cluster that came out asymmetric at 10 windows, where
+uniform weighting is dragged 0.2 windows. Symmetry is not something the method
+can assume, and any background window that happened to agree would drag a
+uniform centroid while contributing nothing to an excess-weighted one. The
+robustness is worth the 0.13 m -- but uniform being exact on symmetric clusters
+is the proof that the residual is a weighting artefact and not geometry.

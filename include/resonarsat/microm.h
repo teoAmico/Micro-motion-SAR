@@ -1501,6 +1501,28 @@ typedef struct {
  * nine windows is not limited by the window spacing any more than a centroid of
  * a star image is limited by the pixel pitch.
  *
+ * THAT NUMBER IS AMPLITUDE-DEPENDENT AND MUST BE QUOTED WITH ONE (item 43). The
+ * same five placements at 0.125 mm, sixteen times weaker:
+ *
+ *     centroid @ 2.000 mm   0.0084 windows = 0.13 m
+ *     centroid @ 0.125 mm   0.1400 windows = 2.24 m
+ *     argmax   @ 0.125 mm   1.0000 windows = 16.0 m
+ *
+ * A 16x weaker signal costs 17x the error -- linear in 1/amplitude to within the
+ * measurement, because what sets the error is the target's excess prominence
+ * against the background gradient and that ratio scales with amplitude. argmax
+ * stays at exactly one window at both, being quantised to an integer index.
+ *
+ * The residual is a WEIGHTING artefact, not geometry. The cluster is a symmetric
+ * 3x3 block whose members agree to about 1.5 percent -- item 41's spread -- with
+ * a monotone gradient toward higher indices, steeper in range, and the centre of
+ * mass inherits it. Weighting every member equally is EXACT on a symmetric
+ * cluster and was tried: 0.000 on four placements and 0.200 on the fifth, whose
+ * cluster came out asymmetric at ten windows. Mean 0.0400 against the excess
+ * weighting's 0.0083. Symmetry cannot be assumed and a background window that
+ * happened to agree would drag a uniform centroid while contributing nothing
+ * here, so the robustness is kept and the bias documented.
+ *
  * 'clipped' MEANS THE ANSWER IS NEAR THE BOUNDARY, not that the cluster
  * reaches it. Those are different and the difference was measured: four of five
  * accurate placements had both the agreeing cluster and its weight-bearing

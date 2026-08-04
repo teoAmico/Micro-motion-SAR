@@ -942,6 +942,61 @@ resonarsat_status_t rs_spectrum_ps_window_opts(const rs_spectrum_t *spec,
     return RS_OK;
 }
 
+/* Prominence at a nominated frequency for one window. See microm.h on why this
+ * is a different question from the dominant peak, and on item 38. */
+resonarsat_status_t rs_spectrum_prominence_at(const rs_spectrum_t *spec,
+                                              size_t window,
+                                              double freq_hz,
+                                              size_t *out_bin,
+                                              double *out_psd,
+                                              double *out_prom)
+{
+    if (out_bin) *out_bin = 0;
+    if (out_psd) *out_psd = 0.0;
+    if (out_prom) *out_prom = 0.0;
+
+    if (!spec || !spec->psd || !spec->freq || spec->n_freq == 0) {
+        rs_set_error("prominence at frequency: spectrum has no power density");
+        return RS_ERR_ARG;
+    }
+    if (window >= spec->n_win) {
+        rs_set_error("prominence at frequency: window %zu of %zu",
+                     window, spec->n_win);
+        return RS_ERR_ARG;
+    }
+    if (!(freq_hz >= 0.0) || !(spec->df > 0.0)) {
+        rs_set_error("prominence at frequency: %.6g Hz is not a frequency this "
+                     "spectrum can be asked about", freq_hz);
+        return RS_ERR_ARG;
+    }
+
+    /* Snap to the nearest bin, clamped to the band the transform covers. A
+     * caller naming a frequency above Nyquist has made an error worth
+     * reporting rather than silently answering about the top bin. */
+    if (freq_hz > spec->freq[spec->n_freq - 1] + 0.5 * spec->df) {
+        rs_set_error("prominence at frequency: %.6g Hz is above this spectrum's "
+                     "%.6g Hz limit", freq_hz, spec->freq[spec->n_freq - 1]);
+        return RS_ERR_RANGE;
+    }
+    size_t k = (size_t)(freq_hz / spec->df + 0.5);
+    if (k >= spec->n_freq) k = spec->n_freq - 1;
+
+    const double *psd = spec->psd + window * spec->n_freq;
+    /* Same definition as the dominant-peak column: this bin's power against the
+     * mean of every other bin, so the two numbers can be subtracted and
+     * compared. n_freq == 1 has no "rest" to compare against. */
+    double sum = 0.0;
+    for (size_t i = 0; i < spec->n_freq; i++) sum += psd[i];
+    const double rest = sum - psd[k];
+    const double mean_rest = (spec->n_freq > 1)
+                           ? rest / (double)(spec->n_freq - 1) : 0.0;
+
+    if (out_bin) *out_bin = k;
+    if (out_psd) *out_psd = psd[k];
+    if (out_prom) *out_prom = (mean_rest > 0.0) ? psd[k] / mean_rest : 0.0;
+    return RS_OK;
+}
+
 /* Ascending comparator over doubles, for the median and MAD below. */
 static int rs_cmp_double(const void *a, const void *b)
 {

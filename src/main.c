@@ -1263,7 +1263,7 @@ static int rs_cmd_mmotion(int argc, char **argv)
                "                          [--stream N]\n"
                "                          [--estimator correlation|phase|splitband|argmax]\n"
                "                          [--shuffle-looks SEED] [--null-trials N]\n"
-               "                          [--fmin HZ]\n"
+               "                          [--fmin HZ] [--probe-hz HZ]\n"
                "                          [--reference first|adjacent|pair|lag]\n"
                "                          [--lag N]\n"
                "                          [--b-shift HZ] [--shifts FILE.csv]\n"
@@ -1774,6 +1774,12 @@ static int rs_cmd_mmotion(int argc, char **argv)
      * first RS_SPECTRUM_LEAKAGE_BINS bins are excluded whatever the caller
      * asks for, and a run that does not say so invites the reader to believe a
      * low-frequency answer was available and not chosen. --fmin only raises it. */
+    /* The nominated frequency for the paired-increment columns. Resolved to a
+     * bin once the spectrum exists, below; zero disables the columns. */
+    const double probe_hz = rs_opt_double(argc, argv, "--probe-hz", 0.0);
+    size_t probe_bin = 0;
+    double probe_bin_hz = 0.0;
+
     const double f_min = rs_opt_double(argc, argv, "--fmin", 0.0);
     {
         const double df = (m.n_looks > 0 && m.dt > 0.0)
@@ -1822,6 +1828,31 @@ static int rs_cmd_mmotion(int argc, char **argv)
     }
 
     printf("spectra: %zu bins, %.4f Hz resolution\n", spec.n_freq, spec.df);
+
+    /* Resolve --probe-hz to the bin the CSV columns will report, and say so.
+     * A probe inside the Hann skirt is allowed -- naming a frequency is not
+     * searching for one -- but it is not separable from a trend, so it is
+     * flagged rather than refused. See rs_spectrum_prominence_at(). */
+    if (probe_hz > 0.0) {
+        if (rs_spectrum_prominence_at(&spec, 0, probe_hz, &probe_bin,
+                                      NULL, NULL) != RS_OK) {
+            rs_report_error("mmotion", RS_ERR_RANGE);
+            rs_spectrum_free(&spec);
+            rs_microm_free(&m); rs_subap_stack_free(&stack);
+            rs_cphd_free(&c);
+            return 1;
+        }
+        probe_bin_hz = spec.freq[probe_bin];
+        printf("probe: %.4f Hz -> bin %zu (%.4f Hz)%s. PREFIX_windows.csv gains "
+               "probe_psd and\n"
+               "       probe_prominence, so this run can be differenced against "
+               "another AT THAT\n"
+               "       frequency -- which is the only comparison a "
+               "zero-amplitude control supports.\n",
+               probe_hz, probe_bin, probe_bin_hz,
+               (probe_bin < RS_SPECTRUM_LEAKAGE_BINS)
+                 ? " INSIDE THE HANN SKIRT -- not separable from a trend" : "");
+    }
 
     /* Report the window with the most prominent spectral peak.
      *
@@ -2630,9 +2661,21 @@ static int rs_cmd_mmotion(int argc, char **argv)
             fprintf(wf, "# passed_cull_source=%s expected_sum=%zu\n",
                     cull_state ? "selector" : "shared-gates-only (allocation failed)",
                     cull_state ? cull.n_survivor : cull.n_input);
+            /* --probe-hz adds two columns measured at ONE nominated frequency
+             * for every window, so two runs can be differenced there. The
+             * dominant-peak columns cannot be differenced: two runs whose
+             * strongest peak sits at different frequencies are not comparable
+             * row by row, which is exactly how item 38's zero-amplitude control
+             * outscored a real injection. */
+            if (probe_hz > 0.0)
+                fprintf(wf, "# probe_hz=%.12g probe_bin=%zu probe_bin_hz=%.12g%s\n",
+                        probe_hz, probe_bin, probe_bin_hz,
+                        (probe_bin < RS_SPECTRUM_LEAKAGE_BINS)
+                          ? " INSIDE_THE_HANN_SKIRT" : "");
             fprintf(wf, "window,iaz,irg,dominant_hz,prominence,quality,"
                         "excursion_px,snr,sigma_px,d_a,passed_gates,"
-                        "agrees_with_consensus,passed_cull\n");
+                        "agrees_with_consensus,passed_cull%s\n",
+                    probe_hz > 0.0 ? ",probe_psd,probe_prominence" : "");
             for (size_t w = 0; w < spec.n_win; w++) {
                 const double exc = spec.excursion_px ? spec.excursion_px[w] : 0.0;
                 const int passed = (spec.quality[w] >= q_min_rep) &&
@@ -2661,12 +2704,19 @@ static int rs_cmd_mmotion(int argc, char **argv)
                  * header line says so. */
                 const int culled = cull_state ? (cull_state[w] == 3) : passed;
                 fprintf(wf, "%zu,%zu,%zu,%.12g,%.12g,%.12g,%.12g,%.12g,%.12g,"
-                            "%.12g,%d,%d,%d\n",
+                            "%.12g,%d,%d,%d",
                         w, w / spec.n_win_rg, w % spec.n_win_rg,
                         spec.dominant_freq[w], spec.prominence[w],
                         spec.quality[w], exc, snr_w, sig_w,
                         spec.d_a ? spec.d_a[w] : RS_DA_MAX,
                         passed, agrees, culled);
+                if (probe_hz > 0.0) {
+                    double p_psd = 0.0, p_prom = 0.0;
+                    rs_spectrum_prominence_at(&spec, w, probe_hz, NULL,
+                                              &p_psd, &p_prom);
+                    fprintf(wf, ",%.12g,%.12g", p_psd, p_prom);
+                }
+                fputc('\n', wf);
             }
             fclose(wf);
         }

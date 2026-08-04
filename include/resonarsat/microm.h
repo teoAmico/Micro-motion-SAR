@@ -1396,6 +1396,50 @@ resonarsat_status_t rs_spectrum_ps_window_opts(const rs_spectrum_t *spec,
                                                double da_max,
                                                rs_spectrum_ps_t *out);
 
+/* Prominence at a NOMINATED frequency, for one window, rather than at whichever
+ * frequency happens to be largest.
+ *
+ * WHY THIS IS A DIFFERENT QUESTION. Everything else here reports each window's
+ * dominant peak and how much it stands out. That answers "what is the strongest
+ * thing in this window", which is the wrong question whenever the frequency of
+ * interest is already known -- and it is known in every injection experiment
+ * this project runs.
+ *
+ * Item 38 is where the difference became load-bearing. A zero-amplitude
+ * injection -- a bright scatterer added to the phase history that does not move
+ * -- outscored every real injection on dominant-peak prominence, because its
+ * residual trend produced a bigger peak at the band floor than a real 0.0625 mm
+ * vibration produced at its own frequency. Compared at the DOMINANT frequency
+ * the motionless target wins. The comparison that distinguishes them has to be
+ * made at one fixed frequency in both runs, which is what this returns.
+ *
+ * The paired statistic it exists for is
+ *
+ *     T(w) = prominence_injected(w, f0) - prominence_zero_amplitude(w, f0)
+ *
+ * -- did running the injection at a real amplitude ADD evidence at f0, over
+ * running the identical code path at zero. That subtracts off everything the
+ * injection machinery does regardless of motion, which no absolute statistic
+ * can separate.
+ *
+ * 'freq_hz' is snapped to the nearest bin; the bin actually used is returned
+ * through 'out_bin' so a caller can report what it measured rather than what it
+ * asked for. Bins below RS_SPECTRUM_LEAKAGE_BINS are ADMISSIBLE here, unlike in
+ * peak selection: a caller naming a frequency is not searching, so the
+ * look-elsewhere reasoning behind the floor does not apply -- but a value from
+ * inside the Hann skirt is still not separable from a trend, and 'out_bin'
+ * being below the floor is how a caller sees that.
+ *
+ * 'out_psd' and 'out_prom' are optional. Prominence uses the same definition as
+ * the dominant-peak column -- the bin's power over the mean of the others -- so
+ * the two are directly comparable. */
+resonarsat_status_t rs_spectrum_prominence_at(const rs_spectrum_t *spec,
+                                              size_t window,
+                                              double freq_hz,
+                                              size_t *out_bin,
+                                              double *out_psd,
+                                              double *out_prom);
+
 /* What a scene-derived null found. See rs_spectrum_scene_null(). */
 typedef struct {
     size_t window;        /* the window maximising z; n_win if none qualified */

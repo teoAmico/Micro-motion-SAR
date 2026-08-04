@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 38 items and their status.
+an index of all 39 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -181,6 +181,15 @@ measured that a scatterer was ADDED, not that it moved. Keep RECOVERABILITY (a
 frequency put in comes back out -- established) apart from DETECTABILITY (deciding
 something moved without knowing the answer -- not established), and never quote a
 positive control that has no zero-amplitude run beside it.
+
+`--probe-hz F` is how that twin is compared (item 39): it adds `probe_psd` and
+`probe_prominence` at ONE nominated frequency to `PREFIX_windows.csv`, so two runs
+can be differenced there. Differencing the dominant-peak columns is meaningless
+when the two runs peak at different frequencies, which is exactly how item 38's
+motionless target won. The median window's increment is +0.00 and the injected
+window's is positive — but the pairing must differ in NOTHING BUT amplitude:
+paired against the uninjected run instead of the zero-amplitude one, the increment
+is LARGER than a real 0.5 mm signal, because it is then measuring the scatterer.
 
 **But a null only calibrates against noise its own model can produce** (item 37).
 Below 2 mm the Giza sweep reported bin 1 instead of the injected frequency, with

@@ -1,0 +1,16 @@
+########## amplitude 0.0 mm
+probe: 0.1630 Hz -> bin 5 (0.1628 Hz). PREFIX_windows.csv gains probe_psd and
+strongest peak in window 8: 0.098 Hz, prominence 56.3, quality 0.895, peak-to-peak velocity 0.8 mm/s
+  backed by 9 windows, largest touching block 9
+########## amplitude 0.5 mm
+probe: 0.1630 Hz -> bin 5 (0.1628 Hz). PREFIX_windows.csv gains probe_psd and
+strongest peak in window 8: 0.163 Hz, prominence 41.7, quality 0.806, peak-to-peak velocity 1.5 mm/s
+  backed by 10 windows, largest touching block 9
+########## amplitude 2.0 mm
+probe: 0.1630 Hz -> bin 5 (0.1628 Hz). PREFIX_windows.csv gains probe_psd and
+strongest peak in window 17: 0.163 Hz, prominence 39.1, quality 0.430, peak-to-peak velocity 7.5 mm/s
+  backed by 10 windows, largest touching block 9
+########## no injection at all
+probe: 0.1630 Hz -> bin 5 (0.1628 Hz). PREFIX_windows.csv gains probe_psd and
+strongest peak in window 6: 0.130 Hz, prominence 17.9, quality 0.445, peak-to-peak velocity 124.8 mm/s
+  backed by 6 windows, largest touching block 5

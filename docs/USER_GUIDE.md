@@ -990,6 +990,14 @@ here so the guide does not imply the set above is complete:
   wrote. If you have code holding an `img->r0`, it will fail to compile — that
   is the point of the rename. Anything indexing range bins against it must
   offset from the CENTRE bin. See `docs/FOLLOW-UPS.md` item 5.
+- **`--probe-hz F` is the only honest way to compare two runs.** It adds
+  `probe_psd` and `probe_prominence` at one nominated frequency to every row of
+  `PREFIX_windows.csv`. The dominant-peak columns cannot be differenced between
+  runs whose strongest peaks sit at different frequencies. Pair a real injection
+  with its zero-amplitude twin and subtract: the median window gains +0.00 and the
+  injected window gains. The two runs must differ in **nothing but amplitude** —
+  paired against an uninjected run instead, the increment is larger than a real
+  signal, because it is measuring the scatterer's presence. `FOLLOW-UPS.md` item 39.
 - **`--inject-vib` at ZERO amplitude produces a bigger "detection" than any real
   one.** A bright scatterer that does not move reaches prominence 56.3 on the
   Giza collect, against 38-47 for real injections, and it clears the

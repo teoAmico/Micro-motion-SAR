@@ -2200,6 +2200,87 @@ int main(void)
      * neighbour, so a target leaks into them. Using those as reference puts the
      * signal into its own null and pulls z down. The case measures z with the
      * guard and without it on the same scene. */
+    /* ASKING ABOUT A NOMINATED FREQUENCY, WHICH IS NOT THE DOMINANT ONE.
+     *
+     * Item 38 in miniature. Two windows: one holds a large low-frequency trend
+     * and no tone, the other a small tone at f0 under a smaller trend. Ranked
+     * by their DOMINANT peaks the trend window wins, which is what let a
+     * zero-amplitude injection outscore a real one. Asked about f0 specifically,
+     * the ordering reverses -- and that reversal is the whole point of the
+     * paired increment this exists to support. */
+    RS_CASE("prominence at a nominated frequency reverses the dominant-peak ranking");
+    {
+        const size_t nw = 2, nlk = 64;
+        rs_microm_t m;
+        memset(&m, 0, sizeof m);
+        m.n_looks = nlk; m.n_win = nw; m.n_win_az = nw; m.n_win_rg = 1;
+        m.win_az = m.win_rg = 8; m.stride_az = m.stride_rg = 8;
+        m.dt = 0.25; m.az_spacing_m = m.rg_spacing_m = 1.0;
+        m.disp_az  = calloc(nw * nlk, sizeof *m.disp_az);
+        m.disp_rg  = calloc(nw * nlk, sizeof *m.disp_rg);
+        m.disp_los = calloc(nw * nlk, sizeof *m.disp_los);
+        m.vel_los  = calloc(nw * nlk, sizeof *m.vel_los);
+        m.quality  = calloc(nw, sizeof *m.quality);
+        m.d_a      = calloc(nw, sizeof *m.d_a);
+        RS_CHECK(m.disp_az && m.disp_rg && m.disp_los && m.vel_los && m.quality && m.d_a);
+
+        const size_t f0_bin = 11;
+        for (size_t w = 0; w < nw; w++) {
+            m.quality[w] = 1.0;
+            for (size_t k = 0; k < nlk; k++) {
+                const double u = (double)k / (double)(nlk - 1);
+                /* Window 0: a big trend, no tone -- the zero-amplitude analogue.
+                 * Window 1: a small trend and a small tone at f0. */
+                double v = (w == 0) ? 30.0 * u * u : 6.0 * u * u;
+                if (w == 1)
+                    v += 0.6 * sin(2.0 * M_PI * (double)f0_bin * (double)k / (double)nlk);
+                m.vel_los[w * nlk + k] = v;
+                m.disp_los[w * nlk + k] = v;
+            }
+        }
+
+        rs_spectrum_t sq;
+        RS_CHECK_OK(rs_spectrum_compute(&m, RS_SPEC_DISPLACEMENT, &sq));
+        const double f0 = sq.freq[f0_bin];
+
+        size_t bin0 = 0, bin1 = 0;
+        double psd0 = 0.0, psd1 = 0.0, pr0 = 0.0, pr1 = 0.0;
+        RS_CHECK_OK(rs_spectrum_prominence_at(&sq, 0, f0, &bin0, &psd0, &pr0));
+        RS_CHECK_OK(rs_spectrum_prominence_at(&sq, 1, f0, &bin1, &psd1, &pr1));
+        printf("    dominant peak:  window 0 (trend only) %.2f  vs  window 1 (tone) %.2f\n",
+               sq.prominence[0], sq.prominence[1]);
+        printf("    at %.4f Hz:     window 0 %.3f  vs  window 1 %.3f\n", f0, pr0, pr1);
+
+        /* Ranked by dominant peak the trend-only window wins ... */
+        RS_CHECK(sq.prominence[0] > sq.prominence[1]);
+        /* ... and asked about f0 the ordering reverses. */
+        RS_CHECK(pr1 > pr0);
+        RS_CHECK(bin0 == f0_bin && bin1 == f0_bin);
+        RS_CHECK(psd1 > psd0);
+
+        /* The paired increment itself: the tone window gains at f0 over the
+         * trend-only one, which is the quantity item 38 asked for. */
+        printf("    increment at f0: %+.3f\n", pr1 - pr0);
+        RS_CHECK(pr1 - pr0 > 0.0);
+
+        /* Snapping, and the two refusals. A frequency between bins resolves to
+         * the nearer one; above Nyquist is an error rather than a silent clamp. */
+        size_t snapped = 0;
+        RS_CHECK_OK(rs_spectrum_prominence_at(&sq, 1, f0 + 0.4 * sq.df, &snapped, NULL, NULL));
+        RS_CHECK(snapped == f0_bin);
+        RS_CHECK_ERR(rs_spectrum_prominence_at(&sq, nw, f0, NULL, NULL, NULL), RS_ERR_ARG);
+        RS_CHECK_ERR(rs_spectrum_prominence_at(&sq, 0, sq.freq[sq.n_freq - 1] + 5.0 * sq.df,
+                                               NULL, NULL, NULL), RS_ERR_RANGE);
+        /* Bins inside the Hann skirt ARE answerable here, unlike in peak
+         * selection: naming a frequency is not searching for one. */
+        size_t low = 99;
+        RS_CHECK_OK(rs_spectrum_prominence_at(&sq, 0, sq.freq[1], &low, NULL, NULL));
+        RS_CHECK(low == 1 && low < RS_SPECTRUM_LEAKAGE_BINS);
+
+        rs_spectrum_free(&sq);
+        rs_microm_free(&m);
+    }
+
     RS_CASE("a window is scored against its scene, with its neighbours guarded out");
     {
         const size_t naz = 9, nrg = 9, nw = naz * nrg, nlk = 64;

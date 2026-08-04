@@ -79,7 +79,8 @@ said, not better) and item 7's line numbers.
 | 35 | **the result** | ADJUDICATED at p = 0.05: a real-data measurement a proper null could not reproduce |
 | 36 | done | Umbra and ICEYE read correctly; the per-vendor SGN override is confirmed right |
 | 37 | done | bin 1 outscored the truth below 2 mm and every gate endorsed it; the first three bins are now unreportable, which relocates a trend rather than removing it |
-| 38 | **the current state** | a ZERO-amplitude injection outscores every real one, so the p-value measured the scatterer being added, not it moving |
+| 38 | done | a ZERO-amplitude injection outscores every real one, so the p-value measured the scatterer being added, not it moving |
+| 39 | **the current state** | the paired increment at a nominated frequency answers item 38: the scene gains exactly zero, the target gains |
 
 ---
 
@@ -4199,11 +4200,82 @@ target, z 51.9 against 34.6, purely because its matched set had a scale of 0.15.
 A paired increment at the nominated frequency,
 `P_injected(f0) - P_zero_amplitude(f0)`, asking whether the injection ADDED
 recoverable evidence at f0 rather than whether an already-artefact-bearing window
-has a large peak. That needs the PSD at a nominated frequency;
-`PREFIX_windows.csv` records only each window's dominant frequency and the
-prominence there, so the zero-amplitude run cannot be interrogated at 0.163 Hz.
-Not attempted.
+has a large peak. Built and measured in item 39.
 
 **Any positive control here must now ship its zero-amplitude twin.** A positive
 control never run at zero amplitude does not establish that the effect came from
 the motion. That is a standing requirement, not a note.
+
+
+## 39. The paired increment: the scene gains exactly zero and the target gains
+
+Item 38 named the statistic that would separate "a scatterer was added" from "it
+moved", and could not compute it: comparing two runs at one fixed frequency
+needs the PSD there, and `PREFIX_windows.csv` carried only each window's
+dominant peak. Two runs whose strongest peaks sit at different frequencies
+cannot be differenced row by row, which is precisely how a motionless target
+outscored a moving one.
+
+`rs_spectrum_prominence_at()` and `--probe-hz` supply it. The CSV gains
+`probe_psd` and `probe_prominence`, measured at one nominated frequency for
+every window, using the same prominence definition as the dominant column so the
+two are subtractable. Bins inside the Hann skirt are answerable here, unlike in
+peak selection -- naming a frequency is not searching for one -- and the run
+header flags it when the probe lands there.
+
+Three runs at 96 m, `--probe-hz 0.163`, differing ONLY in injected amplitude,
+each differenced against its zero-amplitude twin. `runs/giza/2026-08-04-scene-null/`.
+
+```
+T(w) = probe_prominence(w) - probe_prominence_zero_amplitude(w)   at 0.1628 Hz
+
+0.5 mm vs zero              2.0 mm vs zero
+  win  8   T =  +5.15         win 13   T = +51.19
+  win 18   T =  +5.06         win  8   T = +51.19
+  win 17   T =  +5.06         win 18   T = +51.16
+  win 13   T =  +5.06         win 17   T = +51.16
+  win 16   T =  +4.89         win 16   T = +49.55
+  MEDIAN over 25 windows      MEDIAN over 25 windows
+           T =  +0.00                  T =  +0.00
+```
+
+**The median window gains exactly nothing.** Running the injection machinery --
+rewriting the phase history, adding a scatterer at 20x the median sample
+magnitude, refocusing -- contributes zero at f0 across the scene. That is the
+term item 38 could not subtract, and it subtracts to zero.
+
+**What gains is a contiguous block of five windows, all reporting 0.163 Hz**, at
+`iaz` 1-3 and `irg` 1-3: the injected window and its aliasing ghosts. The 1.0 m
+grid cell against this collect's 0.051 m azimuth resolution is the documented
+cause -- `mmotion` warns about it on every run -- so the ghosts are expected and
+are not independent evidence.
+
+The increment scales with amplitude: 4x the amplitude gives 9.9x the increment,
+against the 16x a power-law-in-amplitude-squared would predict. Sub-quadratic,
+same order, not investigated.
+
+### The pairing has to be exact, and this is not a small caveat
+
+Differencing the **uninjected** run -- no scatterer at all -- against the
+zero-amplitude twin gives T(win 8) = +7.71 and a scene maximum of +18.35.
+**Larger than the real 0.5 mm signal's +5.15.** Those two runs differ by the
+presence of a bright scatterer, not by its motion, so the difference measures
+the scatterer.
+
+The increment is only a statement about motion when the two runs differ in
+NOTHING BUT amplitude. Paired against the wrong twin it is worse than useless,
+because it looks like a stronger result.
+
+### What this does and does not establish
+
+It closes item 38's specific hole: there is now a statistic on which a
+zero-amplitude injection scores zero and a real one scores positively, where
+every absolute statistic ranked the motionless target first.
+
+It does not make anything detectable. **The increment requires a zero-amplitude
+twin of the same scene**, which exists only when the injection is ours. On a
+real collect with a suspected vibrating object there is no twin to subtract, so
+this validates the INJECTION EXPERIMENTS and transfers nothing to the field
+problem. The recoverability/detectability gap of item 38 is unchanged; what has
+been fixed is that the injection experiments can now be trusted to be measuring
+motion.

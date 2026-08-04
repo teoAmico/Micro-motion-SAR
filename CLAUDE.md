@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 57 items and their status.
+an index of all 58 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -126,6 +126,15 @@ That cost a wrong diagnosis here: `--max-pulses` was reported as unimplemented i
 test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
+
+**SPOTLIGHT OR A DWELL MODE IS A HARD REQUIREMENT** (item 58), and it is the
+cheapest thing to check about any candidate collect. What matters is PER-TARGET
+observation time, which in stripmap is `lambda*R/(2*rho*V)` and not the collect
+duration: KSTL's 17 s stripmap gives each point 0.71 s, so `df` is 1.4 Hz —
+coarser than the entire 0.3-3 Hz band — and 128 sub-looks of 5.5 ms have no
+azimuth resolution. No processing fixes it. The same arithmetic disqualifies
+Umbra's 2 s spotlight at 0.50 Hz. Check the mode before the footprint and before
+the sensors.
 
 **A PROXY is not a MEASUREMENT** (item 57). ADS-B, AIS and METAR establish that
 something was present and moving; they supply no displacement waveform, so they

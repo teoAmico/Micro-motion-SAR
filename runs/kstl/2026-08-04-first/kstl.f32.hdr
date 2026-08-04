@@ -1,0 +1,7 @@
+format float32
+byte_order little_endian
+n_plane 1024
+n_row 1024
+n_col 1
+layout plane-major, then row, then column
+axes azimuth, range, amplitude

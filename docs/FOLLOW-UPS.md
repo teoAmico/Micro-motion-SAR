@@ -98,7 +98,8 @@ said, not better) and item 7's line numbers.
 | 54 | done | the carrier fix rescues item 25's recovery, 3 of 4 lobe widths, and NOT its static false positives |
 | 55 | done | all three policies on the aspect fixture: none is both safe and useful, and item 47's local peak is a LOSS here |
 | 56 | done | the AM/PM discriminator does NOT work: the false positives are not amplitude modulation at the reported frequency |
-| 57 | **the current state** | KSTL read: ADS-B is a PROXY, no ground aircraft, and 11 seismic stations in the box are all outside the strip |
+| 57 | done | KSTL read: ADS-B is a PROXY, no ground aircraft, and 11 seismic stations in the box are all outside the strip |
+| 58 | **the current state** | STRIPMAP cannot support this measurement at all: per-target observation is 0.71 s, df 1.4 Hz |
 
 ---
 
@@ -5534,3 +5535,61 @@ Two cautions for when it is:
   seismometer sees roughly 0.1 um at 1 Hz against item 53's 5.5 um RMS floor. A
   building's response to wind or traffic reaches tens of microns and is the
   plausible target; bare ground is not.
+
+
+## 58. Stripmap cannot support this measurement, and that is arithmetic
+
+The KSTL focus does not produce a recognisable airport -- 1024 x 1024 at 2 m from
+all 172997 pulses, 21 min 55 s, and the result is speckle with faint smeared
+streaks. `runs/kstl/2026-08-04-first/kstl.png`.
+
+**It is the first STRIPMAP collect this project has processed.** The
+backprojector integrates every pulse onto every grid cell, which is correct for
+spotlight and wrong here: in stripmap the beam sweeps, and a point is lit for
+`lambda*R/(2*rho*V)` and no longer.
+
+```
+  2 m azimuth resolution at 680 km needs 5335 m of aperture = 0.71 s = 7238
+  pulses of 172997, so 95.8% of pulses have the target OUTSIDE the beam
+```
+
+Those pulses carry random phase; signal grows as `N_sig` and noise as
+`sqrt(N_noise)`, so integrating the full 17 s is worse than using the right 4%.
+
+### The requirement is per-target observation time
+
+```
+mode                            collect  per-target   df = 1/T  usable
+Capella KSTL   (stripmap)         17.0s       0.71s    1.406Hz  NO
+Capella Giza   (spotlight)        32.9s      32.90s    0.030Hz  yes
+ICEYE Houston  (dwell-precise)    15.3s      15.30s    0.065Hz  yes
+Umbra Panama   (spotlight)         2.0s       1.99s    0.503Hz  NO
+```
+
+At KSTL the frequency resolution is **1.4 Hz**, coarser than the entire 0.3-3 Hz
+band this project targets, and 0.71 s split into 128 sub-looks gives 5.5 ms each
+with no useful azimuth resolution. **No processing fixes that.** The target was
+not observed long enough, and the sub-aperture stack has nothing to stack.
+
+So KSTL was never a candidate for the vibration chain, aircraft or not -- it is a
+moving-target scene and nothing else, which is what item 57 concluded from the
+kinematics and this confirms from the geometry. The same table disqualifies
+Umbra's 2 s spotlight at 0.50 Hz resolution, which item 36 called coarse without
+quantifying.
+
+**A collect is usable here only if one point stays in the beam for seconds** --
+spotlight or a dwell mode. That should be the FIRST thing checked about any
+candidate, before the footprint and before the sensors, because it is cheap and
+it disqualifies outright.
+
+### A flag ordering defect found on the way, not fixed
+
+`focus --pulse-start 96000 --max-pulses 16000` fails with "pulse window
+[96000, 112000) outside available 16000 pulses". `--max-pulses` truncates the
+READ to the first 16000 and `--pulse-start` then indexes into that truncated
+buffer, so the pair cannot select a window late in a collect -- exactly what a
+stripmap sub-aperture would need. `USER_GUIDE` describes `--pulse-start` as
+"first pulse to read", which is not what it does.
+
+Left unfixed deliberately: the mode it would serve is disqualified above, and a
+fix should be made when something needs it rather than on the way past.

@@ -96,3 +96,62 @@ Two cautions for when it is:
   in a vault sees roughly 0.1 um of displacement at 1 Hz, against the 5.5 um RMS
   floor of item 53. A building's response to wind or traffic reaches tens of
   microns and is the plausible target; bare ground is not.
+
+---
+
+# The image does not focus, and the reason disqualifies the collect
+
+`kstl.png` — 1024 x 1024 at 2 m from all 172997 pulses, 21 min 55 s — is not a
+recognisable airport. It is speckle with faint smeared streaks.
+
+**This is the first STRIPMAP collect this project has processed**, and the
+backprojector integrates every pulse onto every grid cell, which is correct for
+spotlight and wrong here. In stripmap the beam sweeps: a point is lit for
+`lambda*R/(2*rho*V)` and no longer.
+
+```
+  2 m azimuth resolution at 680 km needs a 5335 m aperture = 0.71 s = 7238 pulses
+  of the 172997 available, so 95.8% of pulses have the target OUTSIDE the beam
+```
+
+Those pulses contribute random phase. Signal grows as `N_sig` and noise as
+`sqrt(N_noise)`, so integrating the whole 17 s makes the image worse than using
+the right 4%.
+
+## Spotlight or dwell is a hard requirement
+
+The quantity this measurement needs is PER-TARGET observation time, which in
+stripmap is not the collect duration:
+
+```
+mode                            collect  per-target   df = 1/T  usable
+Capella KSTL   (stripmap)         17.0s       0.71s    1.406Hz  NO
+Capella Giza   (spotlight)        32.9s      32.90s    0.030Hz  yes
+ICEYE Houston  (dwell-precise)    15.3s      15.30s    0.065Hz  yes
+Umbra Panama   (spotlight)         2.0s       1.99s    0.503Hz  NO
+```
+
+At KSTL the frequency resolution is **1.4 Hz**, coarser than the whole 0.3-3 Hz
+band this project targets, and 0.71 s split into 128 sub-looks gives 5.5 ms each
+with no useful azimuth resolution. **No amount of processing fixes that**: the
+target was not observed for long enough.
+
+So KSTL was never a candidate for the vibration chain, aircraft or not. It is a
+moving-target scene and nothing else. The same table disqualifies Umbra's 2 s
+spotlight, which item 36 noted as coarse and did not quantify.
+
+**A collect is usable here only if one point stays in the beam for seconds.**
+That is spotlight or a dwell mode, and it should be the first thing checked
+about any candidate — before the footprint, before the sensors.
+
+## A flag ordering defect found on the way
+
+`focus --pulse-start 96000 --max-pulses 16000` fails with "pulse window
+[96000, 112000) outside available 16000 pulses". `--max-pulses` truncates the
+READ to the first 16000 pulses and `--pulse-start` then indexes into that
+truncated buffer, so the two cannot select a window late in a collect —
+which is exactly what a stripmap sub-aperture needs. `USER_GUIDE` describes
+`--pulse-start` as "first pulse to read", which is not what it does.
+
+Not fixed, because the mode is disqualified above and the fix should be made
+when something needs it.

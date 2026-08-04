@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 65 items and their status.
+an index of all 66 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -126,6 +126,14 @@ That cost a wrong diagnosis here: `--max-pulses` was reported as unimplemented i
 test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
+
+**TWO FLOORS, DO NOT CONFUSE THEM** (item 66): `validate` reports a PER-LOOK CRLB
+(~0.2 mm/look); item 53's END-TO-END detection floor after 128 looks and a
+periodogram is 0.0055 mm RMS, **37x lower**. `docs/GROUND_TRUTH_DATASETS.md` uses
+the per-look figure, which makes Kilauea look 700x below the floor when it is
+really 3x below at the median and one station 2.7x ABOVE. **The best entry there,
+South Portland Bridge, is above the floor by ~300x and blocked by ACCESS, not
+sensitivity** — an author request, not another factor of two.
 
 **MULTI-PIXEL COMBINATION IS NOT A LEVER, IN EITHER FORM** (items 64-65). SqueeSAR
 done properly — KS-test homogeneous pixel selection plus `phaselink.c`'s ML solver

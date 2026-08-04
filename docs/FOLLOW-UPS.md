@@ -106,7 +106,8 @@ said, not better) and item 7's line numbers.
 | 62 | done | the earthquake route fails on DUTY CYCLE: expected coincidences 0.14, needs 7x the archive |
 | 63 | done | finer cells give 1.4x of the needed 4x and are non-monotone; Umbra is disqualified on dwell despite 4048 products |
 | 64 | done | naive multi-pixel combination FAILS -- brightest-K is not statistically homogeneous, and phaselink.c already holds the right estimator |
-| 65 | **the current state** | SHP + phase linking is WORSE still: homogeneous pixels share the ARTEFACT, so the ML estimator sharpens it |
+| 65 | done | SHP + phase linking is WORSE still: homogeneous pixels share the ARTEFACT, so the ML estimator sharpens it |
+| 66 | **the current state** | GROUND_TRUTH_DATASETS.md corroborates items 61-62 independently; its floor is the PER-LOOK one, 37x pessimistic |
 
 ---
 
@@ -6070,3 +6071,51 @@ items 60-62 showed is what would supply hundreds of controls, needs something no
 yet identified rather than more of what is here.
 
 `--pixels` defaults to 1, reproducing every earlier measurement.
+
+
+## 66. The ground-truth survey corroborates items 59-62, and uses the wrong floor
+
+`docs/GROUND_TRUTH_DATASETS.md` surveys public structural-motion datasets against
+SAR collects. It reaches items 61 and 62's conclusion independently and by a
+different route -- **no publicly downloadable positive benchmark that is both
+synchronised and above the motion floor and native to this pipeline** -- which is
+worth more than either finding alone.
+
+It also adds candidates this project did not have: South Portland Bridge (ten
+2048 Hz accelerometers, 1.5-2 mm/s peak LOS, matched modal peaks), the Trento
+Capella shaker (15 mm at 2 Hz), Hardanger Bridge with Sentinel-1 during two named
+storms, and a Mexico City ICEYE pair.
+
+### The floor it compares against is the per-look one
+
+`validate` reports a per-look CRLB -- 0.2017 mm/look on ICEYE. Item 53 measured
+the END-TO-END detection floor, after 128 looks and a periodogram, at **0.0055 mm
+RMS**. That is **37x lower**, and the difference is coherent averaging doing what
+it is supposed to.
+
+```
+                                          measured    vs 5.5 um floor
+  Kilauea HV stations, median (item 61)      1.70 um       0.31x  below
+  Kilauea HV.RIMD, 2024-06-09 (item 61)     15.00 um       2.73x  ABOVE
+  Mexico City G.UNM.00 (doc)                  0.60 um       0.11x  below
+  Oroville BK.ORV (item 60)                   0.78 um       0.14x  below
+```
+
+The page calls Kilauea "about 700 times below the phase floor". Against the
+measured floor it sits AT it: 3x below at the median, and one station 2.7x ABOVE
+on 2024-06-09. **Item 61 rejected that reading on ATTRIBUTION, not amplitude** --
+no catalogued event in the aperture, and `HV.RIMD` is only intermittently high.
+
+Oroville and Mexico City remain genuinely below by an order of magnitude, so the
+page's conclusion stands. What changes is the margin, and therefore what a factor
+of two would buy: items 63-65 put roughly 2x within reach, which does not rescue
+Oroville or Mexico City but would put ordinary Kilauea ground within range.
+
+### What is actually blocking, restated
+
+The page's strongest entry, South Portland Bridge, is native to `mmotion --cphd`,
+independently synchronised, AND demonstrably above the floor at 1.5-2 mm/s -- some
+300x the detection floor. **It is blocked by ACCESS, not by physics or by
+sensitivity.** That is a different problem from the one items 59-65 have been
+solving, and it is the one worth solving: an author request rather than another
+factor of two.

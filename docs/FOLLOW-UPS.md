@@ -78,7 +78,7 @@ said, not better) and item 7's line numbers.
 | 34 | done | null density derived from geometry; it now separates signal from nothing on real data |
 | 35 | **the result** | ADJUDICATED at p = 0.05: a real-data measurement a proper null could not reproduce |
 | 36 | done | Umbra and ICEYE read correctly; the per-vendor SGN override is confirmed right |
-| 37 | **the current state** | bin 1 outscored the truth below 2 mm and every gate endorsed it; the first three bins are now unreportable |
+| 37 | **the current state** | bin 1 outscored the truth below 2 mm and every gate endorsed it; the first three bins are now unreportable, which relocates a trend rather than removing it |
 
 ---
 
@@ -4006,6 +4006,89 @@ to reach it.
 wrong answer at any smaller amplitude with a higher score. p = 0.05 was a
 statement about that operating point, not about the method. Item 35's threshold
 also needs re-measuring under the floor, since removing bins moves the null too.
+
+### Recalibrated, and the control that decides it
+
+Removing bins moves the null too, so item 35's 23.8 does not carry over. 19 fresh
+trials under the floor: min 11.5, mean 16.3, **worst 22.9** -- so the threshold
+barely moved (-0.9) and it is the measurement that did.
+
+```
+ amp mm |  prom | x worst null | verdict
+    2.0 |  38.5 |        1.68x | p = 0.0500  ADJUDICATED
+    1.0 |  40.7 |        1.78x | p = 0.0500  ADJUDICATED
+    0.5 |  41.6 |        1.82x | p = 0.0500  ADJUDICATED
+   0.25 |  42.9 |        1.87x | p = 0.0500  ADJUDICATED
+  0.125 |  45.3 |        1.98x | p = 0.0500  ADJUDICATED
+ 0.0625 |  48.9 |        2.14x | p = 0.0500  ADJUDICATED
+```
+
+**The sweep still never found a floor**, and 0.0500 is the smallest p that 19
+trials can express, so all six sit pinned at the bound rather than approaching
+it. The sensitivity limit is somewhere below 0.0625 mm and this design cannot
+see where.
+
+**THE REAL UNINJECTED SCENE, under the same floor**, is the control that was
+missing:
+
+```
+strongest peak in window 6: 0.130 Hz, prominence 17.9
+```
+
+0.130 Hz is **bin 4 -- the first admissible bin**. The trend did not go away
+when its bins were removed; it moved to the edge of the exclusion and reported
+from there. A sufficiently strong trend leaks or relocates into the first
+permitted bin no matter where the boundary is drawn, because the boundary
+removes bins and not energy.
+
+It is refused -- 17.9 against the null's worst of 22.9 -- but **by 1.28x, and by
+the null rather than by the floor**. The regression fixture's trend-only window
+reaches 28.09, above this null. So the floor is necessary and is not sufficient,
+and the thing actually standing between this tool and a false positive on a
+motionless desert is a synthetic null with very little margin.
+
+(28.09 and 22.9 come from different scenes. Prominence is dimensionless -- peak
+against the mean of the rest -- but it is scene-dependent, so the comparison is
+directional, not a measured crossing.)
+
+### What the literature does and does not offer here
+
+Searched rather than assumed, per this project's own rule. The closest published
+work is Vattulainen et al., *Assessment of Spaceborne SAR Micro-Motion
+Measurement for Vibration-Based SHM*, IEEE Access 14 (2026) 6045-6062 -- the same
+SPOT sub-pixel-offset-tracking route this project's correlator implements, on
+Capella data, against synchronous accelerometer ground truth.
+
+What it establishes: dominant frequency correctly measured in **every** test,
+errors 0.009-0.091 Hz, always below the spectral resolution; 16.01 s acquisition
+giving df = 0.064 Hz; **smallest confirmed radial RMS displacement 0.10 mm**
+(0.81 mm/s RMS radial velocity).
+
+What it does NOT contain, checked by reading it:
+
+- **No detrending of any kind.** The word does not appear. There is no
+  linear-trend removal before the transform.
+- **No band floor, no minimum observable frequency, no low-bin exclusion.**
+- **No null control, no static scene, no false-alarm rate, no significance
+  test.** Every test is a known vibrating target with synchronised ground truth.
+  The question "is this peak real" is never asked, because the answer is known.
+- **Spurious peaks are reported and not explained**: "A spurious third peak
+  appears however at 5 Hz, reaching a magnitude comparable to the lower 2 Hz
+  component." It is noted and moved past.
+
+Two consequences for this project. First, item 37's artefact is not a known
+failure mode being rediscovered -- a paper with no detrending and no low-bin
+exclusion would have been fully exposed to it, and its validation design could
+not have detected it. Second, **the 0.0625 mm adjudication above is below the
+smallest displacement anyone has confirmed**: 0.0625 mm zero-to-peak is about
+0.044 mm RMS against their 0.10 mm. Beating a published floor by 2x with a
+synthetic tone injected into real phase history is a reason for suspicion about
+the injection, not a sensitivity claim. Nothing here has detected a real
+vibrating object.
+
+The CFAR literature is extensive but is about **amplitude** detection of targets
+in clutter, not about deciding whether a spectral line in a tracked series is
+real. No published false-alarm framework for this measurement was found.
 
 ### The open half
 

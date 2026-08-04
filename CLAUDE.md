@@ -186,6 +186,12 @@ cycles of a record one dwell long. `--fmin` raises the floor and cannot lower it
 Do not "fix" a fixture that stops reporting by lowering it — move the fixture's
 frequencies up, as `test_tracking.c` had to in two places.
 
+**The floor relocates a trend; it does not remove one.** The real uninjected Giza
+scene under the floor answers at 0.130 Hz — bin 4, the first admissible bin — at
+prominence 17.9 against the recalibrated null's worst of 22.9. It is refused by
+1.28x, and by the NULL rather than by the floor. A cluster of windows reporting
+the first admissible frequency is a trend field, not a detection.
+
 **Warn rather than silently degrade.** A wrong setting here does not fail loudly: ask
 for a measurement a collect cannot support and you get a complete, well-formed spectrum
 with a confident peak produced by the processing rather than the ground, and a

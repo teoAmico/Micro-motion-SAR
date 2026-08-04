@@ -30,3 +30,18 @@ strongest peak in window 8: 0.163 Hz, prominence 48.9, quality 0.891, peak-to-pe
   static trial 5/19: prominence 13.3 at 0.326 Hz
   static trial 6/19: prominence 11.5 at 0.326 Hz
   static trial 7/19: prominence 18.3 at 0.456 Hz
+  static trial 8/19: prominence 18.4 at 1.856 Hz
+  static trial 9/19: prominence 13.0 at 0.749 Hz
+  static trial 10/19: prominence 12.4 at 0.814 Hz
+  static trial 11/19: prominence 19.3 at 0.195 Hz
+  static trial 12/19: prominence 13.1 at 0.228 Hz
+  static trial 13/19: prominence 17.6 at 0.879 Hz
+  static trial 14/19: prominence 12.2 at 0.228 Hz
+  static trial 15/19: prominence 20.1 at 1.531 Hz
+  static trial 16/19: prominence 12.8 at 1.531 Hz
+  static trial 17/19: prominence 22.5 at 1.498 Hz
+  static trial 18/19: prominence 15.9 at 0.293 Hz
+  static trial 19/19: prominence 16.1 at 0.749 Hz
+  0 of 19 reached it -- empirical p = 0.0500
+strongest peak in window 17: 0.163 Hz, prominence 38.5, quality 0.430, peak-to-peak velocity 7.5 mm/s
+  ADJUDICATED: p = 0.0500 <= alpha 0.05, from 0 of 19 motionless realisations

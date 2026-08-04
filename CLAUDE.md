@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 66 items and their status.
+an index of all 67 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -126,6 +126,15 @@ That cost a wrong diagnosis here: `--max-pulses` was reported as unimplemented i
 test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
+
+**PUBLIC SOURCES LEAVE EXACTLY ONE PAIRING: KILAUEA** (item 67). Hardanger fails
+item 58's dwell test before its missing Sentinel-1 reader matters — IW lights a
+point for 0.16-0.63 s, `df` ~1-6 Hz. Oroville and Mexico City are an order of
+magnitude below the floor. Kilauea is public, native, and dwell-adequate, but 95%
+of its station readings are below the floor — so it supports a CORRELATION test
+across 51 collects (does reported displacement track the seismometer's RMS?),
+not a detection test. That needs no collect above the floor and is the first test
+here whose truth VARIES.
 
 **TWO FLOORS, DO NOT CONFUSE THEM** (item 66): `validate` reports a PER-LOOK CRLB
 (~0.2 mm/look); item 53's END-TO-END detection floor after 128 looks and a

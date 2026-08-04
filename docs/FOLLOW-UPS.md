@@ -107,7 +107,8 @@ said, not better) and item 7's line numbers.
 | 63 | done | finer cells give 1.4x of the needed 4x and are non-monotone; Umbra is disqualified on dwell despite 4048 products |
 | 64 | done | naive multi-pixel combination FAILS -- brightest-K is not statistically homogeneous, and phaselink.c already holds the right estimator |
 | 65 | done | SHP + phase linking is WORSE still: homogeneous pixels share the ARTEFACT, so the ML estimator sharpens it |
-| 66 | **the current state** | GROUND_TRUTH_DATASETS.md corroborates items 61-62 independently; its floor is the PER-LOOK one, 37x pessimistic |
+| 66 | done | GROUND_TRUTH_DATASETS.md corroborates items 61-62 independently; its floor is the PER-LOOK one, 37x pessimistic |
+| 67 | **the current state** | public-only leaves ONE usable pairing, Kilauea, and the test it supports is CORRELATION over 51 collects, not detection |
 
 ---
 
@@ -6119,3 +6120,59 @@ independently synchronised, AND demonstrably above the floor at 1.5-2 mm/s -- so
 sensitivity.** That is a different problem from the one items 59-65 have been
 solving, and it is the one worth solving: an author request rather than another
 factor of two.
+
+
+## 67. Public sources only: one pairing survives, and it changes the experiment
+
+Item 66's survey lists the strongest candidate as South Portland Bridge --
+native, synchronised, 300x above the floor -- behind an author request. With
+public sources only that is out, and so is most of the list. What survives:
+
+**Hardanger Bridge fails on dwell, before the missing reader matters.** It needs
+Sentinel-1, which this project cannot read; but adding a reader would not help.
+Sentinel-1 IW sweeps its beam electronically, so a point is lit for a fraction of
+a second whatever the product length:
+
+```
+  IW (TOPS)            per-target dwell 0.16 s    df = 6.31 Hz
+  IW, single burst                      0.63 s    df = 1.58 Hz
+  SM stripmap                           0.63 s    df = 1.58 Hz
+```
+
+That is item 58's arithmetic again, and `df` around 1 Hz is coarser than the
+bridge modes of interest. **A bridge moving centimetres in a storm is still
+unmeasurable if the radar only watches it for six tenths of a second.**
+
+**Mexico City and Oroville are genuinely below the floor** by an order of
+magnitude (item 66).
+
+**That leaves Kilauea, and only Kilauea**: public on both sides, native to
+`mmotion --cphd`, and dwell-adequate at 25-40 s.
+
+### What Kilauea actually supports, which is not a detection test
+
+```
+  51 collects, 249 station-readings, HV network, UWB excluded
+  station RMS: median 1.64 um, 90th percentile 3.60 um, max 109.96 um
+  the 5.5 um floor sits at the 95th percentile
+```
+
+Ninety-five percent of readings are below the floor, so no single collect is a
+positive control -- which is what items 60 and 61 already concluded one collect at
+a time.
+
+**But 51 collects with 6-8 recording stations each is not one experiment, it is
+51.** The test that ensemble supports is a CORRELATION: does the pipeline's
+reported per-window displacement track the seismometer's RMS across 51
+independent acquisitions of the same ground? That needs no single collect above
+the floor. It asks whether the instrument responds to real ground motion at all,
+which is a weaker claim than detection and a stronger one than anything this
+project currently has.
+
+It would also be the first test here whose truth varies. Every injection
+experiment has one known answer per run; this has 51 known answers spanning two
+orders of magnitude in amplitude, and a pipeline that is measuring nothing would
+show no correlation with them.
+
+**Not attempted.** It needs the 51 CPHDs, which at Capella spotlight sizes is of
+order a terabyte, and that is the real cost rather than any missing method.

@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 60 items and their status.
+an index of all 61 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -126,6 +126,15 @@ That cost a wrong diagnosis here: `--max-pulses` was reported as unimplemented i
 test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
+
+**ALL 315 SYNCHRONISED HITS SCREENED: NONE has motion above the floor that
+survives auditing** (item 61). 52 were above 5.5 um raw, 0 after three checks —
+non-seismic channels (`LWD` is WIND DIRECTION, `LCE` is CLOCK ERROR; read the SEED
+middle letter), chronically-high stations (`HV.UWB` reads 1-1.9 mm on every collect
+for six weeks), and the neighbour test (UWB reads 400x its neighbours on the same
+ground at the same instant). **Invert the search**: start from the earthquake
+catalogue and look for a collect over the epicentre, not from collects hoping for
+motion.
 
 **OROVILLE DAM IS A PROVEN-STATIC SCENE** (item 60): its seismometer records
 0.5-0.8 um RMS during the aperture, 7-11x BELOW item 53's 5.5 um floor. That makes

@@ -101,7 +101,8 @@ said, not better) and item 7's line numbers.
 | 57 | done | KSTL read: ADS-B is a PROXY, no ground aircraft, and 11 seismic stations in the box are all outside the strip |
 | 58 | done | STRIPMAP cannot support this measurement at all: per-target observation is 0.71 s, df 1.4 Hz |
 | 59 | done | 315 synchronised instrument measurements found in the Capella spotlight archive, including Oroville Dam |
-| 60 | **the current state** | Oroville Dam moved 0.5-0.8 um, 7-11x BELOW the floor: not a positive control, but the first PROVEN-STATIC scene |
+| 60 | done | Oroville Dam moved 0.5-0.8 um, 7-11x BELOW the floor: not a positive control, but the first PROVEN-STATIC scene |
+| 61 | **the current state** | all 315 screened: NONE has motion above the floor that survives auditing; invert the search to start from earthquakes |
 
 ---
 
@@ -5736,3 +5737,86 @@ The wider search should now look for a hit where the instrument shows motion
 ABOVE 5.5 um -- a site during an earthquake, or a structure under load. The 315
 hits in `runs/screens/sensor-join/measurement_hits.csv` have not been screened
 that way, and screening them costs one waveform request each.
+
+
+## 61. All 315 screened: none has motion above the floor
+
+Item 60 asked the obvious question of the other 314 hits. Every one screened:
+response removed, 0.03-3 Hz, RMS displacement over its own aperture.
+`runs/screens/sensor-join/MOTION_SCREEN.md`.
+
+```
+  315  synchronised hits
+  305  returned a waveform that survived response removal
+  303  on an actual seismometer or accelerometer channel
+   52  above the 5.5 um floor -- before auditing
+   14  above it once HV.UWB is excluded
+    0  that survive the neighbour test
+```
+
+### Three layers of artefact, each caught by a different check
+
+**Non-seismic channels.** The two largest readings in the whole screen were
+`IU.RAR` `LWD` at 317 METRES and `BK.ORV` `LCE` at 34 metres. `LWD` is WIND
+DIRECTION, `LCE` is CLOCK ERROR. The SEED channel code's middle letter gives the
+instrument -- `H`/`L` seismometer, `N` accelerometer, `W` wind, `C` clock -- and
+filtering on it removes both. Anything reading a waveform archive blind will hit
+this.
+
+**Chronically high stations.**
+
+```
+  HV.UWB    39 collects   median   38.23 um   max 1918.28   INSTRUMENT
+  HV.BYL     5            median    9.03      max   64.35   INSTRUMENT
+  HV.WRM    31            median    3.50      max  109.96
+  HV.UWE    40            median    1.93      max    3.68   quiet
+  HV.RIMD   40            median    1.73      max   14.98
+  HV.OTLD   40            median    1.22      max    2.45   quiet
+```
+
+`HV.UWB` reads 1-1.9 mm on collect after collect for six weeks. Neither ambient
+ground nor earthquakes arrive at every satellite overpass.
+
+**The neighbour test, which is decisive.** Kilauea puts six to eight stations
+inside one footprint, so every reading has controls on the same ground at the
+same instant:
+
+```
+  2024-07-09T20:22:25   UWB 1918.28 um
+     WRM 4.73  UWE 2.24  RIMD 1.88  BYL 1.52  KKO 1.49  SDH 1.18  OTLD 1.11
+```
+
+UWB reads **400x its neighbours**. That settles it without needing to know what
+is wrong with the station, and it is only possible because the same footprint
+holds several instruments -- which is an argument for preferring dense networks
+in any future search.
+
+### The one candidate that looked real, and does not hold
+
+`CAPELLA_C10_SP_CPHD_HH_20240609091921`, 2024-06-09T09:19:21Z: WRM 44.50 um and
+RIMD 14.98 um with the rest at 2.3-3.7 um against a 1.6 um median. Spatially
+coherent, which is what a real source looks like.
+
+- **No catalogued event** in the aperture. USGS lists nothing; the nearest is
+  M1.8 at 09:25:53, six and a half minutes after the radar had gone.
+- **WRM is chronically high**, median 3.50 and above the floor on eight separate
+  collects, so its 44.5 um is WRM being WRM.
+- What is left is RIMD at 14.98 um against its own median of 1.73, with others at
+  about twice background -- consistent with weak volcanic tremor during Kilauea's
+  June 2024 activity, and too weak and too unattributed to build a control on.
+
+### What this establishes, and what to do next
+
+**No collect in the open Capella archive has independently confirmed motion
+clearly above this instrument's floor.** That is stronger than `DATASETS.md` has
+been able to say, which was that no such collect is KNOWN.
+
+What would count: an instrument above **5.5 um RMS in 0.03-3 Hz**, on a
+seismometer channel, at a station that is not chronically high, corroborated by a
+neighbour or a catalogued event, inside a spotlight or dwell collect. The screen
+applies all of those and re-runs against any new catalogue.
+
+**Invert the search.** The likely place is a site DURING AN EARTHQUAKE, so start
+from the earthquake catalogue and look for a collect over the epicentre within
+the aperture, rather than starting from collects and hoping. There are 939
+spotlight collects and rather more earthquakes.

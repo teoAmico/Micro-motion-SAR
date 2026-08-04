@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 53 items and their status.
+an index of all 54 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -423,6 +423,13 @@ against a real 0.58-0.89) and the sign and monotonicity of the window-size respo
 a third of the real slope. The larger finding is a side effect: the window-level hit rate
 collapses from 45-49% to 3-10%, the first time a fixture here has behaved like a real collect
 in refusing to yield a frequency.
+
+**The carrier fix of items 52-53 rescues item 25's RECOVERY and not its SAFETY**
+(item 54): 3 of 4 lobe widths now clear slope-and-rms where none did, but 3 of 12
+static controls still return an in-band frequency on scenes where nothing moves.
+The slope failure was a carrier residual; the false positives are a POLICY failure,
+which is what item 25 said at the time. Read the rest of item 25 with that split
+in mind.
 
 **Item 14's recovery does NOT survive it** (item 25). Item 14's own sweep against the aspect
 fixture: the reported policy, `rs_spectrum_best_window()`, fails at every lobe width with rms

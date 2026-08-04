@@ -94,7 +94,8 @@ said, not better) and item 7's line numbers.
 | 50 | done | sensitivity re-measured at the good overlap with a proper twin: floor is 0.0625-0.125 mm |
 | 51 | done | the floor is a QUADRATIC phase residual the linear carrier removal leaves; a quadratic fit drops it 2000x |
 | 52 | done | quadratic carrier removal implemented: artefact down 38x, floor 0.125 -> 0.0156 mm |
-| 53 | **the current state** | cubic term added: artefact 171x down in total, floor 0.0039-0.0078 mm, returns now falling fast |
+| 53 | done | cubic term added: artefact 171x down in total, floor 0.0039-0.0078 mm, returns now falling fast |
+| 54 | **the current state** | the carrier fix rescues item 25's recovery, 3 of 4 lobe widths, and NOT its static false positives |
 
 ---
 
@@ -5281,3 +5282,59 @@ The defensible claim is narrow: **the instrument's own floor on this collect is
 0.0055 mm RMS**, measured against the only control that applies to an injected
 run. Anything about real structures needs a real structure, which remains the
 thing this project does not have.
+
+
+## 54. The carrier fix against aspect dependence: recovery yes, safety no
+
+Items 52-53 improved the carrier removal by 171x against a static bright
+scatterer on real data. Item 25 is where the phase route breaks on a FIXTURE --
+aspect-dependent scattering, the mechanism real structures have and
+`rs_sim_scene()` lacks, and the reason item 14's recovery was bounded rather than
+believed. `runs/fixtures/2026-08-04-aspect-carrier/`.
+
+```
+ lobe_frac |    slope   rms Hz | verdict  | static controls (3 seeds)
+      1.00 |   1.0417   0.0333 | RECOVERS |  0.25  0.58  0.25  IN BAND
+      0.50 |   1.0417   0.0289 | RECOVERS |  0.25  0.25  0.25  outside
+      0.25 |   1.2083   1.1252 | fails    |  0.33  0.25  0.33  IN BAND
+      0.12 |   0.9583   0.0236 | RECOVERS |  1.83  1.75  1.67  outside
+ isotropic |   0.9583   0.0236 | RECOVERS
+```
+
+Item 25 measured `rs_spectrum_best_window()` failing at ALL FOUR lobe widths with
+slope negative at three. **Three of four now recover.**
+
+**Three of twelve static controls still come back inside the swept band**,
+against item 25's two of twelve. That failure is untouched.
+
+### The split is the finding
+
+The two halves of item 25 had different causes and only one was a carrier
+problem.
+
+The slope-and-rms failure WAS the carrier residual. Aspect dependence makes a
+scatterer's amplitude vary across the aperture, which perturbs a linear-only
+carrier fit, and the leftover curvature swamped the tone. Fitting the curvature
+removes it.
+
+**The static false positives are a POLICY failure and item 25 said so at the
+time**: "aspect dependence gives amplitude per-look structure the isotropic model
+never had, and the prominence policy reads that structure as a frequency."
+Nothing about the carrier changes what prominence does with a genuine amplitude
+modulation on a scene where nothing moves. `rs_spectrum_ps_window()` was the only
+policy that behaved there and still is.
+
+### Not a like-for-like reproduction, stated because the numbers invite it
+
+- **5 frequencies over 1 seed** against item 25's 6 over 3 -- 5 points against
+  18, so slope and rms are far less constrained here.
+- **12 s dwell at 64 looks** gives `df = 0.0833 Hz` and a half-bin bound of
+  0.0417 against item 25's 0.0252. **A looser bar.**
+- Same fixture, same lobe fractions, same estimator and window geometry.
+
+So "three of four recover" is directional against item 25's "none of four", not a
+withdrawal of it. The static count, 3 of 12 against 2 of 12, should be read as
+unchanged rather than worse given the different seed counts.
+
+**Item 25's headline was two-part -- the reported policy fails, and it fails
+unsafely. The first part weakens; the second stands.**

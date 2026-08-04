@@ -1,0 +1,13 @@
+Item 25's sweep, carrier removal now linear+quadratic+cubic.
+Aspect fixture, rs_spectrum_best_window(), 64 looks, df = 0.0833 Hz,
+half-bin bound 0.0417 Hz.
+
+ lobe_frac |    slope   rms Hz | verdict  | static controls (3 seeds)
+---------------------------------------------------------------------------
+      1.00 |   1.0417   0.0333 | RECOVERS |  0.25  0.58  0.25  IN BAND
+      0.50 |   1.0417   0.0289 | RECOVERS |  0.25  0.25  0.25  outside
+      0.25 |   1.2083   1.1252 | fails    |  0.33  0.25  0.33  IN BAND
+      0.12 |   0.9583   0.0236 | RECOVERS |  1.83  1.75  1.67  outside
+
+ISOTROPIC CONTROL (asp = NULL), same targets and processing:
+ isotropic |   0.9583   0.0236 | RECOVERS

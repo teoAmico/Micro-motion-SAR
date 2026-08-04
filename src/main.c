@@ -2550,6 +2550,38 @@ static int rs_cmd_mmotion(int argc, char **argv)
      * most prominent window reported 2.604 Hz. A fragmented vote looks like a
      * motionless scene, which is the uncertainty a single window's argmax
      * cannot express. */
+    /* THE MODAL SET, which is the answer's right shape when the target is a
+     * structure rather than a tone. Reported beside the single-frequency
+     * policies rather than instead of them: item 69 showed prominence losing to
+     * a noise line when six real modes divided the energy, and the sine cases
+     * every earlier measurement rests on are unaffected. It gates nothing. */
+    {
+        rs_modal_set_t ms;
+        const resonarsat_status_t mst = rs_spectrum_modal_set(&spec, &ms);
+        if (mst == RS_OK) {
+            printf("  modal set: %zu mode%s recurring in >= %zu of %zu voting "
+                   "windows\n"
+                   "           (%zu nominations each over %zu admissible bins; "
+                   "%.2f bins expected\n"
+                   "            to clear that by chance, so the threshold is a "
+                   "family-wise budget)\n",
+                   ms.n_mode, ms.n_mode == 1 ? "" : "s", ms.support_min,
+                   ms.n_voting, ms.n_per_window, ms.n_bin, ms.expected_false);
+            for (size_t i = 0; i < ms.n_mode; i++)
+                printf("           %6.3f Hz   support %3zu/%zu   local ratio "
+                       "%.1f\n",
+                       ms.mode[i].freq_hz, ms.mode[i].n_support, ms.n_voting,
+                       ms.mode[i].median_ratio);
+            printf("           Support is cross-window AGREEMENT and adjudicates "
+                   "nothing: item 11's\n"
+                   "           blindness to common-mode artefacts applies to a "
+                   "set exactly as to\n"
+                   "           one frequency. Run --null-static N.\n");
+        } else if (mst == RS_ERR_RANGE) {
+            printf("  modal set: nothing recurs across the windows\n");
+        }
+    }
+
     {
         const double cf = cons_hz;
         const size_t n_agree = cons_agree, n_distinct = cons_distinct;

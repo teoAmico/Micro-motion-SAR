@@ -110,7 +110,8 @@ said, not better) and item 7's line numbers.
 | 66 | done | GROUND_TRUTH_DATASETS.md corroborates items 61-62 independently; its floor is the PER-LOOK one, 37x pessimistic |
 | 67 | done | public-only leaves ONE usable pairing, Kilauea, and the test it supports is CORRELATION over 51 collects, not detection |
 | 68 | done | the doc's new SHM datasets have no co-located collect, but they are real WAVEFORMS to inject in place of a sine |
-| 69 | **the current state** | a real structure's motion is injected for the first time, and the REPORTED answer goes wrong where a sine is correct |
+| 69 | done, amended by 70 | a real structure's motion is injected for the first time, and the REPORTED answer goes wrong where a sine is correct |
+| 70 | **the current state** | reporting a modal SET is the right shape and does NOT fix it; cross-window support gives a noise bin the same 12/49 as the true mode |
 
 ---
 
@@ -6307,4 +6308,125 @@ recovery not surviving aspect-dependent scattering; this finds the reported
 policy not surviving realistic motion. The two gaps are independent and both
 sit between the fixtures and a real collect.
 
+### Amendment from item 70: the ground truth above is at the WRONG RESOLUTION
+
+The six-mode table is the accelerometer's own spectrum at 100 Hz over 20 s. What
+the DWELL can see is coarser -- `df` = 0.0500 Hz, and the record replayed at
+1/2.4 speed and sampled at 128 looks gives:
+
+```
+    0.550 Hz  (bin 11)  rel power 1.00
+    0.600 Hz  (bin 12)  rel power 0.43
+    0.300 Hz  (bin  6)  rel power 0.28
+```
+
+The four modes at 1.10-1.25 Hz are separated by 0.021-0.026 Hz after scaling,
+inside one Hann main lobe, so they are ONE peak here. **"Six modes, no dominant
+line" is true of the instrument and false of the measurement**: at the dwell's
+resolution the record has a dominant at 0.550 Hz, 2.3x the next feature.
+
+That makes this result cleaner rather than weaker. There IS a single correct
+answer, 0.550 Hz, and the reported 1.966 Hz is not near it. Score against the
+record processed to the SAME resolution, which is what Lotti et al. do (item 70)
+and what "within one bin of any true mode" above does not.
+
 Run: `runs/synthetic/2026-08-04-real-waveform/`.
+
+
+## 70. A modal set is the right shape of answer and does not fix item 69
+
+Item 69 concluded that a statistic reporting one frequency is the wrong shape for
+a structure. `rs_spectrum_modal_set()` reports a set instead: each window
+nominates its RS_MODAL_PER_WINDOW strongest peaks against their own local
+background (item 47), nominations are separated by RS_SPECTRUM_LEAKAGE_BINS so a
+Hann skirt cannot be nominated twice, and a bin is reported when its SUPPORT --
+the number of windows nominating it -- clears a threshold derived from a
+binomial null with a family-wise budget of half a bin over the band. Nothing is
+tuned; `support_min` is computed FROM the nomination count, so raising the count
+widens what can be found without loosening what is believed.
+
+### What the literature says, read before the write-up and after the code
+
+**The SAR micro-motion field already reports more than one frequency, and does it
+with no acceptance criterion at all.** Lotti et al., *Vibration-based Structural
+Health Monitoring from single-pass SAR images*, EVACES 2025 -- South Portland
+Street Suspension Bridge, Glasgow, Umbra-04 spotlight:
+
+> "The two highest peak frequencies -- in descending order -- extracted from the
+> m-m time history are compared with those from the ground signal in Table 3."
+
+Top two peaks by height. No threshold, no support test, no clustering. It half
+fails on their own data: *"the second peak is not detectable for pixels 1 and 2,
+as its magnitude is much lower than the peak observed for pixels 3 and 4"* --
+two of four pixels yield one mode.
+
+Their operating point, worth having on the record:
+
+| | |
+|---|---|
+| Umbra-04 spotlight, 9.6 GHz | effective acquisition 9.252 s |
+| sub-aperture 0.271 s, aperture fraction 0.375 | **overlap 0.17-0.20** |
+| N = 34-36 sub-looks | f_s 4.67-4.95 Hz, **df 0.138 Hz** |
+| mode 1 residual | 0.016, 0.054 Hz on two pixels; 0.154, 0.151 Hz on the other two |
+| mode 2 residual | 0.013, 0.080 Hz; undetectable on two pixels |
+| Pearson rho against accelerometers | **0.46, 0.47, 0.39, 0.33** |
+
+Three things there bear on this project. That overlap is 0.17-0.20, a second
+source contradicting item 13's "the published campaigns use ~99% overlap", now
+with exact figures. Their rho tops out at 0.47, so "validated against
+accelerometers" means moderate correlation and not a match -- a useful
+calibration for what success looks like in this field. And they track four bright
+pixels SEPARATELY and never combine them, quietly consistent with items 64-65.
+The site is the South Portland Street Bridge, which item 66 called the best entry
+in `GROUND_TRUTH_DATASETS.md` and blocked by ACCESS: the pairing exists and is
+published, and what is missing is their data, not their target.
+
+**The OMA field has the mature machinery and it is the same principle.**
+Automated operational modal analysis settled "which peaks are real modes" with
+the STABILIZATION DIAGRAM: identify modes at many model orders, and physical
+modes REPEAT across orders while spurious ones scatter. Modern versions cluster
+the diagram, explicitly designed to need no user-specified thresholds (Reynders
+et al., three-stage clustering; later hierarchical-density variants). What
+`rs_spectrum_modal_set()` does is repetition-as-evidence with the SPATIAL WINDOW
+substituted for model order. That is a legitimate analogue and it is not new;
+the derived-threshold instinct matches the field's stated goal, but the idea is
+theirs.
+
+### The measurement
+
+Same two scenes as item 69, at the resolution that item's amendment establishes.
+
+| policy | sine, true 0.500 | record, true 0.550 |
+|---|---|---|
+| `rs_spectrum_best_window()` | 0.504 correct | **1.966** |
+| `rs_spectrum_consensus()` | 0.504 correct | **0.605** -- bin 12, the second feature |
+| `rs_spectrum_modal_set()` | 0.504, exactly one mode, correct | **2.671** |
+
+On the sine the new policy behaves exactly as it should: it finds ONE mode,
+because there is one, and gets it right. On the record it reports one mode and
+that mode is wrong.
+
+The threshold came out at 11 of 49 voting windows, with 0.39 bins expected to
+clear it by chance. The reported bin had support 12. **The true bin also had
+support around 12, and so did a noise bin at 2.671 Hz** -- support alone does not
+separate them, and the tie was broken by local ratio, which went the wrong way.
+
+### What this establishes
+
+Reporting a set is the right shape and it is not sufficient. The discriminator
+has to be something other than cross-window support, and item 11 said so before
+this was built: agreement is blind to anything the processing puts in every
+window identically. A modal set inherits that blindness whole.
+
+What separates a real mode from a noise line in the OMA literature is not merely
+that it recurs but that it recurs WITH CONSISTENT PROPERTIES -- damping, mode
+shape, and the MAC between shapes at different orders. This project has a spatial
+analogue available and unused: a real mode's amplitude across the window grid is
+a mode SHAPE, smooth and contiguous, where a noise line's is not. That is
+`rs_spectrum_centroid()`'s clustering applied per candidate mode rather than to
+the single reported peak, and it is the next thing to try. It is also the same
+answer item 69 pointed at from the other side.
+
+The policy is committed because it gates nothing, it is correct where a correct
+answer exists, and it makes the modal structure visible in the output. It is not
+committed as a fix.

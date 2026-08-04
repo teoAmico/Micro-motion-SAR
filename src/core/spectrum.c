@@ -1039,6 +1039,189 @@ resonarsat_status_t rs_spectrum_am_check(const rs_microm_t *m,
     return RS_OK;
 }
 
+/* The local background ratio for bin k: its power over the median of its own
+ * neighbourhood, with the Hann main lobe guarded out. Returns -1 when there are
+ * too few reference bins to call it an estimate of noise. 'ref' is scratch of
+ * at least 2*RS_LOCAL_HALF_BINS+1 doubles, supplied by the caller so the inner
+ * loops allocate nothing. */
+static double rs_local_ratio(const double *P, size_t k, size_t k_lo,
+                             size_t n_freq, double *ref)
+{
+    const size_t lo = (k > k_lo + RS_LOCAL_HALF_BINS) ? k - RS_LOCAL_HALF_BINS : k_lo;
+    const size_t hi = (k + RS_LOCAL_HALF_BINS + 1 < n_freq)
+                    ? k + RS_LOCAL_HALF_BINS + 1 : n_freq;
+    size_t n_ref = 0;
+    for (size_t j = lo; j < hi; j++) {
+        const size_t d = (j > k) ? j - k : k - j;
+        if (d <= RS_LOCAL_GUARD_BINS) continue;
+        ref[n_ref++] = P[j];
+    }
+    if (n_ref < 4) return -1.0;
+    const double med = rs_median_inplace(ref, n_ref);
+    if (!(med > 0.0)) return -1.0;
+    return P[k] / med;
+}
+
+/* log(n!) by lgamma, for the binomial tail below. */
+static double rs_log_fact(size_t n)
+{
+    return lgamma((double)n + 1.0);
+}
+
+/* P(S >= s) for S ~ Binomial(n, p), summed from the top so the small tail this
+ * threshold lives in does not lose its significant digits to cancellation. */
+static double rs_binom_tail(size_t n, double p, size_t s)
+{
+    if (s == 0) return 1.0;
+    if (s > n) return 0.0;
+    if (!(p > 0.0)) return 0.0;
+    if (p >= 1.0) return 1.0;
+    const double lp = log(p), lq = log1p(-p);
+    double sum = 0.0;
+    for (size_t i = n; i + 1 > s; i--) {
+        const double lt = rs_log_fact(n) - rs_log_fact(i) - rs_log_fact(n - i)
+                        + (double)i * lp + (double)(n - i) * lq;
+        sum += exp(lt);
+        if (i == 0) break;
+    }
+    return sum > 1.0 ? 1.0 : sum;
+}
+
+/* Sort key for ranking modes: support first, then how far each stood above its
+ * own background. */
+static int rs_cmp_mode(const void *a, const void *b)
+{
+    const rs_mode_t *x = a, *y = b;
+    if (x->n_support != y->n_support)
+        return x->n_support > y->n_support ? -1 : 1;
+    if (x->median_ratio != y->median_ratio)
+        return x->median_ratio > y->median_ratio ? -1 : 1;
+    return x->bin < y->bin ? -1 : (x->bin > y->bin);
+}
+
+/* Which frequencies recur across the windows. See microm.h for why a structure
+ * needs a set reported rather than a winner. */
+resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
+                                          rs_modal_set_t *out)
+{
+    if (!out) {
+        rs_set_error("modal set: no output structure");
+        return RS_ERR_ARG;
+    }
+    memset(out, 0, sizeof *out);
+    if (!spec || !spec->psd || spec->n_win == 0 || spec->n_freq == 0) {
+        rs_set_error("modal set: empty spectrum");
+        return RS_ERR_ARG;
+    }
+
+    const size_t n_freq = spec->n_freq;
+    const size_t k_lo = RS_SPECTRUM_LEAKAGE_BINS;
+    if (n_freq <= k_lo + RS_LOCAL_GUARD_BINS + 1) {
+        rs_set_error("modal set: %zu bins is too few to estimate a local "
+                     "background above bin %zu", n_freq, k_lo);
+        return RS_ERR_RANGE;
+    }
+    const size_t n_bin = n_freq - k_lo;
+
+    double *ref     = malloc((2 * RS_LOCAL_HALF_BINS + 1) * sizeof *ref);
+    double *ratio   = malloc(n_freq * sizeof *ratio);
+    size_t *support = calloc(n_freq, sizeof *support);
+    /* Every window's ratio at every bin, so a mode's median can be taken over
+     * the windows that actually nominated it rather than over all of them. */
+    double *acc     = malloc(spec->n_win * sizeof *acc);
+    size_t *pick    = malloc(RS_MODAL_PER_WINDOW * sizeof *pick);
+    double **nom    = calloc(n_freq, sizeof *nom);
+    if (!ref || !ratio || !support || !acc || !pick || !nom) {
+        free(ref); free(ratio); free(support); free(acc); free(pick); free(nom);
+        rs_set_error("modal set: out of memory");
+        return RS_ERR_ALLOC;
+    }
+    for (size_t k = 0; k < n_freq; k++) {
+        nom[k] = malloc(spec->n_win * sizeof **nom);
+        if (!nom[k]) {
+            for (size_t j = 0; j < k; j++) free(nom[j]);
+            free(ref); free(ratio); free(support); free(acc); free(pick); free(nom);
+            rs_set_error("modal set: out of memory");
+            return RS_ERR_ALLOC;
+        }
+    }
+
+    size_t n_voting = 0;
+    for (size_t w = 0; w < spec->n_win; w++) {
+        const double *P = spec->psd + w * n_freq;
+        int any = 0;
+        for (size_t k = k_lo; k < n_freq; k++) {
+            ratio[k] = rs_local_ratio(P, k, k_lo, n_freq, ref);
+            if (ratio[k] > 0.0) any = 1;
+        }
+        if (!any) continue;
+
+        /* Greedy nomination: take the best remaining bin, then forbid its Hann
+         * skirt so one mode cannot be nominated twice. */
+        size_t n_pick = 0;
+        while (n_pick < RS_MODAL_PER_WINDOW) {
+            size_t best = n_freq;
+            double best_r = 0.0;
+            for (size_t k = k_lo; k < n_freq; k++) {
+                if (!(ratio[k] > best_r)) continue;
+                int blocked = 0;
+                for (size_t i = 0; i < n_pick; i++) {
+                    const size_t d = (k > pick[i]) ? k - pick[i] : pick[i] - k;
+                    if (d < RS_SPECTRUM_LEAKAGE_BINS) { blocked = 1; break; }
+                }
+                if (blocked) continue;
+                best = k; best_r = ratio[k];
+            }
+            if (best == n_freq) break;
+            nom[best][support[best]] = best_r;
+            support[best]++;
+            pick[n_pick++] = best;
+        }
+        if (n_pick > 0) n_voting++;
+    }
+
+    /* The threshold: the smallest support at which fewer than half a bin is
+     * expected to clear it by chance over the whole band. */
+    const double p = (double)RS_MODAL_PER_WINDOW / (double)n_bin;
+    size_t support_min = n_voting + 1;
+    double expected = 0.0;
+    for (size_t s = 1; s <= n_voting; s++) {
+        const double e = (double)n_bin * rs_binom_tail(n_voting, p, s);
+        if (e < 0.5) { support_min = s; expected = e; break; }
+    }
+    /* A single window agreeing with itself is not agreement, whatever the
+     * arithmetic says about a band this narrow. */
+    if (support_min < 2) { support_min = 2; expected = (double)n_bin * rs_binom_tail(n_voting, p, 2); }
+
+    out->n_voting     = n_voting;
+    out->n_bin        = n_bin;
+    out->n_per_window = RS_MODAL_PER_WINDOW;
+    out->support_min  = support_min;
+    out->expected_false = expected;
+
+    for (size_t k = k_lo; k < n_freq && out->n_mode < RS_MODAL_MAX_MODES; k++) {
+        if (support[k] < support_min) continue;
+        for (size_t i = 0; i < support[k]; i++) acc[i] = nom[k][i];
+        rs_mode_t *m = &out->mode[out->n_mode++];
+        m->bin = k;
+        m->freq_hz = spec->freq[k];
+        m->n_support = support[k];
+        m->median_ratio = rs_median_inplace(acc, support[k]);
+    }
+    qsort(out->mode, out->n_mode, sizeof out->mode[0], rs_cmp_mode);
+
+    const size_t n_mode = out->n_mode;
+    for (size_t k = 0; k < n_freq; k++) free(nom[k]);
+    free(ref); free(ratio); free(support); free(acc); free(pick); free(nom);
+
+    if (n_mode == 0) {
+        rs_set_error("modal set: no bin was nominated by %zu of %zu windows, "
+                     "so nothing recurs", support_min, n_voting);
+        return RS_ERR_RANGE;
+    }
+    return RS_OK;
+}
+
 /* Strongest peak against its own neighbourhood. See microm.h on why the plain
  * prominence is biased toward low frequencies on a red noise floor. */
 resonarsat_status_t rs_spectrum_local_window(const rs_spectrum_t *spec,

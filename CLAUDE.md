@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 69 items and their status.
+an index of all 70 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -127,17 +127,39 @@ test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
 
+**A MODAL SET IS THE RIGHT SHAPE AND DOES NOT FIX IT** (item 70).
+`rs_spectrum_modal_set()` has each window nominate its strongest peaks against
+their own local background and reports the bins whose cross-window SUPPORT clears
+a threshold derived from a binomial null at a family-wise budget of half a bin —
+nothing tuned. On the sine it finds exactly one mode and is right; on item 69's
+record it reports 2.671 Hz, because **the true bin and a noise bin both reached
+support 12 of 49**. Item 11 predicted this: agreement is blind to whatever the
+processing puts in every window, and a set inherits that whole. The unused
+discriminator is the SPATIAL one — a real mode's amplitude across the window grid
+is a mode shape, contiguous and smooth, which is `rs_spectrum_centroid()`'s
+clustering applied per candidate mode. **The SAR field reports two peaks by
+height with no acceptance criterion at all** (Lotti et al., EVACES 2025, South
+Portland Street Bridge, Umbra-04: 9.252 s, `df` 0.138 Hz, **overlap 0.17-0.20**,
+Pearson 0.33-0.47 against accelerometers, second mode undetectable on 2 of 4
+pixels) — so that overlap figure is a second source against item 13's "~99%", and
+0.47 is what "validated" means there. The OMA field settled this with the
+STABILIZATION DIAGRAM: physical modes repeat across model orders, spurious ones
+scatter. Item 70 is that principle with the spatial window substituted for model
+order; it is not new.
+
 **A REAL STRUCTURE'S MOTION NOW GOES IN, AND THE REPORTED ANSWER GOES WRONG**
 (item 69). `sim_cphd --wave FILE[,RATE_HZ]` and `mmotion --inject-wave` drive the
 target from a measured displacement record instead of a tone; both normalise to
 unit peak so `AMP_MM` means the same thing either way, and
 `rs_simulate_inject_vibrator()` is behaviourally unchanged. On the Oroville Dam
-accelerometer's record of the M5.5 Lake Almanor earthquake — six modes within a
-factor of two, no dominant line — the same scene, seed, amplitude and processing
+accelerometer's record of the M5.5 Lake Almanor earthquake — at the DWELL's own
+resolution 0.550 Hz at 1.00, 0.600 at 0.43, 0.300 at 0.28, so score against the
+record processed to the SAME resolution, never the instrument's — the same
+scene, seed, amplitude and processing
 that report a sine correctly at 0.504 Hz against 0.500 report **1.966 Hz**, with
 no mode within 1.3 Hz; window-level hit rate halves, 20% to 10%. The tracker is
-not blind to it (consensus 0.605 Hz against a true mode at 0.583), so this is
-items 7-9 again and worse: the energy is SPLIT across six modes, none is ever
+not blind to it (consensus 0.605 Hz, the second feature), so this is
+items 7-9 again and worse: the energy is SPLIT across modes, none is ever
 prominent, and `rs_spectrum_best_window()` goes to the tallest noise line. **A
 statistic that reports one frequency is the wrong shape of answer for a
 structure.** Every earlier synthetic recovery here was measured on the easiest

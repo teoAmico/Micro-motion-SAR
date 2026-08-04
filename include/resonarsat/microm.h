@@ -1663,6 +1663,90 @@ typedef struct {
 resonarsat_status_t rs_spectrum_local_window(const rs_spectrum_t *spec,
                                              rs_local_peak_t *out);
 
+/* One mode of a reported modal set. See rs_spectrum_modal_set(). */
+typedef struct {
+    size_t bin;           /* its spectral bin */
+    double freq_hz;
+    size_t n_support;     /* windows that listed it among their own peaks */
+    double median_ratio;  /* median local ratio across those windows */
+} rs_mode_t;
+
+/* Most modes reported. A structure's low-order modes are what a dwell this
+ * short can resolve at all; beyond a handful the list stops being a description
+ * and becomes a spectrum with extra steps. */
+#define RS_MODAL_MAX_MODES 12u
+
+/* How many peaks each window nominates. NOT a false-positive knob: the support
+ * threshold below is computed FROM this number, so raising it widens what can
+ * be found without loosening what is believed. It trades only sensitivity to
+ * weak modes against the cost of a larger null family. */
+#define RS_MODAL_PER_WINDOW 6u
+
+/* A modal SET and the evidence for it. */
+typedef struct {
+    rs_mode_t mode[RS_MODAL_MAX_MODES];
+    size_t n_mode;        /* modes clearing the support threshold, strongest first */
+
+    size_t n_voting;      /* windows that nominated anything */
+    size_t n_bin;         /* admissible bins searched, the family size */
+    size_t n_per_window;  /* peaks each window nominated */
+    size_t support_min;   /* the derived threshold, in windows */
+    double expected_false;/* bins expected to clear it by chance alone */
+} rs_modal_set_t;
+
+/* WHAT THE WINDOWS COLLECTIVELY SAY IS MOVING, AS A SET RATHER THAN A WINNER.
+ *
+ * WHY THIS EXISTS. Item 69 injected a real structure's motion for the first
+ * time -- an accelerometer record from Oroville Dam with six modes inside a
+ * factor of two -- into the same scene, seed, amplitude and processing that
+ * report a sine correctly at 0.504 Hz against 0.500. The reported answer was
+ * 1.966 Hz, with no true mode within 1.3 Hz. The tracker was not blind to it:
+ * rs_spectrum_consensus() landed at 0.605 Hz against a true mode at 0.583.
+ * rs_spectrum_best_window() lost because prominence ranks ONE line, and when a
+ * structure's energy is divided among six modes no single one is ever the
+ * tallest thing in the band -- so the statistic goes to whatever noise line is.
+ *
+ * No threshold on prominence fixes that, because the quantity being maximised
+ * is the wrong shape. A structure does not have a frequency. It has a set of
+ * them, and the right question is which frequencies RECUR.
+ *
+ * HOW. Each window nominates its RS_MODAL_PER_WINDOW strongest peaks, scored
+ * against their own local neighbourhood rather than against the whole band --
+ * item 47's finding, that the noise floor is red and a band-wide mean therefore
+ * biases every comparison toward low frequencies, applies here exactly as it
+ * does to rs_spectrum_local_window(). Nominations are separated by
+ * RS_SPECTRUM_LEAKAGE_BINS so that one mode's Hann skirt cannot be nominated as
+ * a second mode. A bin's SUPPORT is the number of windows nominating it.
+ *
+ * THE THRESHOLD IS DERIVED, NOT TUNED. Under the null -- noise, no mode -- a
+ * window's nominations fall anywhere in the admissible band, so a given bin is
+ * nominated with probability p = M/K for M nominations over K bins, and its
+ * support is Binomial(n_voting, p). 'support_min' is the smallest support at
+ * which the EXPECTED NUMBER of bins clearing it, K * P(S >= support_min), drops
+ * below one half. That is a family-wise budget over the band, so the
+ * look-elsewhere cost this project has been caught by twice (items 49, 55) is
+ * inside the threshold rather than left to the reader. It is reported as
+ * 'expected_false' so a caller can see what it bought.
+ *
+ * WHAT IT DOES NOT DO. It does not adjudicate. Support is agreement across
+ * windows, and item 11 is unchanged: agreement is blind to anything the
+ * processing puts in every window identically, which is exactly what a
+ * common-mode artefact is. A modal set with high support can still be an
+ * artefact, and only a null control says otherwise. What this fixes is the
+ * narrower failure of item 69 -- that a correct answer was unreportable because
+ * the report had room for one number.
+ *
+ * Nor does it use the null model as a p-value. The nominations of overlapping
+ * windows are not independent, so P(S >= s) understates the true tail; the
+ * threshold is a principled ordering statistic, not a significance test.
+ *
+ * Modes come back strongest-support first, ties broken by median local ratio.
+ * Returns RS_ERR_RANGE when no bin clears the threshold, which is the honest
+ * answer for a scene with nothing recurring in it, and RS_ERR_ARG on a NULL or
+ * empty spectrum. 'out' is cleared on any non-OK return. */
+resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
+                                          rs_modal_set_t *out);
+
 /* Where a target sits, to better than one window. See rs_spectrum_centroid(). */
 typedef struct {
     size_t seed;          /* the window the centroid was grown from */

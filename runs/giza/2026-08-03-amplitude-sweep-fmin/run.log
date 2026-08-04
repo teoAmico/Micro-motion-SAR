@@ -1,0 +1,32 @@
+########## amplitude 2.0 mm
+strongest peak in window 17: 0.163 Hz, prominence 38.5, quality 0.430, peak-to-peak velocity 7.5 mm/s
+  backed by 10 windows, largest touching block 9
+  NOT ADJUDICATED -- nothing here distinguishes this from an artefact of the
+########## amplitude 1.0 mm
+strongest peak in window 8: 0.163 Hz, prominence 40.7, quality 0.675, peak-to-peak velocity 2.5 mm/s
+  backed by 10 windows, largest touching block 9
+  NOT ADJUDICATED -- nothing here distinguishes this from an artefact of the
+########## amplitude 0.5 mm
+strongest peak in window 8: 0.163 Hz, prominence 41.6, quality 0.806, peak-to-peak velocity 1.5 mm/s
+  backed by 10 windows, largest touching block 9
+  NOT ADJUDICATED -- nothing here distinguishes this from an artefact of the
+########## amplitude 0.25 mm
+strongest peak in window 8: 0.163 Hz, prominence 42.9, quality 0.863, peak-to-peak velocity 1.1 mm/s
+  backed by 10 windows, largest touching block 9
+  NOT ADJUDICATED -- nothing here distinguishes this from an artefact of the
+########## amplitude 0.125 mm
+strongest peak in window 8: 0.163 Hz, prominence 45.3, quality 0.884, peak-to-peak velocity 0.9 mm/s
+  backed by 10 windows, largest touching block 9
+  NOT ADJUDICATED -- nothing here distinguishes this from an artefact of the
+########## amplitude 0.0625 mm
+strongest peak in window 8: 0.163 Hz, prominence 48.9, quality 0.891, peak-to-peak velocity 0.8 mm/s
+  backed by 10 windows, largest touching block 9
+  NOT ADJUDICATED -- nothing here distinguishes this from an artefact of the
+########## null distribution under the same band floor
+  static trial 1/19: prominence 16.5 at 0.358 Hz
+  static trial 2/19: prominence 13.3 at 0.293 Hz
+  static trial 3/19: prominence 22.9 at 0.195 Hz
+  static trial 4/19: prominence 19.9 at 1.172 Hz
+  static trial 5/19: prominence 13.3 at 0.326 Hz
+  static trial 6/19: prominence 11.5 at 0.326 Hz
+  static trial 7/19: prominence 18.3 at 0.456 Hz

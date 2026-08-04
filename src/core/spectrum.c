@@ -200,12 +200,12 @@ resonarsat_status_t rs_spectrum_compute_opts(const rs_microm_t *m,
         /* Dominant peak, skipping the zero bin and anything below the band
          * floor. k_min is computed once per window rather than hoisted only for
          * clarity; it costs nothing beside the transform. */
-        size_t k_min = 1;
+        size_t k_min = RS_SPECTRUM_LEAKAGE_BINS;
         if (f_min > 0.0 && out->df > 0.0) {
             const double kf = ceil(f_min / out->df);
-            if (kf > 1.0) k_min = (size_t)kf;
-            if (k_min >= n_freq) k_min = n_freq - 1;
+            if (kf > (double)k_min) k_min = (size_t)kf;
         }
+        if (k_min >= n_freq) k_min = n_freq - 1;
         size_t best = k_min;
         for (size_t k = k_min + 1; k < n_freq; k++) if (psd[k] > psd[best]) best = k;
 

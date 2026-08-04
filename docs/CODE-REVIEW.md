@@ -15,6 +15,7 @@ because several of these are patterns rather than incidents.
 
 | date | commit | scope | outcome |
 |---|---|---|---|
+| 2026-08-04 | `0b66c27` | Re-execution of item 35's adjudication at other amplitudes | **Found a defect the whole gate stack missed.** Below 2 mm the reported frequency collapses to bin 1 while prominence RISES 32.0 -> 56.0, and prominence, quality, `D_A` and the `--null-static` control all endorse it. Fixed by making the first three bins unreportable (`RS_SPECTRUM_LEAKAGE_BINS`). This is the first review here that re-ran a `FOLLOW-UPS` measurement at a different operating point, which the 2026-08-02 sweep explicitly listed as not covered. |
 | 2026-08-03 | `0c717d9` | Capella's `CPHD_by_Example.ipynb` read against this reader | Three conventions confirmed from the primary source (SGN inverse, SRP phase referencing, near-range arithmetic); no gap found. It surfaced the unread `Antenna/AntPattern`, which `FOLLOW-UPS` 23e then excluded as a `D_A` explanation. |
 | 2026-08-03 | `55c4aa5` | Full ASAN + UBSAN pass over the whole suite | Clean: 17/17 binaries, **zero** sanitizer diagnostics. Sanitizers verified armed. See below. |
 | 2026-08-02 | `cda093f` | Removing the two dead `rs_slc_t` fields | `sizeof(rs_slc_t)` falls 3976 -> 320 bytes, 92 percent of it, saving 7.3 MB on a 2048-look stack. Pipeline output bit-identical. |

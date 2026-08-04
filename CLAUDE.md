@@ -170,6 +170,22 @@ scene-wide agreement gate rejected all five true positives on real data
 calibrated on fixtures where the whole scene vibrates. Agreement and contiguity
 are printed and gate nothing.
 
+**But a null only calibrates against noise its own model can produce** (item 37).
+Below 2 mm the Giza sweep reported bin 1 instead of the injected frequency, with
+prominence *rising* from 32.0 to 56.0 as the target weakened — and prominence,
+quality, `D_A` and the null control all endorsed it, because the null's trials are
+synthetically static and contain no dominant scatterer to impose a trend. Item 11's
+rule that only a null catches common-mode artefacts is true only of artefacts the
+null can generate. A null built from the real scene rather than simulated beside it
+is the open half.
+
+**The first `RS_SPECTRUM_LEAKAGE_BINS` (3) frequency bins are never reportable, and
+that is not a tunable.** A Hann main lobe is ±2 bins, so bins 1-2 are the skirt of
+any residual trend; bin k is k cycles across the dwell, so those are one and two
+cycles of a record one dwell long. `--fmin` raises the floor and cannot lower it.
+Do not "fix" a fixture that stops reporting by lowering it — move the fixture's
+frequencies up, as `test_tracking.c` had to in two places.
+
 **Warn rather than silently degrade.** A wrong setting here does not fail loudly: ask
 for a measurement a collect cannot support and you get a complete, well-formed spectrum
 with a confident peak produced by the processing rather than the ground, and a

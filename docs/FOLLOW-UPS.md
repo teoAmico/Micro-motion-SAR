@@ -77,7 +77,8 @@ said, not better) and item 7's line numbers.
 | 33 | fixed by 34 | the static null is not comparable to Giza; item 31's gate cannot adjudicate it |
 | 34 | done | null density derived from geometry; it now separates signal from nothing on real data |
 | 35 | **the result** | ADJUDICATED at p = 0.05: a real-data measurement a proper null could not reproduce |
-| 36 | **the current state** | Umbra and ICEYE read correctly; the per-vendor SGN override is confirmed right |
+| 36 | done | Umbra and ICEYE read correctly; the per-vendor SGN override is confirmed right |
+| 37 | **the current state** | bin 1 outscored the truth below 2 mm and every gate endorsed it; the first three bins are now unreportable |
 
 ---
 
@@ -3901,3 +3902,116 @@ Both read and one focuses. Nothing here has tracked, taken a spectrum, or
 adjudicated on either provider, and the PVP layouts differ from Capella's in
 ways the reader handles by reading offsets from the XML rather than assuming
 them. Treat them as read-verified, not measurement-verified.
+
+## 37. The amplitude sweep found a defect instead of a sensitivity bound
+
+Item 35 adjudicated a 2 mm injection at p = 0.05. The obvious next question is
+how far down that goes, so the amplitude was swept with everything else held at
+item 35's settings. `runs/giza/2026-08-03-amplitude-sweep/`.
+
+The null trials synthesise their own static scenes and never see the injection,
+so item 35's 19-trial distribution applies unchanged to every amplitude. Reusing
+it rather than regenerating it made the sweep 5 x 5 minutes instead of 5 x 90.
+Its maximum is 23.8, so clearing 23.8 is what p = 0.05 means here.
+
+```
+amp mm | injected window 8    | selected      | vs null max 23.8
+   2.0 |  0.163 Hz  prom 32.0 | win 8 @ 0.163 | ADJUDICATES   correct
+   1.0 |  0.033 Hz  prom 31.4 | win13 @ 0.033 | ADJUDICATES   WRONG ANSWER
+   0.5 |  0.033 Hz  prom 47.4 | win13 @ 0.033 | ADJUDICATES   WRONG ANSWER
+  0.25 |  0.033 Hz  prom 54.0 | win13 @ 0.033 | ADJUDICATES   WRONG ANSWER
+ 0.125 |  0.033 Hz  prom 56.0 | win13 @ 0.033 | ADJUDICATES   WRONG ANSWER
+```
+
+**Below 2 mm the tool does not stop answering. It answers wrongly, with a
+confidence that rises as the injection weakens** -- 32.0 to 56.0, every one of
+them clearing the threshold item 35 called an adjudication.
+
+0.033 Hz is bin 1: 128 looks at dt = 0.2399 s is a 30.71 s record, df = 0.0326 Hz.
+One cycle across the whole dwell. Windows 8 and 13 agree to within 0.1
+prominence at every amplitude, which is one common-mode artefact rather than two
+findings.
+
+### Every gate this project has endorses it, and more strongly the wronger it gets
+
+```
+amp mm | windows in bin 1 | quality | D_A at window 8
+   2.0 |       1/25       |  0.419  |  0.581
+   1.0 |      10/25       |  0.675  |  0.325
+   0.5 |      10/25       |  0.806  |  0.194   <- passes Ferretti 0.25
+  0.25 |      10/25       |  0.863  |  0.137   <- passes
+ 0.125 |      10/25       |  0.884  |  0.121   <- passes
+```
+
+`D_A` falls because a scatterer that barely moves has a stable amplitude, so the
+persistent-scatterer criterion of items 19-20 is satisfied **by the target
+failing to vibrate**. Quality rises for the same reason. Prominence, quality,
+`D_A`, the cull and the null control all agree on the wrong answer.
+
+**The null could not have caught this**, which is the part that generalises. Its
+trials are synthetically static, contain no bright dominant scatterer to impose
+a common trend, and topped out at 23.8 against an artefact reaching 56. Item 11
+said a null control is what catches common-mode artefacts. That is true only of
+artefacts the null's own model can produce.
+
+### The code predicted this exactly and stopped one bin short
+
+`src/core/spectrum.c:30` already argued it: removing the mean alone "makes every
+window report the same spurious dominant frequency of one bin width, which looks
+like a measurement and is not". `rs_spectrum_compute_band()`'s header goes
+further -- a curved trend "piles its energy into the first two or three bins" --
+and names the band floor as the remedy. The defences shipped were a linear
+detrend, which removes a straight line exactly and leaves the curvature, and
+exclusion of **bin 0**. `--fmin` existed and defaulted to `0.0`.
+
+### The fix, and what it does not fix
+
+`RS_SPECTRUM_LEAKAGE_BINS` is 3 and is not a tunable. A Hann window's main lobe
+is +/-2 bins, so bins 1 and 2 carry the skirt of whatever sits at zero and are
+not separable from it at any SNR. `--fmin` can raise the floor, never lower it,
+and passing 0 no longer restores the old behaviour.
+
+Re-swept with a floor -- `runs/giza/2026-08-03-amplitude-sweep-fmin/`, at
+`--fmin 0.098`, which is `ceil(0.098/0.0326) = 4` bins rather than the default 3:
+
+```
+amp mm | 2.0  | 1.0  | 0.5  | 0.25 | 0.125 | 0.0625
+freq   | .163 | .163 | .163 | .163 | .163  | .163     <- all correct
+prom   | 38.5 | 40.7 | 41.6 | 42.9 | 45.3  | 48.9
+```
+
+**Correct at every amplitude down to 0.0625 mm**, a 32-fold improvement on the
+1-2 mm the unfloored sweep bottomed out at.
+
+**But prominence still rises as the signal weakens**, which no real detection
+does, so this is not yet a sensitivity curve. Two candidate reasons, neither
+measured: 2 mm is a 0.78 rad phase swing, near item 14's lambda/4 wrapping
+limit, so the strongest injection may be the most degraded; and a weaker target
+leaves a quieter spectrum for a fixed peak to stand out against.
+
+**And the trend is relocated, not removed.** The regression test built for this
+makes it plain: a trend-only window reports the first admissible bin at
+prominence 28.09, against 19.67 for a window holding a genuine tone under the
+same trend. Excluding bins moves where a trend is reported, not whether it wins.
+A window with nothing in it still has to answer somewhere, and prominence still
+prefers it.
+
+### What this costs item 35
+
+**Item 35's 2 mm result stands as measured.** The selected peak was the injected
+one, in the injected window, at the injected frequency, and 19 controls failed
+to reach it.
+
+**What it loses is generality.** The gate that passed it would have passed a
+wrong answer at any smaller amplitude with a higher score. p = 0.05 was a
+statement about that operating point, not about the method. Item 35's threshold
+also needs re-measuring under the floor, since removing bins moves the null too.
+
+### The open half
+
+A null synthesised from a model calibrates only against noise the model
+contains. This artefact was invisible to it because the model has no bright
+dominant scatterer; the next common-mode artefact will be invisible for its own
+reason. The fix that generalises is a null built from the **real** scene --
+permuting or phase-scrambling the actual tracked series so the control inherits
+whatever the collect does -- rather than simulated beside it. Not attempted.

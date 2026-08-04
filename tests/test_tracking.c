@@ -1041,7 +1041,14 @@ int main(void)
         for (size_t w = 0; w < n_win; w++) {
             m.quality[w] = 1.0;
             const int in_block = (w == 5 || w == 6 || w == 9 || w == 10);
-            const double freq = in_block ? 1.25 : 0.15625 * (double)(2 + (w % 3));
+            /* df is 0.15625 Hz here (64 looks at dt 0.1), so the filler runs
+             * over bins 3, 4, 5 and the block sits at bin 8. The multiplier
+             * starts at 3 rather than 2 because item 37 made bins below
+             * RS_SPECTRUM_LEAKAGE_BINS unreportable: a third of the filler
+             * windows previously sat at bin 2, and once that stopped being
+             * answerable they scattered into whatever the leakage left, which
+             * changed gate 3's neighbour counts and the survivor total. */
+            const double freq = in_block ? 1.25 : 0.15625 * (double)(3 + (w % 3));
             for (size_t i = 0; i < k; i++) {
                 const double v = sin(2.0 * M_PI * freq * m.dt * (double)i);
                 m.disp_az[w * k + i] = v;
@@ -2111,7 +2118,12 @@ int main(void)
         m.d_a      = calloc(nw, sizeof *m.d_a);
         RS_CHECK(m.disp_az && m.disp_rg && m.disp_los && m.vel_los && m.quality && m.d_a);
 
-        const size_t sig_bin = 5, art_bin = 2;
+        /* art_bin must sit at or above RS_SPECTRUM_LEAKAGE_BINS. It was 2 until
+         * item 37 made the first three bins unreportable, at which point the
+         * artefact windows silently stopped reporting the artefact and the
+         * fixture's own premise -- that the artefact is the more numerous
+         * population -- was no longer true of it. */
+        const size_t sig_bin = 5, art_bin = RS_SPECTRUM_LEAKAGE_BINS;
         size_t n_art_placed = 0;
         for (size_t w = 0; w < nw; w++) {
             const size_t a = w / nrg, r = w % nrg;
@@ -2160,18 +2172,103 @@ int main(void)
         printf("    consensus picks %.3f Hz (the artefact)\n", cons);
         RS_CHECK_NEAR(cons, f_art, 1e-9);
 
-        /* A frequency nobody reports has no windows and no block. Bin 3 is
-         * unused by construction -- the fixture places 2, 5 and 6..8 -- where
+        /* A frequency nobody reports has no windows and no block. Bin 4 is
+         * unused by construction -- the fixture places 3, 5 and 6..8 -- where
          * the top bin is NOT free, which is what the first version of this
          * assertion got wrong. */
         size_t n_none = 99, b_none = 99;
-        RS_CHECK_OK(rs_spectrum_block_at(&sp, sp.freq[3], &n_none, &b_none));
+        RS_CHECK_OK(rs_spectrum_block_at(&sp, sp.freq[4], &n_none, &b_none));
         RS_CHECK(n_none == 0 && b_none == 0);
 
         /* Optional outputs, and a rejected spectrum clears them. */
         RS_CHECK_OK(rs_spectrum_block_at(&sp, f_sig, NULL, NULL));
         RS_CHECK_ERR(rs_spectrum_block_at(NULL, f_sig, &n_sig, &b_sig), RS_ERR_ARG);
         RS_CHECK(n_sig == 0 && b_sig == 0);
+
+        rs_spectrum_free(&sp);
+        rs_microm_free(&m);
+    }
+
+    /* THE LOWEST BINS ARE NOT REPORTABLE, AND A CURVED TREND CANNOT WIN.
+     *
+     * This is item 37 as a regression. On the real Giza collect a 0.163 Hz
+     * injection was reported as 0.033 Hz -- bin 1 -- at every amplitude below
+     * 2 mm, with prominence RISING from 32.0 to 56.0 as the injection weakened,
+     * because a weaker target leaves a cleaner spectrum for the trend to
+     * dominate. Prominence, quality, D_A and item 35's null control all
+     * endorsed it.
+     *
+     * The linear detrend is not the defence. It removes a straight line
+     * exactly, so the fixture uses a QUADRATIC ramp: what survives a
+     * least-squares line is the curvature, and that is what lands in the first
+     * bins. A test built on a linear ramp would pass without the fix. */
+    RS_CASE("a curved trend cannot be reported as a frequency");
+    {
+        const size_t nw = 4, nlk = 64;
+        rs_microm_t m;
+        memset(&m, 0, sizeof m);
+        m.n_looks = nlk; m.n_win = nw; m.n_win_az = nw; m.n_win_rg = 1;
+        m.win_az = m.win_rg = 8; m.stride_az = m.stride_rg = 8;
+        m.dt = 0.25; m.az_spacing_m = m.rg_spacing_m = 1.0;
+        m.disp_az  = calloc(nw * nlk, sizeof *m.disp_az);
+        m.disp_rg  = calloc(nw * nlk, sizeof *m.disp_rg);
+        m.disp_los = calloc(nw * nlk, sizeof *m.disp_los);
+        m.vel_los  = calloc(nw * nlk, sizeof *m.vel_los);
+        m.quality  = calloc(nw, sizeof *m.quality);
+        m.d_a      = calloc(nw, sizeof *m.d_a);
+        RS_CHECK(m.disp_az && m.disp_rg && m.disp_los && m.vel_los && m.quality && m.d_a);
+
+        /* Windows 0-1 are trend ONLY. Windows 2-3 carry the same trend with a
+         * small tone at bin 7 on top -- a tenth of the trend's amplitude, so
+         * the trend dominates the raw series and the tone can only win once the
+         * first bins are out. */
+        const size_t tone_bin = 7;
+        for (size_t w = 0; w < nw; w++) {
+            m.quality[w] = 1.0;
+            for (size_t k = 0; k < nlk; k++) {
+                const double u = (double)k / (double)(nlk - 1);
+                double v = 10.0 * u * u;
+                if (w >= 2)
+                    v += 1.0 * sin(2.0 * M_PI * (double)tone_bin * (double)k / (double)nlk);
+                m.vel_los[w * nlk + k] = v;
+                m.disp_los[w * nlk + k] = v;
+            }
+        }
+
+        rs_spectrum_t sp;
+        RS_CHECK_OK(rs_spectrum_compute(&m, RS_SPEC_DISPLACEMENT, &sp));
+        const double floor_hz = (double)RS_SPECTRUM_LEAKAGE_BINS * sp.df;
+        printf("    df %.4f Hz, floor %.4f Hz (%d bins), tone at %.4f Hz\n",
+               sp.df, floor_hz, RS_SPECTRUM_LEAKAGE_BINS, sp.freq[tone_bin]);
+        for (size_t w = 0; w < nw; w++)
+            printf("    window %zu (%s): dominant %.4f Hz, prominence %.2f\n",
+                   w, w >= 2 ? "trend+tone" : "trend only",
+                   sp.dominant_freq[w], sp.prominence[w]);
+
+        /* No window may report inside the skirt, including the two that contain
+         * nothing else -- they have to answer somewhere, but not there. */
+        for (size_t w = 0; w < nw; w++)
+            RS_CHECK(sp.dominant_freq[w] >= floor_hz - 1e-12);
+
+        /* And the tone is found where it exists, under a trend ten times its
+         * size. This is the half that fails without the exclusion. */
+        RS_CHECK_NEAR(sp.dominant_freq[2], sp.freq[tone_bin], 1e-9);
+        RS_CHECK_NEAR(sp.dominant_freq[3], sp.freq[tone_bin], 1e-9);
+
+        /* An explicit --fmin still raises the floor; it just cannot lower it.
+         * Asking for a floor above the tone must move the answer off it. */
+        rs_spectrum_t hi;
+        RS_CHECK_OK(rs_spectrum_compute_band(&m, RS_SPEC_DISPLACEMENT,
+                                             sp.freq[tone_bin] + 0.5 * sp.df, &hi));
+        RS_CHECK(hi.dominant_freq[2] > sp.freq[tone_bin]);
+        rs_spectrum_free(&hi);
+
+        /* Passing 0 is not a way back to the old behaviour. */
+        rs_spectrum_t zero;
+        RS_CHECK_OK(rs_spectrum_compute_band(&m, RS_SPEC_DISPLACEMENT, 0.0, &zero));
+        for (size_t w = 0; w < nw; w++)
+            RS_CHECK(zero.dominant_freq[w] >= floor_hz - 1e-12);
+        rs_spectrum_free(&zero);
 
         rs_spectrum_free(&sp);
         rs_microm_free(&m);

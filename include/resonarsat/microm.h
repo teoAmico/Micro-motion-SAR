@@ -883,6 +883,40 @@ resonarsat_status_t rs_spectrum_compute(const rs_microm_t *m,
                                        rs_spectrum_source_t source,
                                        rs_spectrum_t *out);
 
+/* Bins always excluded when choosing a dominant frequency, counting from DC.
+ *
+ * WHY THREE, AND WHY IT IS NOT A TUNABLE. Every series here is Hann-windowed
+ * before its transform. A Hann window's main lobe is four bins wide, +/-2 about
+ * the component's own bin, so any residual DC or trend deposits energy in bins
+ * 1 and 2 no matter how clean the record is. Those bins do not contain a
+ * separable measurement of anything; they contain the skirt of whatever sits at
+ * zero. Bin 3 is the first that a leakage argument does not condemn.
+ *
+ * The physical reading agrees. Bin k is k cycles across the dwell, so bins 1
+ * and 2 are one and two cycles of a record whose whole length is the dwell.
+ * Calling one cycle a "frequency" is not a measurement of periodicity; it is a
+ * measurement of the fact that the record has ends.
+ *
+ * MEASURED, on the real Giza collect at 128 looks over 30.71 s (df = 0.0326 Hz).
+ * A 0.163 Hz injection swept downward in amplitude was reported correctly at
+ * 2 mm and then, at every smaller amplitude, as 0.033 Hz -- bin 1 exactly -- in
+ * 10 of 25 windows at once, with the SAME prominence to within 0.1 in windows
+ * far apart. Prominence rose from 32.0 to 56.0 as the injection weakened, so
+ * the answer got more confident as it got wronger, and D_A fell to 0.121
+ * because a scatterer that barely moves has a stable amplitude -- passing the
+ * Ferretti criterion of items 19-20 by failing to vibrate. Quality rose for the
+ * same reason. Prominence, quality, D_A and the null control of item 35 all
+ * endorsed it. The null could not do otherwise: its trials are synthetically
+ * static, contain no dominant scatterer to impose a common trend, and topped
+ * out at 23.8 against this artefact's 56.
+ *
+ * Excluding these three bins, the same sweep returns 0.163 Hz at every
+ * amplitude from 2 mm down to 0.0625 mm. See FOLLOW-UPS item 37.
+ *
+ * A caller wanting the old behaviour does not get it, deliberately. There is no
+ * operating point at which bin 1 means something. */
+#define RS_SPECTRUM_LEAKAGE_BINS 3
+
 /* As rs_spectrum_compute(), but ignoring every bin below 'f_min' hertz when
  * choosing the dominant peak and when computing prominence.
  *
@@ -896,8 +930,11 @@ resonarsat_status_t rs_spectrum_compute(const rs_microm_t *m,
  *
  * A band floor is the direct remedy and it is also a test. If a detection
  * survives excluding the lowest bins, whatever it is has structure at a real
- * frequency; if it evaporates, it was a trend. Passing 0 gives the unrestricted
- * behaviour, which is what rs_spectrum_compute() does. */
+ * frequency; if it evaporates, it was a trend.
+ *
+ * 'f_min' can only RAISE the floor, never lower it. RS_SPECTRUM_LEAKAGE_BINS
+ * below is always excluded, including when 0 is passed, because those bins are
+ * not separable from a trend by any amount of signal. See that constant. */
 resonarsat_status_t rs_spectrum_compute_band(const rs_microm_t *m,
                                             rs_spectrum_source_t source,
                                             double f_min,

@@ -1,0 +1,25 @@
+########## amplitude 2.0 mm
+POSITIVE CONTROL: injected a 0.1630 Hz scatterer at the grid origin,
+strongest peak in window 8: 0.163 Hz, prominence 32.0, quality 0.419, peak-to-peak velocity 7.7 mm/s
+  backed by 9 windows, largest touching block 9
+  NOT ADJUDICATED -- nothing here distinguishes this from an artefact of the
+########## amplitude 1.0 mm
+POSITIVE CONTROL: injected a 0.1630 Hz scatterer at the grid origin,
+strongest peak in window 13: 0.033 Hz, prominence 31.6, quality 0.681, peak-to-peak velocity 2.4 mm/s
+  backed by 10 windows, largest touching block 9
+  NOT ADJUDICATED -- nothing here distinguishes this from an artefact of the
+########## amplitude 0.5 mm
+POSITIVE CONTROL: injected a 0.1630 Hz scatterer at the grid origin,
+strongest peak in window 13: 0.033 Hz, prominence 47.5, quality 0.810, peak-to-peak velocity 1.4 mm/s
+  backed by 10 windows, largest touching block 9
+  NOT ADJUDICATED -- nothing here distinguishes this from an artefact of the
+########## amplitude 0.25 mm
+POSITIVE CONTROL: injected a 0.1630 Hz scatterer at the grid origin,
+strongest peak in window 13: 0.033 Hz, prominence 54.1, quality 0.864, peak-to-peak velocity 1.0 mm/s
+  backed by 10 windows, largest touching block 9
+  NOT ADJUDICATED -- nothing here distinguishes this from an artefact of the
+########## amplitude 0.125 mm
+POSITIVE CONTROL: injected a 0.1630 Hz scatterer at the grid origin,
+strongest peak in window 8: 0.033 Hz, prominence 56.0, quality 0.884, peak-to-peak velocity 0.9 mm/s
+  backed by 10 windows, largest touching block 9
+  NOT ADJUDICATED -- nothing here distinguishes this from an artefact of the

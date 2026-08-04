@@ -733,9 +733,10 @@ does not say:
   PRF: `fs = 1/dt` with `dt` the time between sub-apertures, so the axis ends at
   `fs/2` and the bin spacing is `df = fs/n_looks`, printed in the header of
   `PREFIX_windows.csv` as `df_hz`. Nothing about the collect's pulse rate
-  appears here. Bins below `--fmin` are still drawn but are excluded from
-  peak-picking, so a tall spike at the far left can be one the picker was told to
-  ignore.
+  appears here. **The first three bins are always excluded from peak-picking**,
+  as is anything below `--fmin`, but all of them are still drawn — so a tall
+  spike at the far left is normal and is one the picker was told to ignore. It is
+  usually a residual trend, and it is often the tallest thing in the plot.
 - *y, `POWER, (M/S)^2/HZ`* — the one-sided **power spectral density** of that
   window's tracked series: `|X(f)|²` normalised by the Hann window's power and by
   `fs`, with interior bins doubled for the one-sided fold. Summing the curve
@@ -783,8 +784,8 @@ does not say:
   be a genuine minimum or a window with no answer at all. The CSV disambiguates.
 - **A window masked by `--coherence` has its series zeroed, not marked absent.**
   Its spectrum is then flat zero and the peak-picker returns the lowest
-  admissible bin, so masked windows all report exactly `df_hz` (or the first bin
-  above `--fmin`). A patch of identical low-frequency cells at that one value is
+  admissible bin, so masked windows all report exactly `3 * df_hz` (or the first
+  bin above `--fmin`, whichever is higher). A patch of identical low-frequency cells at that one value is
   a mask, not a measurement — check `quality` and `passed_gates` in the CSV. The
   same thing happens to the whole map if the collect carried no usable geometry:
   the azimuth-shift-to-velocity conversion is skipped rather than guessed when
@@ -989,6 +990,20 @@ here so the guide does not imply the set above is complete:
   wrote. If you have code holding an `img->r0`, it will fail to compile — that
   is the point of the rename. Anything indexing range bins against it must
   offset from the CENTRE bin. See `docs/FOLLOW-UPS.md` item 5.
+- **The first three frequency bins are never reported, and this is not
+  configurable.** A Hann window's main lobe is ±2 bins, so bins 1 and 2 hold the
+  skirt of any residual trend and cannot be separated from it at any SNR;
+  physically they are one and two cycles across the whole dwell, which is not a
+  periodicity. `--fmin` can raise the floor and cannot lower it. Before this,
+  a 0.163 Hz injection into the real Giza collect was reported as 0.033 Hz — bin
+  1 — at every amplitude below 2 mm, with prominence *rising* from 32.0 to 56.0
+  as the target got weaker, and prominence, quality, `D_A` and the `--null-static`
+  control all endorsed it. `FOLLOW-UPS.md` item 37.
+- **Excluding those bins relocates a trend, it does not remove one.** A window
+  containing only a trend still has to answer somewhere, and it answers at the
+  first admissible bin — measured at prominence 28.09 against 19.67 for a window
+  holding a real tone under the same trend. A cluster of windows all reporting
+  the floor frequency is a trend field, not a detection.
 - **The amplitude field is qualitative.** Frequencies recover where relative
   amplitudes do not. Label it as such wherever it is presented.
 - **The frequency map's colour bar is autoscaled to that map**, so the same

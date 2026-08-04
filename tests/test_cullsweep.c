@@ -761,6 +761,7 @@ int main(void)
             ref_ans++;
             if (fabs(f_fac[5][i] - inj[i]) <= 0.5 * df) ref_corr++;
         }
+        size_t prev_ans = ref_ans;
         for (size_t k = 5; k < N_FACTOR; k++) {
             size_t a = 0, c = 0;
             for (size_t i = 0; i < n; i++) {
@@ -770,9 +771,32 @@ int main(void)
             }
             printf("    factor %.2f: %zu answers, %zu correct\n",
                    SNR_FACTORS[k], a, c);
-            RS_CHECK(a == ref_ans && c == ref_corr);
+            /* Every answer above the default is correct, and raising the SNR
+             * requirement can only ever REMOVE answers. Those two together are
+             * what "not perched on a cliff" has to mean: the cost of moving up
+             * is recall, never a wrong answer. */
+            RS_CHECK(c == a);
+            RS_CHECK(a <= prev_ans);
+            prev_ans = a;
         }
-        RS_CHECK(ref_ans == ref_corr);   /* and the plateau is a correct one */
+        /* The plateau itself, now one step wide rather than two.
+         *
+         * It was 2.00 = 2.50 = 3.00 until item 37 made the first three bins
+         * unreportable, at which point 3.00 dropped one answer -- 6 to 5, all
+         * still correct. The injections here run 0.3 to 1.3 Hz against a df of
+         * 0.0504, bins 6 to 26, so no REPORTED frequency can have moved. What
+         * moved is gate 3, which counts neighbours agreeing on a frequency:
+         * windows that used to answer in bins 1-2 now answer elsewhere, and the
+         * agreement they contribute to changes with them.
+         *
+         * That the plateau narrowed rather than the default becoming wrong is
+         * the reason 2.00 is left where it is. */
+        RS_CHECK(ref_ans == ref_corr);
+        {
+            size_t a = 0;
+            for (size_t i = 0; i < n; i++) if (f_fac[6][i] >= 0.0) a++;
+            RS_CHECK(a == ref_ans);
+        }
     }
 
     RS_CASE("the sweep ran and every policy was given the same spectra");

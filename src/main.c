@@ -1770,9 +1770,22 @@ static int rs_cmd_mmotion(int argc, char **argv)
         }
     }
 
+    /* The floor is reported unconditionally because it is never absent: the
+     * first RS_SPECTRUM_LEAKAGE_BINS bins are excluded whatever the caller
+     * asks for, and a run that does not say so invites the reader to believe a
+     * low-frequency answer was available and not chosen. --fmin only raises it. */
     const double f_min = rs_opt_double(argc, argv, "--fmin", 0.0);
-    if (f_min > 0.0) {
-        printf("band floor: ignoring bins below %.3f Hz when picking the peak\n", f_min);
+    {
+        const double df = (m.n_looks > 0 && m.dt > 0.0)
+                        ? 1.0 / ((double)m.n_looks * m.dt) : 0.0;
+        const double floor_hz = (double)RS_SPECTRUM_LEAKAGE_BINS * df;
+        if (f_min > floor_hz) {
+            printf("band floor: ignoring bins below %.3f Hz when picking the peak\n", f_min);
+        } else {
+            printf("band floor: ignoring the first %d bins (below %.3f Hz) -- they carry "
+                   "the Hann skirt of any residual trend, not a vibration\n",
+                   RS_SPECTRUM_LEAKAGE_BINS, floor_hz);
+        }
     }
 
     /* WHICH OBSERVABLE THE SPECTRUM IS TAKEN OF DEPENDS ON THE ESTIMATOR, and

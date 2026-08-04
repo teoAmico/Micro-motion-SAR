@@ -99,7 +99,8 @@ said, not better) and item 7's line numbers.
 | 55 | done | all three policies on the aspect fixture: none is both safe and useful, and item 47's local peak is a LOSS here |
 | 56 | done | the AM/PM discriminator does NOT work: the false positives are not amplitude modulation at the reported frequency |
 | 57 | done | KSTL read: ADS-B is a PROXY, no ground aircraft, and 11 seismic stations in the box are all outside the strip |
-| 58 | **the current state** | STRIPMAP cannot support this measurement at all: per-target observation is 0.71 s, df 1.4 Hz |
+| 58 | done | STRIPMAP cannot support this measurement at all: per-target observation is 0.71 s, df 1.4 Hz |
+| 59 | **the current state** | 315 synchronised instrument measurements found in the Capella spotlight archive, including Oroville Dam |
 
 ---
 
@@ -5593,3 +5594,73 @@ stripmap sub-aperture would need. `USER_GUIDE` describes `--pulse-start` as
 
 Left unfixed deliberately: the mode it would serve is disqualified above, and a
 fix should be made when something needs it rather than on the way past.
+
+
+## 59. The data problem, opened: 315 synchronised measurements in the archive
+
+Every open item here ends at the same place -- no collect has independently
+confirmed motion, so detection is bounded by signals this project injected
+itself. That is a data problem, and this is the search.
+`runs/screens/sensor-join/`.
+
+```
+  1174  CPHD in the Capella open archive
+   939  spotlight or sliding spotlight              <- item 58's filter, applied first
+        dwell: median 22.5 s, 646 at >= 15 s, 156 at >= 30 s
+ 70490  FDSN stations worldwide after dropping network SY, which is SYNTHETIC
+  3877  polygon hits over 257 distinct collects
+   553  at dwell >= 25 s
+   315  WITH A REAL WAVEFORM across the aperture
+```
+
+**315 station-collect pairs where an instrument was recording inside the
+footprint during the aperture.** This project has never had one.
+
+### An instrument ON a structure, which is the case that matters
+
+```
+  BK.ORV   167,936 B   dwell 30.4 s   Oroville Dam, Oroville, CA
+           CAPELLA_C10_SP_CPHD_HH_20240803004650_20240803004720   32.13 GB
+  NN.CC12   23,552 B   dwell 25.7 s   Clark County Firehouse 12, ANSS strong motion
+           CAPELLA_C09_SP_CPHD_HH_20231119132416_20231119132442   22.19 GB
+```
+
+Oroville Dam is the strongest candidate in the archive: a large concrete
+structure, an instrument on it, a 30.4 s spotlight collect over it, and 168 KB of
+waveform spanning the aperture.
+
+### And forty repeats of Kilauea
+
+`HV.KKO`, `HV.OTLD`, `HV.RIMD`, `HV.UWE`, `HV.WRM` each appear in **40 separate
+collects**, with six or more stations recording per collect. That is a
+repeatability experiment rather than one shot. Mount Etna appears with four INGV
+stations in a single collect.
+
+### What it does not establish
+
+**A waveform existing is not a waveform showing anything.** Ambient ground
+motion is of order 0.1 um at 1 Hz against item 53's 5.5 um RMS instrument floor
+-- fifty times below it. A vault seismometer on quiet ground will show nothing
+this radar could have seen, and the comparison would be a null on both sides.
+What could clear the floor is a dam or building responding to wind, traffic or
+machinery, where displacement reaches tens of microns, or any of these sites
+during an actual earthquake.
+
+**Co-located is not co-measured.** A seismometer records ground velocity at one
+point; this pipeline records line-of-sight displacement of scatterers across a
+window. The station's own structure has to be a scatterer the radar resolves.
+
+**Nothing has been downloaded or run.** The two structural candidates are 32 GB
+and 22 GB. This is a search result.
+
+### A dead endpoint that looked like a clean negative
+
+The first availability pass used `service.iris.edu/fdsnws/availability` and
+reported **0 of 553 hits with data**. That is a plausible-looking null and it was
+an artefact: the host now returns an HTML page, whose lines all fail the "not a
+comment" test, so every query parsed as empty. `service.earthscope.org/fdsnws/
+dataselect` answers correctly and gives 315.
+
+The same shape as item 12's zsh word-splitting and item 33's defocused null: **a
+negative result from an unverified harness is not a negative result.** Assert a
+known-good control before believing a zero.

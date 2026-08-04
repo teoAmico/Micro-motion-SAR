@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 58 items and their status.
+an index of all 59 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -126,6 +126,15 @@ That cost a wrong diagnosis here: `--max-pulses` was reported as unimplemented i
 test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
+
+**315 SYNCHRONISED MEASUREMENTS EXIST IN THE CAPELLA ARCHIVE** (item 59) —
+station-collect pairs where an FDSN instrument was recording inside the footprint
+during the aperture. `runs/screens/sensor-join/measurement_hits.csv`. The best is
+**Oroville Dam** (`BK.ORV`, 30.4 s spotlight, 32 GB); Kilauea gives forty repeats
+with six stations each. Nothing downloaded or run yet, and a waveform existing is
+not a waveform showing anything — ambient ground motion is ~50x below item 53's
+5.5 um floor, so a dam or building responding to wind or traffic is the case worth
+pursuing, not quiet ground.
 
 **SPOTLIGHT OR A DWELL MODE IS A HARD REQUIREMENT** (item 58), and it is the
 cheapest thing to check about any candidate collect. What matters is PER-TARGET

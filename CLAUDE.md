@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 63 items and their status.
+an index of all 64 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -126,6 +126,17 @@ That cost a wrong diagnosis here: `--max-pulses` was reported as unimplemented i
 test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
+
+**NAIVE MULTI-PIXEL COMBINATION FAILS** (item 64): combining the K brightest
+pixels makes the artefact GROW faster than the signal — 70.7 to 182 at K=4 — where
+sqrt(K) predicted a 2x gain. The literature explains it: SqueeSAR selects
+STATISTICALLY HOMOGENEOUS pixels by a two-sample Kolmogorov-Smirnov test, not the
+brightest, because the second-brightest pixel is usually a DIFFERENT scatterer with
+its own carrier and its own residual; and phase linking combines via the sample
+COVARIANCE MATRIX by maximum likelihood, not by averaging independently-estimated
+phases. **`src/core/phaselink.c` already implements that solver** — written for
+split-band, never applied to the sub-aperture stack. That is the experiment worth
+running.
 
 **UMBRA IS DISQUALIFIED ON DWELL** (item 63) despite holding 4048 CPHD against
 Capella's 707 spotlight: median dwell 3.50 s, 0.4% at >=15 s, NONE at >=30 s,

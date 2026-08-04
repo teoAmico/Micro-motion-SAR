@@ -1264,7 +1264,7 @@ static int rs_cmd_mmotion(int argc, char **argv)
                "                          [--stream N]\n"
                "                          [--estimator correlation|phase|splitband|argmax]\n"
                "                          [--shuffle-looks SEED] [--null-trials N]\n"
-               "                          [--fmin HZ] [--probe-hz HZ]\n"
+               "                          [--fmin HZ] [--probe-hz HZ] [--pixels N]\n"
                "                          [--reference first|adjacent|pair|lag]\n"
                "                          [--lag N]\n"
                "                          [--b-shift HZ] [--shifts FILE.csv]\n"
@@ -1374,6 +1374,7 @@ static int rs_cmd_mmotion(int argc, char **argv)
      * (runs/screens/). Reaching the only operating point with published
      * ground-truth validation behind it means processing about six seconds. */
     const size_t mm_first = (size_t)rs_opt_double(argc, argv, "--pulse-start", 0.0);
+
     const size_t mm_max   = (size_t)rs_opt_double(argc, argv, "--max-pulses", 0.0);
     resonarsat_status_t st = rs_load_cphd(&c, in,
                        mm_stream ? 2 : rbin_window,
@@ -1559,6 +1560,14 @@ static int rs_cmd_mmotion(int argc, char **argv)
 
     rs_microm_params_t mp;
     rs_microm_params_default(&mp);
+    /* PHASE ROUTE: how many of each window's brightest pixels to track and
+     * combine. 1 is the single-pixel estimator every earlier measurement used. */
+    mp.n_pixels = (size_t)rs_opt_double(argc, argv, "--pixels", 1.0);
+    if (mp.n_pixels > RS_MICROM_MAX_PIXELS) mp.n_pixels = RS_MICROM_MAX_PIXELS;
+    if (mp.n_pixels > 1 && mp.estimator == RS_MICROM_EST_PHASE)
+        printf("combining the %zu brightest pixels per window, each with its own "
+               "carrier\n", mp.n_pixels);
+
     mp.reference = (rs_microm_ref_t)ref_mode;
     /* --lag, validated as a double BEFORE the cast to size_t.
      *

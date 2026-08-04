@@ -29,6 +29,9 @@ void rs_microm_params_default(rs_microm_params_t *params)
     params->ref_lag = 1;
     params->win_az = 64;
     params->win_rg = 64;
+    /* 1 keeps the single-pixel phase estimator every earlier measurement was
+     * made on. See rs_microm_params_t.n_pixels. */
+    params->n_pixels = 1;
     params->stride_az = 16;
     params->stride_rg = 16;
     params->upsample_az = 10;
@@ -389,13 +392,18 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
     {
         float complex *pref = malloc(win_az * win_rg * sizeof *pref);
         float complex *pcur = malloc(win_az * win_rg * sizeof *pcur);
+        /* Multi-pixel scratch: one series being built, one accumulating the
+         * weighted mean, and a taken-mask for the partial selection. */
+        double *pxacc = malloc(n_looks * sizeof *pxacc);
+        double *pxsum = malloc(n_looks * sizeof *pxsum);
+        unsigned char *pxtaken = malloc(win_az * win_rg);
         /* Split-band estimation needs every look's patch simultaneously. */
         const int want_stack = (params->estimator == RS_MICROM_EST_SPLITBAND);
         float complex *pstack = want_stack
             ? malloc(n_looks * win_az * win_rg * sizeof *pstack) : NULL;
         double *pshift = want_stack ? malloc(n_looks * sizeof *pshift) : NULL;
 
-        if (!pref || !pcur || (want_stack && (!pstack || !pshift))) {
+        if (!pref || !pcur || !pxacc || !pxsum || !pxtaken || (want_stack && (!pstack || !pshift))) {
             shared_st = RS_ERR_ALLOC;
         } else {
 #ifdef _OPENMP
@@ -544,16 +552,36 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
                      * pixel of the reference look is used throughout, so the
                      * series follows one scatterer rather than wandering to
                      * whichever happens to be brightest in each look. */
-                    size_t best_i = 0;
+                    const size_t n_px = params->n_pixels ? params->n_pixels : 1;
                     double best_a = -1.0, ref_mean = 0.0;
                     for (size_t i = 0; i < win_az * win_rg; i++) {
                         const double a = (double)cabsf(pref[i]);
                         ref_mean += a;
-                        if (a > best_a) { best_a = a; best_i = i; }
+                        if (a > best_a) best_a = a;
                     }
                     ref_mean /= (double)(win_az * win_rg);
-                    const size_t pa = az0 + best_i / win_rg;
-                    const size_t pr = rg0 + best_i % win_rg;
+
+                    /* The n_px brightest pixels of the reference patch, by
+                     * partial selection rather than a full sort: n_px is a
+                     * handful and the patch is a thousand. */
+                    size_t sel[RS_MICROM_MAX_PIXELS];
+                    size_t n_sel = 0;
+                    {
+                        unsigned char *taken = pxtaken;
+                        memset(taken, 0, win_az * win_rg);
+                        const size_t want = (n_px < RS_MICROM_MAX_PIXELS)
+                                          ? n_px : RS_MICROM_MAX_PIXELS;
+                        for (size_t t = 0; t < want; t++) {
+                            double bv = -1.0; size_t bi = 0; int got = 0;
+                            for (size_t i = 0; i < win_az * win_rg; i++) {
+                                if (taken[i]) continue;
+                                const double a = (double)cabsf(pref[i]);
+                                if (!got || a > bv) { bv = a; bi = i; got = 1; }
+                            }
+                            if (!got) break;
+                            taken[bi] = 1; sel[n_sel++] = bi;
+                        }
+                    }
 
                     /* SPATIAL dominance of that pixel over its own window, which
                      * is this window's quality. See below on why it is not the
@@ -601,18 +629,8 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
                      * that was unbounded in principle and swamped in practice.
                      * Use the correlation estimator for motion larger than
                      * that; it has no ambiguity at all. */
-                    /* The pixel has to exist in every look before anything
-                     * reads it. This loop accumulated the amplitude sums the old
-                     * temporal-stability quality needed; that quality is now
-                     * spatial and taken from the reference patch, so only the
-                     * bounds check remains. */
-                    int ok = 1;
-                    for (size_t k = 0; k < n_looks; k++) {
-                        const rs_slc_t *im = &stack->look[k];
-                        if (pa >= im->n_az || pr >= im->n_rg) { ok = 0; break; }
-                    }
-
-                    if (!ok) goto next_window;
+                    /* Each selected pixel checks its own bounds inside the
+                     * per-pixel loop below, since they are different pixels. */
 
                     /* THE CARRIER MUST COME OFF BEFORE THE PHASE IS WRAPPED, AND
                      * NOT DOING SO WAS THIS ESTIMATOR'S WHOLE FAILURE.
@@ -682,6 +700,27 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
                      * Doppler, and no processing downstream can recover what was
                      * not sampled. Fewer looks over a fixed dwell make it worse,
                      * since the platform travels further between them. */
+                    /* ONE PIXEL AT A TIME, EACH WITH ITS OWN CARRIER. The
+                     * carrier is (4*pi/lambda)*dX*dx/R with dx the offset from
+                     * THAT pixel's centre, so two pixels a cell apart have
+                     * measurably different rates and a shared de-ramp would
+                     * leave a residual on all but one. */
+                    memset(pxsum, 0, n_looks * sizeof *pxsum);
+                    double wsum = 0.0;
+                    int any_px = 0;
+
+                    for (size_t si = 0; si < n_sel; si++) {
+                    memset(pxacc, 0, n_looks * sizeof *pxacc);
+                    const size_t pa = az0 + sel[si] / win_rg;
+                    const size_t pr = rg0 + sel[si] % win_rg;
+
+                    int inb = 1;
+                    for (size_t k = 0; k < n_looks; k++) {
+                        const rs_slc_t *im = &stack->look[k];
+                        if (pa >= im->n_az || pr >= im->n_rg) { inb = 0; break; }
+                    }
+                    if (!inb) continue;
+
                     double nu = 0.0, mu = 0.0, kappa = 0.0;
                     {
                         /* STAGE 1: the linear rate, coarse over the N Fourier
@@ -803,15 +842,45 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
                         const double psi = (pr_re != 0.0 || pr_im != 0.0)
                                          ? atan2(pr_im, pr_re) : 0.0;
 
+                        /* Accumulated rather than written: this pixel is one of
+                         * n_sel, and what the window reports is their weighted
+                         * mean. Weight is amplitude SQUARED -- phase noise goes
+                         * as 1/SNR and SNR as amplitude, so A^2 is
+                         * inverse-variance. Applied once per pixel below; the
+                         * per-look sum here is the series itself. */
+                        pxacc[k] += -psi * lambda / (4.0 * M_PI);
+
                         const size_t idx = (size_t)w * n_looks + k;
-                        out->phase[idx] = psi;
-                        /* The tracked pixel's amplitude, kept look by look so
-                         * rs_spectrum_am_check() can ask whether a peak is
-                         * amplitude modulation rather than motion. */
-                        if (out->amp) out->amp[idx] = (double)cabsf(z);
-                        /* Line-of-sight displacement from phase: one wavelength
-                         * of two-way path is 4*pi of phase. */
-                        out->disp_los[idx] = -psi * lambda / (4.0 * M_PI);
+                        /* The BRIGHTEST pixel's amplitude is what
+                         * rs_spectrum_am_check() reads, so only si == 0 writes
+                         * it -- a mean over pixels would not be any scatterer's
+                         * brightness. */
+                        if (si == 0 && out->amp) out->amp[idx] = (double)cabsf(z);
+                    }
+
+                    {
+                        /* This pixel's series, scaled by its weight and folded
+                         * into the window accumulator. */
+                        double amean = 0.0;
+                        for (size_t k = 0; k < n_looks; k++) {
+                            const rs_slc_t *im = &stack->look[k];
+                            amean += (double)cabsf(im->data[pa * im->n_rg + pr]);
+                        }
+                        amean /= (double)n_looks;
+                        const double wgt = amean * amean;
+                        for (size_t k = 0; k < n_looks; k++) pxsum[k] += wgt * pxacc[k];
+                        wsum += wgt;
+                        any_px = 1;
+                    }
+                    }   /* end per-pixel loop */
+
+                    if (!any_px || !(wsum > 0.0)) goto next_window;
+
+                    for (size_t k = 0; k < n_looks; k++) {
+                        const size_t idx = (size_t)w * n_looks + k;
+                        const double d = pxsum[k] / wsum;
+                        out->disp_los[idx] = d;
+                        out->phase[idx] = -d * 4.0 * M_PI / lambda;
                         out->disp_az[idx] = out->disp_rg[idx] = 0.0;
                     }
 
@@ -1106,6 +1175,9 @@ resonarsat_status_t rs_microm_track(const rs_subap_stack_t *stack,
 
         free(pref);
         free(pcur);
+        free(pxacc);
+        free(pxsum);
+        free(pxtaken);
         free(pstack);
         free(pshift);
     }

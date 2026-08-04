@@ -445,6 +445,11 @@ typedef enum {
     RS_MICROM_EST_ARGMAX = 3
 } rs_microm_estimator_t;
 
+/* Hard cap on rs_microm_params_t.n_pixels. Each pixel costs its own O(N^2)
+ * carrier search, so this bounds the per-window work at a known multiple of the
+ * single-pixel cost rather than letting a caller make it unbounded. */
+#define RS_MICROM_MAX_PIXELS 32u
+
 typedef struct {
     rs_microm_estimator_t estimator;  /* how shifts are computed */
     rs_microm_ref_t reference;  /* which correlation reference (correlation only) */
@@ -523,6 +528,33 @@ typedef struct {
      * is a second measurement by a slower route, whose only use is comparison
      * with the first. Neither passes a null test on its own -- see README.md. */
     int no_optimize;
+
+    /* PHASE ROUTE ONLY: how many of the window's brightest pixels to track and
+     * combine. 1 reproduces the single-pixel estimator exactly and is the
+     * default; 0 is treated as 1.
+     *
+     * WHY THIS EXISTS. The phase estimator reads ONE pixel per window and
+     * discards the other 1023 of a 32x32. If several pixels sit on the same
+     * moving target their displacement series agree, and averaging K of them
+     * beats the noise down by sqrt(K) -- 3x at K = 9, which is the factor
+     * items 62-63 identified as missing and could not find elsewhere.
+     *
+     * IT IS ALSO A DIRECT TEST OF ITEM 15'S PRECONDITION. If a window holds one
+     * dominant scatterer per sub-look resolution cell, the second and third
+     * brightest pixels are that same scatterer's sidelobes or its immediate
+     * neighbours and should carry the same motion. If instead they are separate
+     * clutter, their series are uncorrelated and averaging measures nothing
+     * better. The estimator has assumed the first for years without testing it.
+     *
+     * Each pixel gets its OWN carrier search, because the carrier is
+     * (4*pi/lambda)*dX*dx/R with dx the offset from that pixel's centre -- two
+     * pixels one cell apart have measurably different carriers, and a shared
+     * de-ramp would leave a residual on all but one of them.
+     *
+     * Combination is amplitude-squared weighted. Phase noise goes as 1/SNR and
+     * SNR goes as amplitude, so inverse-variance weighting is A^2. */
+    size_t n_pixels;
+
 } rs_microm_params_t;
 
 /* Per-window micro-motion result over the whole sub-look stack.

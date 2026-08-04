@@ -104,7 +104,8 @@ said, not better) and item 7's line numbers.
 | 60 | done | Oroville Dam moved 0.5-0.8 um, 7-11x BELOW the floor: not a positive control, but the first PROVEN-STATIC scene |
 | 61 | done | all 315 screened: NONE has motion above the floor that survives auditing; invert the search to start from earthquakes |
 | 62 | done | the earthquake route fails on DUTY CYCLE: expected coincidences 0.14, needs 7x the archive |
-| 63 | **the current state** | finer cells give 1.4x of the needed 4x and are non-monotone; Umbra is disqualified on dwell despite 4048 products |
+| 63 | done | finer cells give 1.4x of the needed 4x and are non-monotone; Umbra is disqualified on dwell despite 4048 products |
+| 64 | **the current state** | naive multi-pixel combination FAILS -- brightest-K is not statistically homogeneous, and phaselink.c already holds the right estimator |
 
 ---
 
@@ -5945,3 +5946,66 @@ Finer cells 1.4x. A quartic carrier term is worth about 2x in artefact by item
 discards the other 1023.** Combining the K brightest coherently gives up to
 sqrt(K) if they share the motion -- 3x at K=9, which is the missing factor.
 Whether they share it is item 15's precondition, and it has never been tested.
+
+
+## 64. Multi-pixel combination fails, and the literature said so first
+
+Item 63 named the missing factor: the phase estimator reads ONE pixel per window
+and discards the other 1023. Combining the K brightest should give sqrt(K) --
+3x at K = 9, exactly the gap. `runs/giza/2026-08-04-multipixel/`.
+
+```
+ pixels   artefact  signal @0.03125mm  signal/artefact  vs K=1
+      1       70.7             2310.4             32.7   1.00x
+      4      181.9             4340.7             23.9   0.73x
+      9      159.9             4363.1             27.3   0.83x
+```
+
+**The artefact grows with K faster than the signal does.** Signal rises 2310 to
+4341; artefact rises 70.7 to 182. The ratio that decides detection gets WORSE.
+
+### The literature has done this properly for fifteen years
+
+**SqueeSAR** (Ferretti et al. 2011) and the phase-linking family combine pixels
+in exactly this situation. Two differences from what was implemented here, and
+they are the whole result:
+
+**Which pixels.** SqueeSAR selects STATISTICALLY HOMOGENEOUS PIXELS by a
+two-sample Kolmogorov-Smirnov test on their amplitude distributions -- pixels
+drawn from the same scattering population. This took the K BRIGHTEST, which is a
+different set and generally the wrong one: the second and third brightest pixels
+in a window are usually DIFFERENT SCATTERERS, each with its own sub-pixel offset,
+its own carrier, and its own carrier residual. Averaging them adds artefacts
+instead of averaging noise down, which is what the numbers show.
+
+**How to combine.** Phase linking estimates the phase history from the sample
+COVARIANCE MATRIX by maximum likelihood, not by averaging phases estimated
+independently per pixel. Independent estimation discards the cross-terms that
+carry most of the information.
+
+### And this project already had the estimator
+
+`src/core/phaselink.c` implements the maximum-likelihood phase estimate over a
+stack -- the coherence matrix and the fixed-point iteration
+`x_n <- exp(j*arg(sum_m Gamma_nm x_m))`, which is the standard phase-linking
+solver. Written for the split-band route, never applied to the sub-aperture
+stack.
+
+So the right experiment is not the one run here: select statistically homogeneous
+pixels in the window, form the covariance across SUB-LOOKS rather than across
+passes, and hand it to the existing linker. The physics differs from multi-pass
+InSAR -- sub-looks differ in squint rather than in time and baseline -- but the
+estimator structure is identical.
+
+**This is the third time this project has built something the field already
+had** (item 32's argmax, item 56's AM check reaching item 25's conclusion, and
+now this). CLAUDE.md's rule to search first exists for exactly this, and the
+search was run after writing the code rather than before.
+
+### What the measurement is worth
+
+It bounds the naive version, which is what anyone tries first and which looked
+like free sqrt(K). It does NOT test item 15's precondition -- whether several
+pixels share the motion -- because a brightest-K construction cannot answer that.
+
+`--pixels` stays, defaulting to 1, which reproduces every earlier measurement.

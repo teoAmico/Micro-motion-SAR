@@ -108,7 +108,8 @@ said, not better) and item 7's line numbers.
 | 64 | done | naive multi-pixel combination FAILS -- brightest-K is not statistically homogeneous, and phaselink.c already holds the right estimator |
 | 65 | done | SHP + phase linking is WORSE still: homogeneous pixels share the ARTEFACT, so the ML estimator sharpens it |
 | 66 | done | GROUND_TRUTH_DATASETS.md corroborates items 61-62 independently; its floor is the PER-LOOK one, 37x pessimistic |
-| 67 | **the current state** | public-only leaves ONE usable pairing, Kilauea, and the test it supports is CORRELATION over 51 collects, not detection |
+| 67 | done | public-only leaves ONE usable pairing, Kilauea, and the test it supports is CORRELATION over 51 collects, not detection |
+| 68 | **the current state** | the doc's new SHM datasets have no co-located collect, but they are real WAVEFORMS to inject in place of a sine |
 
 ---
 
@@ -6176,3 +6177,54 @@ show no correlation with them.
 
 **Not attempted.** It needs the 51 CPHDs, which at Capella spotlight sizes is of
 order a terabyte, and that is the real cost rather than any missing method.
+
+
+## 68. The additional public SHM datasets: no pairing, but a better injection
+
+`GROUND_TRUTH_DATASETS.md` lists public structural-motion repositories and names
+the ETH Aventa AV-7 research wind turbine as "the strongest new spatially
+joinable candidate", asking for a CPHD polygon search at 47.520056 N, 8.682139 E
+before downloading multi-gigabyte packages. Item 59's harvest already holds 939
+Capella spotlight footprints, so the search is free.
+
+```
+  ETH Aventa AV-7 turbine, Winterthur     0 footprints contain it; nearest centre 57 km
+  Hell Bridge Test Arena, Norway          0;  nearest 1076 km
+  Route 345 Bridge, New York              0;  nearest   66 km
+```
+
+**None is inside any Capella spotlight footprint.** Umbra has 56 named task sites
+of which only *Jeddah Tower* and *Port of Rotterdam* are structural at all, and
+neither is one of these; and item 63 disqualified Umbra on dwell regardless. That
+matches the doc's own screen, which found no simultaneous pair for Hell Bridge.
+
+So the spatial join is closed for these, and cheaply -- the polygon search cost
+nothing because the footprints were already harvested. **Do the join before the
+download**, which is what the doc advised and what item 57 built the tool for.
+
+### What they ARE good for, which the doc half-says
+
+These are real structural response records: eleven accelerometers plus two strain
+gauges at 200 Hz on a wind turbine, 100 Hz acceleration and strain on a
+full-scale steel bridge with known damage states, dual-axis accelerometers under
+vehicle loading on a road bridge.
+
+**Every injection this project has ever run was a pure sinusoid.**
+`rs_simulate_inject_vibrator()` takes one frequency and one amplitude. A real
+structure is multi-modal, non-stationary, and amplitude-modulated by whatever is
+exciting it -- which is precisely the regime items 25, 55 and 56 found the
+selection policies failing in, on a fixture built to imitate it.
+
+Injecting a MEASURED waveform instead of a sine would test:
+
+- whether `rs_spectrum_best_window()` reports the dominant mode when there are
+  several, rather than the loudest artefact;
+- whether the band floor of item 37 removes a real structure's lowest mode;
+- whether the local peak of item 47 survives a spectrum that is genuinely
+  multi-line rather than one tone plus noise.
+
+None of that needs a co-located collect. It needs the waveform, the existing
+injection path taking a series instead of a frequency, and the fixtures already
+here. **That is the cheapest untried experiment left**, and unlike items 63-65 it
+is not chasing a factor of two -- it is asking whether the reporting stage works
+on realistic motion at all.

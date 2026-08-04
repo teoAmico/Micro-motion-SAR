@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 67 items and their status.
+an index of all 68 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -126,6 +126,14 @@ That cost a wrong diagnosis here: `--max-pulses` was reported as unimplemented i
 test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
+
+**EVERY INJECTION HERE HAS BEEN A PURE SINUSOID** (item 68), and real structures
+are multi-modal, non-stationary and amplitude-modulated — the regime items 25, 55
+and 56 found the selection policies failing in. `GROUND_TRUTH_DATASETS.md` lists
+public SHM waveforms (Aventa turbine 200 Hz, Hell Bridge 100 Hz, Route 345) whose
+sites are in NO Capella footprint — checked against the harvested 939, all zero —
+but which can be INJECTED in place of a sine. That needs no collect pairing and is
+the cheapest untried experiment left.
 
 **PUBLIC SOURCES LEAVE EXACTLY ONE PAIRING: KILAUEA** (item 67). Hardanger fails
 item 58's dwell test before its missing Sentinel-1 reader matters — IW lights a

@@ -103,7 +103,8 @@ said, not better) and item 7's line numbers.
 | 59 | done | 315 synchronised instrument measurements found in the Capella spotlight archive, including Oroville Dam |
 | 60 | done | Oroville Dam moved 0.5-0.8 um, 7-11x BELOW the floor: not a positive control, but the first PROVEN-STATIC scene |
 | 61 | done | all 315 screened: NONE has motion above the floor that survives auditing; invert the search to start from earthquakes |
-| 62 | **the current state** | the earthquake route fails on DUTY CYCLE: expected coincidences 0.14, needs 7x the archive |
+| 62 | done | the earthquake route fails on DUTY CYCLE: expected coincidences 0.14, needs 7x the archive |
+| 63 | **the current state** | finer cells give 1.4x of the needed 4x and are non-monotone; Umbra is disqualified on dwell despite 4048 products |
 
 ---
 
@@ -5883,3 +5884,64 @@ collect has confirmed motion". The truer statement after items 59-62 is that
 **the instrument's floor sits a factor of three to four above ordinary ground
 motion**, and closing that gap would supply hundreds of controls from data
 already indexed.
+
+
+## 63. Chasing the factor of four: finer cells help a little, Umbra not at all
+
+Item 62 reframed the data problem -- the floor sits 3-4x above ordinary ground
+motion, and closing that gap makes all 315 synchronised hits usable. Two routes
+tested. `runs/giza/2026-08-04-cell-sweep/`.
+
+### Finer grid cells: real, and worth 1.4x
+
+The carrier the estimator removes is `(4*pi/lambda) * dX * dx / R` where **`dx`
+is the scatterer's offset from its pixel centre** (`microm.c:623`). Giza runs
+1.0 m cells on a collect with 0.051 m azimuth resolution -- twenty times coarser
+-- so a scatterer sits up to half a metre from its pixel centre, and that offset
+IS the carrier. Predicted 0.553 rad/look at 1.0 m against a measured 1.1-1.9,
+same order.
+
+```
+  cell 1.000 m   artefact  70.7x
+  cell 0.250 m   artefact  36.3x     halved
+  cell 0.125 m   artefact 159.0x     WORSE
+```
+
+**Not monotone.** 0.25 m halves the artefact, which is 1.4x in the amplitude
+floor since the floor goes as its square root. 0.125 m is four times worse.
+
+The likely cause is scene extent rather than sampling: at 96 cells, 0.125 m spans
+12 m and a 32-pixel window is 4 m, which holds too little scene for the
+surrounding statistics the estimator leans on. Hypothesis; the non-monotonicity
+is the measurement.
+
+### Umbra: disqualified on dwell, with 4048 products
+
+Umbra's open archive holds **4048 CPHD** against Capella's 707 spotlight, at
+finer resolution. Dwell, sampled from 250:
+
+```
+   median 3.50 s, 90th 7.62 s, max 23.50 s
+   dwell >= 10 s   2.9%   ~116 of 4048
+   dwell >= 15 s   0.4%   ~ 16
+   dwell >= 30 s   0.0%      0
+```
+
+Capella spotlight: median 22.5 s, 646 at >= 15 s, 156 at >= 30 s.
+
+Umbra's median gives `df` = 0.29 Hz, coarser than most of the 0.3-3 Hz target
+band, and 128 looks over 3.5 s is 27 ms each. **Disqualified by exactly item 58's
+arithmetic** -- per-target observation time in seconds -- and six times the
+products does not change it. Item 36 called the 1.99 s Panama collect coarse
+without quantifying; this quantifies it and generalises it to the archive. Umbra
+is built for resolution and revisit, not for staring.
+
+### The arithmetic of the remaining factor
+
+Finer cells 1.4x. A quartic carrier term is worth about 2x in artefact by item
+53's trend, so 1.4x in amplitude. Together roughly 2x against the 4x needed.
+
+**The untried lever is that the estimator reads ONE pixel per window and
+discards the other 1023.** Combining the K brightest coherently gives up to
+sqrt(K) if they share the motion -- 3x at K=9, which is the missing factor.
+Whether they share it is item 15's precondition, and it has never been tested.

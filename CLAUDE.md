@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 62 items and their status.
+an index of all 63 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -126,6 +126,15 @@ That cost a wrong diagnosis here: `--max-pulses` was reported as unimplemented i
 test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
+
+**UMBRA IS DISQUALIFIED ON DWELL** (item 63) despite holding 4048 CPHD against
+Capella's 707 spotlight: median dwell 3.50 s, 0.4% at >=15 s, NONE at >=30 s,
+against Capella's median 22.5 s. `df` = 0.29 Hz is coarser than most of the target
+band. Same arithmetic as item 58 — Umbra is built for resolution and revisit, not
+staring. **Finer grid cells are worth 1.4x and are NON-MONOTONE**: the carrier is
+`(4*pi/lambda)*dX*dx/R` with `dx` the offset from the pixel centre, so 1.0 m cells
+on 0.051 m resolution are the carrier's own cause — 0.25 m halves the artefact,
+0.125 m makes it four times worse.
 
 **THE DATA PROBLEM IS A FLOOR PROBLEM, NOT A SEARCH PROBLEM** (item 62). The
 earthquake route fails on DUTY CYCLE: 20,013 s of aperture over 2,036 days is

@@ -102,7 +102,8 @@ said, not better) and item 7's line numbers.
 | 58 | done | STRIPMAP cannot support this measurement at all: per-target observation is 0.71 s, df 1.4 Hz |
 | 59 | done | 315 synchronised instrument measurements found in the Capella spotlight archive, including Oroville Dam |
 | 60 | done | Oroville Dam moved 0.5-0.8 um, 7-11x BELOW the floor: not a positive control, but the first PROVEN-STATIC scene |
-| 61 | **the current state** | all 315 screened: NONE has motion above the floor that survives auditing; invert the search to start from earthquakes |
+| 61 | done | all 315 screened: NONE has motion above the floor that survives auditing; invert the search to start from earthquakes |
+| 62 | **the current state** | the earthquake route fails on DUTY CYCLE: expected coincidences 0.14, needs 7x the archive |
 
 ---
 
@@ -5820,3 +5821,65 @@ applies all of those and re-runs against any new catalogue.
 from the earthquake catalogue and look for a collect over the epicentre within
 the aperture, rather than starting from collects and hoping. There are 939
 spotlight collects and rather more earthquakes.
+
+
+## 62. The earthquake route fails on duty cycle, and here is the number
+
+Item 61 proposed starting from the earthquake catalogue rather than from
+collects. It does not work either, and the reason is arithmetic rather than bad
+luck. `runs/screens/sensor-join/QUAKE_SEARCH.md`.
+
+11,977 events of M >= 5.0 worldwide 2020-2026 against 939 spotlight and
+sliding-spotlight collects, with P (8 km/s), S (4.5) and Rayleigh (3.5) arrivals
+computed at each footprint centre.
+
+```
+  7 collect-earthquake pairs with a phase arriving during the aperture
+  ALL teleseismic, 8,000-18,000 km, M5.0-5.8, all P or S -- no Rayleigh
+```
+
+P-wave displacement at 8,000 km from an M5.4 is well under 1 um, an order of
+magnitude below the 5.5 um floor. None is usable, and the one phase that would
+have carried real displacement -- Rayleigh -- never coincided.
+
+### Why looking harder cannot fix it
+
+```
+  total aperture      20,013 s across 2,036 days
+  duty cycle          1.14e-04
+  M>=5.0 within 200 km of a collect site, any time:   1,242
+  EXPECTED number coinciding with an aperture:        0.14
+```
+
+**Finding zero is what the arithmetic predicts.** An expectation of one needs
+about seven times this archive, roughly 39 hours of spotlight over the same
+sites. And 0.14 is generous: it counts M>=5 out to 200 km where the ground motion
+is already below the floor, so the true expectation is lower.
+
+**The duty cycle is the whole problem.** A satellite that stares for thirty
+seconds cannot be expected to be looking when the ground moves. That is a
+property of the observation, not of this archive, and no amount of catalogue
+mining changes it.
+
+### What is left, and it is not a search
+
+1. **A structure that moves all the time.** Bridges under traffic, tall buildings
+   in wind, wind turbines -- tens of microns continuously, no coincidence needed.
+   Their instruments live in structural-health-monitoring archives (NTNU open
+   data, Zenodo) rather than FDSN, so the join needs a SAR collect over that
+   specific structure during its monitoring period.
+2. **A tasked collect**, which is commercial rather than open.
+3. **A lower floor.** Items 51-53 took it from 0.125 mm to 0.0055 mm by removing
+   carrier residual. The quiet sites screened in item 61 sit at 1-2 um ambient,
+   so roughly another factor of four would bring ORDINARY GROUND into range --
+   turning all 315 hits into candidates instead of none.
+
+**Route 3 is the only one this project can pursue alone**, and item 53 recorded
+the returns falling fast: 38x then 4.5x from successive carrier terms, with a
+quartic worth perhaps two.
+
+That reframes the whole data problem. It has been stated throughout as "no
+collect has confirmed motion". The truer statement after items 59-62 is that
+**the instrument's floor sits a factor of three to four above ordinary ground
+motion**, and closing that gap would supply hundreds of controls from data
+already indexed.

@@ -97,7 +97,8 @@ said, not better) and item 7's line numbers.
 | 53 | done | cubic term added: artefact 171x down in total, floor 0.0039-0.0078 mm, returns now falling fast |
 | 54 | done | the carrier fix rescues item 25's recovery, 3 of 4 lobe widths, and NOT its static false positives |
 | 55 | done | all three policies on the aspect fixture: none is both safe and useful, and item 47's local peak is a LOSS here |
-| 56 | **the current state** | the AM/PM discriminator does NOT work: the false positives are not amplitude modulation at the reported frequency |
+| 56 | done | the AM/PM discriminator does NOT work: the false positives are not amplitude modulation at the reported frequency |
+| 57 | **the current state** | KSTL read: ADS-B is a PROXY, no ground aircraft, and 11 seismic stations in the box are all outside the strip |
 
 ---
 
@@ -5449,3 +5450,87 @@ failed: item 47's local peak (item 55) and this. Both failed for the same
 underlying reason -- they test the SPECTRUM, and the failure is not in the
 spectrum but in the tracked series being non-stationary. **A test for
 non-stationarity is what this needs**, and none exists here.
+
+
+## 57. KSTL, and the difference between a proxy and a measurement
+
+`docs/KSTL_ADSB_POSITIVE_TEST.md` paired a Capella stripmap collect with
+ADSB.lol and found two aircraft inside the footprint during the aperture -- the
+first collect here with independently confirmed MOTION. The CPHD was not
+downloaded. It is now, and it reads. `runs/kstl/2026-08-04-first/`.
+
+```
+CAPELLA_C11_SM_CPHD_HH_20250319191515_20250319191532   6.77 GB
+  172997 pulses, 9.55 GHz, PRF 10174 Hz, dwell 17.003 s, near range 679.7 km
+  footprint 10 x 100 km; KSTL, both aircraft and the scene reference all inside
+```
+
+**The footprint check needed the corners ordered.** The five `<Lat>/<Lon>` pairs
+in the header are the scene reference then four corners in an order that is not
+a ring; taken as given, point-in-polygon says KSTL is OUTSIDE its own scene.
+Sorted by angle about the centroid everything is inside. A trap for anything
+reading these footprints, this project included.
+
+### ADS-B is a proxy, and that is a category difference
+
+```
+  N510CN   1394 m altitude,  69.8 m/s,  moved  975 m across the in-aperture reports
+  N707VM    914 m altitude, 126.5 m/s,  moved 1386 m
+```
+
+Both are **airborne and translating**. The focusing grid sits at height 0, so a
+target 1.4 km above it is mislocated and defocused before anything else; and a
+moving target is displaced in azimuth by `R*v_r/V`, up to **6.3 km** at this
+range and platform speed. These are moving-target signatures, which is `ccd.c`'s
+question rather than the vibration chain's.
+
+**ADS-B establishes presence and motion and supplies no displacement waveform.**
+It cannot validate a frequency or an amplitude, which is what every open item
+here needs. The doc said so; this sharpens why.
+
+### No ground aircraft, and the tool said so for the wrong reason
+
+A parked aircraft would be a much better target: ground level, not translating,
+bright, and vibrating if its APU runs. Scanned the day's archive against this
+footprint -- 200 reports in the box, 16 in aperture, **0 on the ground at any
+time**.
+
+**`adsblol_cphd_crossmatch.py` read `on_ground` from `point[6]`, the flags
+word.** readsb puts the STRING `"ground"` in the ALTITUDE field for a surface
+aircraft, so the column read 0 for everything -- which looks like a scan finding
+no ground traffic rather than a bug. Fixed. The corrected scan still finds zero,
+so the conclusion survives and the reason for believing it is now sound.
+
+### The sensor join: object identification is not measurement
+
+`tools/footprint_sensor_join.py` classifies a footprint's contents as
+MEASUREMENT (an instrument with data across the aperture), OBJECT (a structure
+known from a map) or PROXY (ADS-B, AIS, METAR).
+
+```
+scene                       box  in  rec  verdict
+GIZA_C13_SP_20241004          0   0    0  nothing in the box
+ICEYE_X47_HOUSTON             0   0    0  nothing in the box
+KSTL_C11_SM_20250319         10   0    0  nearby but outside
+```
+
+**Eleven FDSN stations fall in the KSTL bounding box and NONE in the 10 km
+strip**, including three building-mounted strong-motion instruments -- one at
+One Bell Center, a downtown tower. Comparing scene centres, or boxes, would have
+claimed a match that does not exist.
+
+### What would actually change the answer
+
+A MEASUREMENT-class hit needs a collect whose footprint contains an instrument
+recording across the aperture. Three CPHDs is not a search; the catalogue has
+thousands and the tool is written to be pointed at them.
+
+Two cautions for when it is:
+
+- **Strong-motion instruments in buildings are usually TRIGGERED.** They are
+  open for decades and hold data for minutes of it. Station metadata says
+  "operating"; only the availability service says "recorded".
+- **Ambient ground motion is far below this instrument's floor.** A vault
+  seismometer sees roughly 0.1 um at 1 Hz against item 53's 5.5 um RMS floor. A
+  building's response to wind or traffic reaches tens of microns and is the
+  plausible target; bare ground is not.

@@ -104,7 +104,12 @@ def main():
                     "altitude_ft": point[3] if len(point) > 3 else "",
                     "ground_speed_kt": point[4] if len(point) > 4 else "",
                     "track_deg": point[5] if len(point) > 5 else "",
-                    "on_ground": point[6] if len(point) > 6 else "",
+                    # readsb puts the STRING "ground" in the altitude field for
+                    # an aircraft on the surface. Index 6 is the flags word, and
+                    # reading it as a boolean reported every aircraft as
+                    # airborne -- which looks like a scan finding no ground
+                    # traffic rather than like a bug. FOLLOW-UPS item 57.
+                    "on_ground": int(point[3] == "ground") if len(point) > 3 else "",
                 })
 
     fields = [

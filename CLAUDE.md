@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 56 items and their status.
+an index of all 57 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -126,6 +126,17 @@ That cost a wrong diagnosis here: `--max-pulses` was reported as unimplemented i
 test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
+
+**A PROXY is not a MEASUREMENT** (item 57). ADS-B, AIS and METAR establish that
+something was present and moving; they supply no displacement waveform, so they
+cannot validate a frequency or an amplitude. Only an instrument recording a time
+series — FDSN seismic and strong-motion, GNSS, SHM archives — is truth here.
+`tools/footprint_sensor_join.py` does that classification, and **intersect the
+POLYGON, never the bounding box**: at KSTL eleven FDSN stations fall in the box
+and none in the 10 km strip, three of them building-mounted. Capella footprint
+corners in the CPHD header are the scene reference followed by four corners NOT
+in ring order — sort them by angle about the centroid or the scene excludes
+itself.
 
 **Search the literature online before concluding something is unsolved, and
 before designing a method this field already has.** This project reasons from a

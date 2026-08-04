@@ -1992,24 +1992,6 @@ static int rs_cmd_mmotion(int argc, char **argv)
         }
     }
 
-    /* Where the target actually is, to better than a window. argmax cannot get
-     * this right except by accident: at 50% overlap a target sits in four
-     * windows that track the same scatterer and score within 1.5% of each
-     * other, and the one it is CENTRED in scores lowest. See item 41. */
-    {
-        rs_centroid_t ct;
-        if (rs_spectrum_centroid(&spec, best, mp.stride_az, mp.stride_rg,
-                                 mp.win_az, mp.win_rg, &ct) == RS_OK) {
-            printf("  located at window (%.2f, %.2f) of (%zu, %zu) -- pixel "
-                   "(%.1f, %.1f) --\n"
-                   "           from %zu windows agreeing on %.3f Hz%s\n",
-                   ct.c_az, ct.c_rg, spec.n_win_az - 1, spec.n_win_rg - 1,
-                   ct.az_px, ct.rg_px, ct.n_cluster, ct.freq_hz,
-                   ct.clipped ? ", CLIPPED at the grid edge so biased inward"
-                              : "");
-        }
-    }
-
     /* The scene-derived null. Unlike --null-static this needs no extra
      * processing and carries the collect's own trends by construction, which is
      * exactly what item 37 showed the simulated null could not. It gates
@@ -2023,7 +2005,9 @@ static int rs_cmd_mmotion(int argc, char **argv)
                            ? (mp.win_az + mp.stride_az - 1) / mp.stride_az - 1
                            : 0;
         rs_scene_null_t sn;
+        int have_sn = 0;
         if (rs_spectrum_scene_null(&spec, guard, &sn) == RS_OK) {
+            have_sn = 1;
             printf("  scene-derived null: window %zu at %.3f Hz stands %.2f robust "
                    "deviations above\n"
                    "           its own scene (median %.1f, scale %.1f, %zu matched "
@@ -2040,6 +2024,59 @@ static int rs_cmd_mmotion(int argc, char **argv)
                    "rs_spectrum_scene_null().\n");
         } else {
             printf("  scene-derived null: not computed -- %s\n", rs_last_error());
+        }
+
+        /* WHERE THE TARGET IS, to better than a window. argmax cannot get this
+         * right except by accident: at 50% overlap a target sits in four
+         * windows that track the same scatterer and score within 1.5% of each
+         * other, and the one it is CENTRED in scores lowest (item 41).
+         *
+         * SEEDED TWICE, BECAUSE THE TWO SEEDS ANSWER DIFFERENT QUESTIONS. The
+         * reported window is gated; the scene-derived null's is not. On ICEYE
+         * Houston that mattered: every window carrying the injected frequency
+         * failed the quality gate, so the reported centroid pointed at a trend
+         * artefact while the null's pointed at the target (item 45). A centroid
+         * is only ever as good as its seed, and printing one number would hide
+         * which question it answered.
+         *
+         * When they agree there is one line. When they disagree, the
+         * disagreement is the finding -- it says a gate removed something the
+         * scene thinks is unusual -- so it is stated rather than resolved. */
+        rs_centroid_t ct_best, ct_null;
+        const int ok_best = (rs_spectrum_centroid(&spec, best, mp.stride_az,
+                                                  mp.stride_rg, mp.win_az,
+                                                  mp.win_rg, &ct_best) == RS_OK);
+        const int ok_null = have_sn &&
+                            (rs_spectrum_centroid(&spec, sn.window, mp.stride_az,
+                                                  mp.stride_rg, mp.win_az,
+                                                  mp.win_rg, &ct_null) == RS_OK);
+        if (ok_best)
+            printf("  located at window (%.2f, %.2f) of (%zu, %zu) -- pixel "
+                   "(%.1f, %.1f) --\n"
+                   "           from %zu windows agreeing on %.3f Hz, seeded from "
+                   "the reported peak%s\n",
+                   ct_best.c_az, ct_best.c_rg, spec.n_win_az - 1,
+                   spec.n_win_rg - 1, ct_best.az_px, ct_best.rg_px,
+                   ct_best.n_cluster, ct_best.freq_hz,
+                   ct_best.clipped ? ", CLIPPED at the grid edge so biased inward"
+                                   : "");
+        /* Half a window is the resolution item 43 measured at 2 mm and a
+         * sixteenth of the window spacing, so anything beyond it is a different
+         * place rather than the same one located twice. */
+        if (ok_best && ok_null &&
+            (fabs(ct_best.c_az - ct_null.c_az) > 0.5 ||
+             fabs(ct_best.c_rg - ct_null.c_rg) > 0.5)) {
+            printf("  DISAGREEMENT: seeded from the scene-derived null instead, "
+                   "the target is at\n"
+                   "           window (%.2f, %.2f) -- pixel (%.1f, %.1f) -- on "
+                   "%.3f Hz from %zu windows.\n"
+                   "           The reported peak is gated and the null is not, so "
+                   "a gate has removed\n"
+                   "           what the scene finds most unusual. Read "
+                   "PREFIX_windows.csv before trusting\n"
+                   "           either. See FOLLOW-UPS item 45.\n",
+                   ct_null.c_az, ct_null.c_rg, ct_null.az_px, ct_null.rg_px,
+                   ct_null.freq_hz, ct_null.n_cluster);
         }
     }
 

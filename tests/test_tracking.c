@@ -2301,6 +2301,28 @@ int main(void)
         RS_CHECK_NEAR(ct.az_px, ct.c_az * 16.0 + 15.5, 1e-9);
         RS_CHECK_NEAR(ct.rg_px, ct.c_rg * 16.0 + 15.5, 1e-9);
 
+        /* A CENTROID IS ONLY AS GOOD AS ITS SEED, and that is a property worth
+         * pinning rather than a caveat. Seeded inside the target's cluster it
+         * finds the target; seeded on a background window that agrees with
+         * nothing it reports that window and not the target. Measured on ICEYE
+         * Houston, where every window carrying the injected frequency failed the
+         * quality gate: the centroid seeded from the reported peak pointed at a
+         * trend artefact while the same function seeded from the scene-derived
+         * null pointed at the target (item 45). mmotion now prints both. */
+        {
+            size_t far = 0;               /* a corner, outside the 2x2 block */
+            RS_CHECK(sc.prominence[far] > 0.0);
+            rs_centroid_t elsewhere;
+            RS_CHECK_OK(rs_spectrum_centroid(&sc, far, m.stride_az, m.stride_rg,
+                                             m.win_az, m.win_rg, &elsewhere));
+            const double d = fmax(fabs(elsewhere.c_az - t_az),
+                                  fabs(elsewhere.c_rg - t_rg));
+            printf("    seeded at window %zu instead: (%.2f,%.2f), %.2f from the "
+                   "target\n", far, elsewhere.c_az, elsewhere.c_rg, d);
+            RS_CHECK(d > 1.0);
+            RS_CHECK(elsewhere.seed == far);
+        }
+
         /* Contract: rejected calls clear the output, and a seed off the end is
          * an error rather than a read past the array. */
         RS_CHECK_ERR(rs_spectrum_centroid(&sc, nw, 16, 16, 32, 32, &ct), RS_ERR_ARG);

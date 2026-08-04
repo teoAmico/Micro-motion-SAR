@@ -4709,12 +4709,33 @@ statistic that steps around it. Both readings stand: it is useful against some
 confounds and not others, which is the most that can be said for any single
 statistic here.
 
-### Open, and not attempted
+### Fixed: the centroid is now seeded twice and the disagreement is reported
 
-The `located at` centroid is seeded from `best_window`, so on the injected run it
-reports (0.00, 0.00) -- the artefact's position rather than the target's. **The
-centroid is only as good as its seed**, and nothing currently seeds it from the
-scene-derived null. That is a one-line change with a measurement behind it and it
-has not been made.
+The `located at` centroid was seeded from `best_window` alone, so on the injected
+run it reported (0.00, 0.00) -- the artefact's position rather than the target's.
+**A centroid is only as good as its seed.**
+
+`mmotion` now computes it from both seeds and prints the second only when they
+land more than half a window apart, which is beyond the 0.13 m item 43 measured
+and so means a different place rather than the same one twice:
+
+```
+  located at window (0.00, 0.00) -- pixel (15.5, 15.5) -- seeded from the reported peak
+  DISAGREEMENT: seeded from the scene-derived null instead, the target is at
+           window (1.99, 1.99) -- pixel (47.3, 47.3) -- on 1.047 Hz from 8 windows.
+```
+
+Truth is the grid origin, window (2.00, 2.00) at pixel 47.5. **The null-seeded
+centroid is right to 0.01 windows -- 0.16 m** -- matching item 42's accuracy on
+Capella, on a different vendor and a different frequency, while the reported
+answer points two windows away.
+
+The two seeds are kept rather than one replacing the other, because they answer
+different questions: the reported peak is gated and the null is not, so a
+disagreement between them IS the finding -- it says a gate removed what the scene
+finds most unusual. Resolving it silently would destroy that.
+
+`test_tracking.c` pins seed-dependence directly: seeded on a background window
+the same function returns that window, 2.50 windows from the target.
 
 Nothing in this scene is known to move. The 1.047 Hz is ours.

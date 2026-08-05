@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 76 items and their status.
+an index of all 77 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -155,6 +155,18 @@ That cost a wrong diagnosis here: `--max-pulses` was reported as unimplemented i
 test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
+
+**THE BLOCK THRESHOLD IS CONTINGENT ON THE LOOK COUNT** (item 77). Item 76's
+clean separation — true modes at block 30-31, static at most 12 — survives a
+12-point sweep at 128 looks (**3 of 12 correct**, all at 0.300-0.400 Hz, static
+at 7-12) and **DIES at 48 looks**: both static controls return confident modes at
+**block 21-23**, one of them at **0.301 Hz**, the same frequency that reads as
+recovery of a true 0.300. A wrong answer reaches block 31. Fewer looks DOES raise
+the sub-aperture response (0.7586 to 0.9654), so item 13's ceiling is real and
+movable — but it bought more confident answers and fewer correct ones, so
+whatever limits recall above 0.450 Hz is not only the response. **Quote item 76's
+block with its look count attached or not at all**; the geometric 2x2 bound is a
+floor, never a separator.
 
 **ITEMS 69-74 MEASURED A TRACKER THAT COULD NOT SEE** (item 76). Every run in
 that arc used the DEFAULT `correlation` estimator, whose precision scales with

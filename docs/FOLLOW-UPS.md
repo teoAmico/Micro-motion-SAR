@@ -6843,3 +6843,67 @@ Not withdrawn: item 74's sweep discipline. One burst recovering at one amplitude
 and one seed is what item 73 was, and that did not survive. **The phase re-run
 needs the same sweep before it is a recovery**, with the added question of where
 the block threshold sits between 12 and 30.
+
+
+## 77. The block threshold is a property of the look count, not a geometric bound
+
+Item 76 recovered a real burst on `--estimator phase` and found the modal set's
+BLOCK separating signal from artefact with no overlap: 30-31 for true modes,
+at most 12 for anything a static scene produced. Two sweeps now bound that.
+
+### At 128 looks, the separation holds and recall is low
+
+Twelve points, two seeds, plus a static control each:
+
+```
+  true    seed 7            seed 11
+  0.300   0.302 blk 31 OK   0.302 blk 14 OK
+  0.400   0.403 blk 18 OK   1.663 blk  9
+  0.450   1.512 blk 12      0.605 blk 15
+  0.550   1.512 blk 11      1.210 blk 12
+  0.750   0.151 blk  8      2.419 blk 11
+  0.850   1.512 blk 12      0.605 blk  6
+  static  1.512 blk 12      1.210 blk  7
+```
+
+**3 of 12 correct** against item 74's 1 of 12 on the correlation route, and all
+three recoveries are at 0.300-0.400 Hz. The block separates: correct answers at
+14-31, both static controls at 7-12.
+
+### At 48 looks the response improves and the discriminator DIES
+
+Fewer looks raises the sub-aperture response, 0.7586 to **0.9654** -- so the
+recall ceiling really is item 13's and the setting moves it. It buys nothing:
+
+```
+  true    seed 7            seed 11
+  0.300   0.301 blk 21 OK   0.151 blk 39
+  0.400   0.251 blk 25      0.351 blk 13
+  0.450   0.301 blk 31      0.602 blk 30
+  0.550   0.853 blk 26      0.151 blk 21
+  0.750   1.004 blk 24      0.753 blk 31 OK
+  0.850   0.853 blk 19      0.151 blk 21
+  static  0.301 blk 21      0.151 blk 23
+```
+
+**2 of 12 correct, and BOTH static controls return confident modes at block
+21-23** -- inside the range that flagged true modes at 128 looks. Static seed 7
+returns **0.301 Hz**, the same frequency that reads as a recovery of the true
+0.300. A wrong answer reaches block 31, the highest in either sweep.
+
+### What this settles
+
+**The block threshold is contingent on the look count.** It is not the geometric
+2x2 bound `rs_spectrum_modal_set()` derives, which is a floor and not a
+separator. Quoting "block 30 means real" is quoting a tuned constant, and item
+76 must be read with its look count attached or not at all.
+
+**Raising the response does not raise recall.** More response gave more
+confident answers and fewer correct ones. Whatever limits recovery above 0.450
+Hz at 128 looks, it is not only the sub-aperture response.
+
+**The best result in this project remains 3 of 12**, phase route, 128 looks,
+0.300-0.400 Hz, with static controls refusing at block <= 12. That is not
+`rs_track_fit()`'s bar and should not be quoted as a recovery.
+
+Run: `runs/synthetic/2026-08-05-phase-sweep/`.

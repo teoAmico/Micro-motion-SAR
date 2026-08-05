@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 94 items and their status.
+an index of all 95 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,26 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**ITEM 91 REPLICATES, AND THE 1.512 Hz ARTEFACT IS SEED-BOUND** (item 95). The
+first run here with hypotheses **pre-registered before it ran** (commit
+`cb47b06`); the recorded prediction that H1 would fail was correct. Naples
+injected through settings identical to items 74/77/80/81/91: **7 of 24 correct,
+slope +0.779, rms 0.7295** against Granada's **1 of 24, slope -0.948**. H1 and H3
+fail on both, so the kill criterion applies and *this chain does not recover
+ambient structural motion* stands at the bar. **But: ALL SEVEN 1.512 Hz answers
+are SEED 7, and seed 11 returns it NOT ONCE** — seed 7's static control reports
+1.512, seed 11's reports 1.210. **Item 76 called 1.512 Hz common-mode "in all
+three scenes"; it is common to one CLUTTER REALISATION, not to the processing**,
+and since every sweep in items 80-95 used seeds 7 and 11, the 1.512 Hz recurring
+throughout `FOLLOW-UPS.md` is seed 7's signature — quote it as such. Two further
+structures in the failure: **source modal prominence predicts recovery** (segment
+02 scores 5 of 12, segment 13 scores 2 of 12, both unit-normalised so it is
+spectral SHAPE not amplitude), and **recovery rises with target frequency**
+(1,0,1,1,1,**3** of 4 from 0.30 to 0.90 Hz — item 47's red floor). The full
+ordering is now **sine 6/6, burst 3/12, ambient-with-sharp-mode 7/24,
+ambient-diffuse 1/24**: the chain degrades smoothly with how concentrated the
+injected motion is, which is what a prominence-based selection must do.
 
 **A SECOND BUILDING RECORD, AND ITS MODE IS INSIDE THE BAND** (item 94).
 `zenodo.org/records/20667124` — former military hospital, Naples: a multi-setup

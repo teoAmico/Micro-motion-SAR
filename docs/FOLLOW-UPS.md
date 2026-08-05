@@ -136,6 +136,7 @@ said, not better) and item 7's line numbers.
 | 92 | external, adopt | their validation practice: an erratum that is our recurring rule, a derived threshold, and a pre-registration template |
 | 93 | answered, negative | the Butte ground-truth chain is geometry only; two "dead" links are 403/429 refusals |
 | 94 | open, better source | a second building record at 2.64 Hz, INSIDE the band, with mode-shape geometry; its loudest peak is not a mode |
+| 95 | **bounds 76** | item 91 replicates on a second building; the 1.512 Hz artefact is SEED-BOUND, not common-mode |
 
 ---
 
@@ -8108,3 +8109,64 @@ geometry that Granada's single-column record does not.
 Its real peak displacement is **0.80-1.23 um**, so like every instrument measured
 in items 83-91 it sits below item 53's 5.5 um floor and would not be detected
 even by a perfect collect over it.
+
+
+---
+
+## 95. Item 91 replicates on a second building — and the artefact turns out to be SEED-BOUND.
+
+The first run in this project with **hypotheses pre-registered before it ran**
+(`runs/synthetic/2026-08-05-naples-ambient/PREREG.md`, commit `cb47b06`). The
+prediction recorded there -- that H1 would fail -- was correct.
+
+Item 94's Naples record injected through settings identical to items
+74/77/80/81/91; only the waveform differs. Two segments from **different setups**,
+so independent in time and in sensor mounting.
+
+| | Naples | Granada (item 91) |
+|---|---|---|
+| correct within half a bin | **7 of 24** | 1 of 24 |
+| `rs_track_fit` slope | **+0.779** | **-0.948** |
+| rms | 0.7295 Hz | 0.9315 Hz |
+| answers equal to a static control's | 7 of 24 | 9 of 21 |
+
+**H1 fails on both** (bar: slope within 0.10 of 1, rms < 0.0252 Hz). **H3 fails on
+both.** So the pre-registered kill criterion applies: item 91 is not a property of
+one record, and *this chain does not recover ambient structural motion* stands at
+the bar.
+
+### But the failure is structured, and one part of it revises item 76
+
+- **THE ARTEFACT IS SEED-BOUND.** All seven 1.512 Hz answers are **seed 7**;
+  **seed 11 returns it not once.** Seed 7's own static control reports 1.512 and
+  seed 11's reports 1.210. Item 76 recorded 1.512 Hz as appearing "in all three
+  scenes including static" and called it common-mode; **it is common to one
+  CLUTTER REALISATION, not to the processing.** Every sweep in items 80-91 used
+  seeds 7 and 11, so the 1.512 Hz that recurs throughout this file is seed 7's
+  signature. **Quote it as such.**
+- **Source modal prominence predicts recovery.** Segment 02 scores 5 of 12,
+  segment 13 scores 2 of 12. Both are normalised to unit peak before injection,
+  so the difference is the record's spectral SHAPE -- how concentrated its energy
+  is at its own dominant -- not its amplitude.
+- **Recovery rises with target frequency**: 1, 0, 1, 1, 1, **3** of 4 at 0.30 to
+  0.90 Hz. The low targets sit nearer the artefact-rich bins, which is item 47's
+  red floor showing through.
+
+### Where this leaves the ambient case
+
+Granada gave slope **-0.948** -- anti-correlated, i.e. pure artefact. Naples gives
+**+0.779** -- genuinely tracking, and failing the bar on scatter rather than on
+direction. That is a real difference between two ambient records, and it points
+at the source rather than the chain: **an ambient record with a sharper modal
+peak is partially recoverable; one without is not.**
+
+So the ordering of items 91 and 95 together is: sine 6/6, earthquake burst 3/12,
+**ambient-with-sharp-mode 7/24, ambient-diffuse 1/24**. The chain degrades
+smoothly with how concentrated the injected motion is, which is what a
+prominence-based selection must do.
+
+### What these runs may not claim
+
+Pre-registered and unchanged: **no localisation claim** (target at the grid
+origin, item 40) and **no detectability claim** (the controls are motionless
+scenes, not item 38's zero-amplitude twins). Recoverability only.

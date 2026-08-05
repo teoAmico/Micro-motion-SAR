@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 88 items and their status.
+an index of all 89 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,24 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**A CONTINUOUS 6-SENSOR BUILDING RECORD EXISTS, AND ITS MODES ARE ABOVE THE BAND
+AT 128 LOOKS** (item 89). `zenodo.org/records/17358241` — Hospital Real, Granada,
+six accelerometers at 200 Hz, **CONTINUOUS for 7 days**, CC BY 4.0. **No collect
+over it in any archive** (nearest centre 91 km), so it is not a pairing — but it
+is the best INJECTION source here: continuous where item 88's structural
+instruments are event-triggered, AMBIENT where item 69's Oroville was a
+transient, six sensors so a mode SHAPE exists for items 70-71's spatial test, and
+7 days at 200 Hz so a sweep can pool over thousands of INDEPENDENT real-structure
+realisations, which `rs_track_fit` demands and item 69's single record could not
+give. **Its modes were measured without downloading 8 GB** — Zenodo serves range
+requests, and a 40 MB slice inflated through BOTH layers (zip deflate, then gzip)
+gives 47 minutes at 200 Hz. **Dominant mode 3.78 Hz on 4 of 6 sensors, family
+3.27-4.32 Hz**; the 0.22 Hz peak on 5 of 6 is the secondary ocean MICROSEISM, not
+a mode. **3.78 Hz is OUTSIDE the observable band at 128 looks** (0.100-2.13 Hz at
+30 s) — it needs **256 looks**, changing an operating point items 13, 76 and 77
+are all quoted at. **A stiff masonry building is a poor match for a long dwell**:
+long dwell buys resolution and spends Nyquist.
 
 **ESM WITHDRAWS "NO DAM HAS EVER BEEN IN A FOOTPRINT", AND THE WALL MOVES TO THE
 INSTRUMENT** (item 88). Item 87 recorded ESM as refused with 413; retried it is

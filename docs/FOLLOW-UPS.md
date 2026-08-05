@@ -130,6 +130,7 @@ said, not better) and item 7's line numbers.
 | 86 | answered, negative | RESIF joined; one European pairing and it is proven-static; still no dam anywhere |
 | 87 | answered, negative | INGV joined; Etna summit during a paroxysm is still 9x below the floor; ESM unqueried |
 | 88 | **withdraws part of 83, 86, 87** | ESM queried: Grande Dixence IS in a footprint; the structural instruments are EVENT-TRIGGERED |
+| 89 | open, untried | a continuous 6-sensor building record exists; its modes are 3.8 Hz, above the band at 128 looks |
 
 ---
 
@@ -7705,3 +7706,71 @@ above-floor motion only record when the motion happens, and no such moment has
 coincided with an aperture in 13,735 collects. Every continuously-recording
 instrument checked, on four networks, reads 7x to 50x below the floor:
 Oroville 0.5-0.8, FR.CURIE 0.510, Etna 0.589-0.803, Grande Dixence 0.113 um.
+
+
+---
+
+## 89. A continuous SHM record of a real building exists. Its modes are above the band this project uses.
+
+`zenodo.org/records/17358241` -- **Hospital Real, Granada**, the 16th-century
+University of Granada rectorate: **six KB12VD accelerometers at 200 Hz,
+continuous, 27 January to 2 February 2025**, CC BY 4.0, 8.0 GB.
+
+### No pairing
+
+No collect over the building in any of the three archives during the window, and
+none outside it either. Nearest scene centres: Capella 197.8 km, Umbra 91.0 km,
+ICEYE 92.1 km. So this is not the coincidence item 88 said was missing.
+
+### It is nonetheless the best INJECTION source this project has had
+
+Item 88 established that the structural instruments inside footprints are
+**event-triggered** and hold nothing unless something shook them. This record is
+the opposite in every respect that matters:
+
+- **continuous**, so there is no duty cycle on the sensor side at all
+- a real building under real **AMBIENT** load -- item 68's target class, and a
+  different regime from item 69's Oroville EARTHQUAKE transient
+- **six sensors**, so a mode SHAPE exists, which is what items 70-71's spatial
+  test wants and has never had from real data
+- **seven days at 200 Hz**, so a sweep can pool over thousands of INDEPENDENT
+  real-structure realisations. `rs_track_fit`'s bar demands exactly that and item
+  69's single record could not supply it.
+
+### Its modes were measured without downloading it
+
+The Zenodo object supports range requests; the zip's central directory gives
+seven daily members, and a 40 MB slice of the first one inflates through BOTH
+layers (zip deflate, then gzip) to **564,272 lines -- 47 minutes at 200 Hz**.
+
+```
+  dominant structural mode   3.78 Hz   (4 of 6 sensors)
+  mode family                3.27 - 4.32 Hz
+  also 5.05, 5.93, 6.08 Hz
+  0.22 Hz on 5 of 6 sensors -- NOT a mode: that is the secondary ocean
+      microseism, and a 37 m masonry building cannot be that flexible
+```
+
+### And that is the problem
+
+The observable band is `n_looks/(2T)` at the top and the leakage floor at the
+bottom:
+
+| dwell | looks | band |
+|---|---|---|
+| 30 s | **128** | 0.100 - **2.13 Hz** |
+| 30 s | 256 | 0.100 - 4.27 Hz |
+| 20 s | **128** | 0.150 - **3.20 Hz** |
+| 20 s | 256 | 0.150 - 6.40 Hz |
+
+**3.78 Hz is OUTSIDE the band at 128 looks**, which is the look count every
+measurement in this file uses. Using this record means moving to **256 looks**,
+halving the sub-aperture length and changing an operating point everything else
+here is calibrated against -- items 13, 76 and 77 are all quoted at 128.
+
+That is a real cost and it is not a reason to discard the dataset; it is the
+reason to quote any result from it with its look count attached, which is item
+77's rule. It also says something about the target class: **a stiff masonry
+building is a poor match for a long dwell**, because long dwell buys frequency
+resolution and spends Nyquist, and item 58's arithmetic runs the other way for
+stiff structures than for the 0.3-1 Hz motions this project was built around.

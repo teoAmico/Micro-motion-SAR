@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 84 items and their status.
+an index of all 85 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -155,6 +155,19 @@ That cost a wrong diagnosis here: `--max-pulses` was reported as unimplemented i
 test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
+
+**ALL THREE PUBLIC LONG-DWELL ARCHIVES ARE NOW JOINED, AND THE SEARCH IS
+FINISHED** (item 85). Capella 940 collects / 12 structures / **0 bridges, 0
+dams**; Umbra 12,404 / 81 / **4 bridges**, 0 dams; ICEYE 391 / **0 structures**
+(control 391 of 391, so it is a measurement) — its open programme points at
+global CATASTROPHES, not instrumented civil structures, and its worth here stays
+the six `dwell-precise`/`dwell-fine` CPHD in `runs/screens/iceye/RUN.md`.
+**Earthquake coincidences across all three: 0**, so item 83's 0.0040 expectation
+now stands over 13,735 collects. **Exactly one pairing exists in public data**:
+Umbra over the San Francisco Bay Bridge/West (24.8 s) and Fremont Channel B
+Bridge (27.4 s), **SICD only**. **No dam, anywhere, ever.** The archive search is
+over; what remains is whether a bridge under traffic clears the 5.5 um floor,
+which is a measurement on identified data rather than another search.
 
 **ITEM 63'S UMBRA DWELL VERDICT DOES NOT SURVIVE THE FULL ARCHIVE** (item 84).
 Item 63 sampled **250** products to measure a **sub-2% tail** — it had no power

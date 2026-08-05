@@ -126,6 +126,7 @@ said, not better) and item 7's line numbers.
 | 82 | explains 81 | the threshold effect predicts it; matrix pencil and LSCF transient terms are untried |
 | 83 | answered, negative | instrumented structures are ABOVE the floor and never observed moving; 0 bridges and 0 dams ever in a footprint |
 | 84 | **partly withdraws 63** | Umbra has 228 collects >= 30 s, not none, and covers two instrumented bridges |
+| 85 | done | all three public archives joined; ICEYE covers no structure; one bridge pairing exists in total |
 
 ---
 
@@ -7424,3 +7425,47 @@ not exist for the earthquake route may exist for the AMBIENT route, and this is
 the first named, public, dwell-adequate collect over an instrumented structure
 this project has found. Whether a bridge's traffic response clears item 53's
 5.5 um floor is untested and is the next measurement, not a conclusion.
+
+
+---
+
+## 85. All three public long-dwell archives, joined. One bridge pairing exists.
+
+Completes items 83-84 with ICEYE, so every public archive this project can reach
+has now been put through the same join, the same CESMD structure list and the
+same scene-centre-in-its-own-ring control.
+
+ICEYE's open STAC holds **404 items, 391 harvested** -- 13 skipped for
+MultiPolygon geometry, which the containment test does not handle and which are
+scan-mode strips rather than stares. Its dwell is the best of the three by
+median.
+
+| | collects | median dwell | >= 15 s | >= 30 s | structures inside | bridges | dams |
+|---|---|---|---|---|---|---|---|
+| Capella | 940 | 22.5 s | 648 (69%) | 156 | 12 | **0** | **0** |
+| Umbra | 12,404 | 5.80 s | 1071 (8.6%) | 228 | 81 | **4** | 0 |
+| ICEYE | 391 | 14.86 s | 197 (50%) | 8 | **0** | 0 | 0 |
+
+**ICEYE covers no instrumented CESMD structure at all.** Its control passes
+391 of 391, so that is a measurement and not a broken join. The cause is size and
+aim: 391 collects, pointed by an open-data programme at global CATASTROPHES,
+which is a different target set from instrumented civil structures in California.
+Its value to this project remains the one already recorded in
+`runs/screens/iceye/RUN.md` -- six CPHD in `dwell-precise` and `dwell-fine`
+modes, the only open provider labelling long-stare modes as such, and the best
+per-look phase floor screened anywhere here at 0.2017 mm.
+
+### The state of the search, entire
+
+- **Earthquake coincidences across all three archives: 0.** Item 83's duty-cycle
+  arithmetic -- 0.0040 expected, 252x the archive for an expectation of one --
+  now stands over 13,735 collects rather than 940.
+- **Exactly one class of pairing exists**: Umbra over the **San Francisco Bay
+  Bridge/West** (24.8 s, three collects) and the **Fremont Channel B Bridge**
+  (27.4 s), SICD only, no CPHD.
+- **No dam has ever been inside any footprint of any of the three.**
+
+So the search across public archives is finished, and it returns one candidate.
+Whether that candidate is worth anything turns on a question no archive can
+answer: whether a bridge under traffic clears item 53's 5.5 um floor. That is a
+measurement on data already identified, not another search.

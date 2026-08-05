@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 96 items and their status.
+an index of all 97 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,28 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**THE PAIRED SAME-SCENE TWIN FINDS THE SIGNAL THAT THE REPORT LOSES** (item 97).
+Pre-registered at `8543974`. 24 injected points each paired with a twin on the
+SAME seed and clutter differing only in whether the target moves;
+`D = probe_prominence(injected) - probe_prominence(twin)` at the injected
+frequency. **H1 passes at exactly the threshold, `D > 0` in 20 of 24.** The
+finding: **of the 17 points whose REPORTED frequency was wrong, 13 (76%) have a
+POSITIVE D at the frequency injected** — including three seed-7 runs that reported
+the 1.512 Hz artefact while carrying D of **+7.2, +16.4 and +19.5**. **The chain
+measures the injected frequency and reports the artefact instead**, so item 96's
+100% false-positive rate is a property of the SELECTION and not of the
+measurement — items 7-9 and 30 restated with a paired statistic behind them. D
+tracks source modal prominence (seg 02 +3.2..+28.3, seg 13 +0.08..+3.9) and rises
+almost monotonically with target frequency (item 47's red floor). **H2 was
+MIS-SPECIFIED by me**: it required the median-window difference to be under a
+tenth of the centre's, but this fixture uses `--clutter-vib` which moves the WHOLE
+patch, so a scene-wide increment is correct and H2's form belonged to item 39's
+single-scatterer `--inject-vib` setup. **H2 is inapplicable, not failed** —
+recorded rather than quietly dropped. **The open work**: nothing in `mmotion`
+reports a twin-differenced statistic; every policy in `spectrum.c` selects a peak
+from ONE scene's spectrum, and D needs two runs. Bounds: `D > 0` is measured with
+the truth known and a real collect has no twin to pair against.
 
 **IT IS NOT SEED 7: TWELVE OF TWELVE MOTIONLESS SCENES REPORT A CONFIDENT
 FREQUENCY** (item 96). Item 95 said the 1.512 Hz artefact was seed-bound, which

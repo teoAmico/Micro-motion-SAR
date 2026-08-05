@@ -138,6 +138,7 @@ said, not better) and item 7's line numbers.
 | 94 | open, better source | a second building record at 2.64 Hz, INSIDE the band, with mode-shape geometry; its loudest peak is not a mode |
 | 95 | **bounds 76** | item 91 replicates on a second building; the 1.512 Hz artefact is SEED-BOUND, not common-mode |
 | 96 | **bounds 95** | 12 of 12 motionless scenes report a confident frequency, 9 distinct; there is no clean seed |
+| 97 | **locates the defect** | the paired twin finds the injected frequency in 76% of runs whose report is wrong: the SELECTION loses it |
 
 ---
 
@@ -8245,3 +8246,89 @@ already said so.
 **Bounds of this measurement:** one fixture family (`rs_sim_scene` clutter at 400
 scatterers), one estimator, one operating point. It says nothing about real
 collects, where item 17's Giza run DID return a null.
+
+
+---
+
+## 97. The paired same-scene twin FINDS the signal at the injected frequency in 76% of the runs whose REPORT is wrong.
+
+Pre-registered at commit `8543974`, run afterwards. Item 96 had measured a 100%
+false-positive rate on motionless clutter; this asks whether the remedy this
+project already owns -- a zero-amplitude twin of the SAME scene, differenced at
+the injected frequency with `--probe-hz` (items 38, 39) -- recovers what the
+reported frequency loses.
+
+24 injected points, each paired with a twin on the **same seed and same clutter,
+differing only in whether the target moves**. Statistic: `D = probe_prominence
+(injected) - probe_prominence(twin)` at the injected frequency.
+
+### H1 passes, at exactly the pre-registered threshold
+
+**`D > 0` in 20 of 24 points** against a threshold of 20. Median `D` = +0.832,
+mean +4.466, range -0.319 to +28.342.
+
+### The finding: the energy is there, the report is not
+
+Of the **17 points whose REPORTED frequency was wrong** in item 95, **13 (76%)
+have a POSITIVE paired difference at the frequency that was injected.** The
+starkest cases are unambiguous:
+
+```
+  target 0.40, seg 02, seed 7   reported 1.512 Hz (seed 7's artefact)   D = +7.196
+  target 0.60, seg 02, seed 7   reported 1.512 Hz                       D = +16.352
+  target 0.75, seg 02, seed 7   reported 1.512 Hz                       D = +19.531
+  target 0.90, seg 13, seed 7   reported 1.512 Hz                       D = +3.872
+```
+
+**The chain measures the injected frequency and reports the artefact instead.**
+
+That is items 7-9 and item 30 restated with a paired statistic behind it -- *"the
+tracker does recover the injected carrier in most windows and the selection policy
+discards it"*, and *"the tracker meets the bar on real data; nothing that reports
+does"*. Item 96's 100% false-positive rate is therefore **a property of the
+SELECTION, not of the measurement**, and this is the first evidence that separates
+those two cleanly on an ambient record.
+
+### Two structures in D, both consistent with earlier items
+
+- **`D` tracks source modal prominence.** Segment 02 gives +3.2 to +28.3;
+  segment 13 gives +0.08 to +3.9. Same normalisation, different spectral shape --
+  item 95's finding, now on a paired statistic instead of a hit rate.
+- **`D` rises almost monotonically with target frequency** on segment 02: +3.2,
+  +7.2, +11.8, +16.4, +19.5, +28.3 at 0.30 to 0.90 Hz. Item 47's red floor: the
+  low bins are where the noise is.
+
+### H2 was MIS-SPECIFIED, and that is my error, not a result
+
+H2 required the median-window difference to be under a tenth of the centre
+window's, so that a scene-wide gain could not pass. It came out at **0.518**,
+which I would have reported as a failure of spatial specificity. **It is not a
+failure. The test was wrong.**
+
+This fixture uses `--clutter-vib`, which vibrates the **whole clutter patch**, so
+every window contains moving ground and a scene-wide increment is the CORRECT
+behaviour. H2's form was borrowed from item 39, whose setup was `--inject-vib` --
+a single added scatterer at a point. Item 71 had already recorded that this
+fixture is whole-scene.
+
+**H2 is therefore inapplicable here and is not scored.** Testing spatial
+specificity needs `--inject-vib` with `--inject-at`, which is a different run.
+Recorded rather than quietly dropped, because a pre-registration that can be
+reinterpreted after the fact is worth nothing.
+
+### What follows
+
+The pre-registered branch that fires is: *"the discriminator works and the failure
+is in what is REPORTED, not in what is measurable -- which would make a
+twin-differenced statistic the thing to report."*
+
+That is now the open work: `--probe-hz` exists and `D` is computable, but **nothing
+in `mmotion` reports a twin-differenced statistic as its answer**. Every policy in
+`spectrum.c` selects a peak from one scene's spectrum. The paired difference
+requires two runs and is therefore outside what a single invocation can report --
+which is a design question, not a bug.
+
+**Bounds:** one fixture family, whole-scene motion, one estimator, 2 mm. `D > 0`
+in 20 of 24 is not a detection either -- it is measured with the truth known, and
+on a real collect there is no twin to pair against. That is exactly why
+`--null-static` exists and why item 96 matters.

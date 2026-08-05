@@ -117,6 +117,35 @@ because this code is full of dimensionally interchangeable quantities that are
 physically different — Hz against rad/s, slant against ground range, azimuth line rate
 against transmit PRF — and the comment must state units and conventions.
 
+**A NETWORK QUERY THAT FAILS LOOKS EXACTLY LIKE ONE THAT FOUND NOTHING, AND
+THIS HAS NOW COST FIVE WRONG ANSWERS.** Every remote helper here returns a falsy
+value on error, so a dead endpoint, a rejected argument, a misrouted archive and
+a genuinely silent sensor are one symptom. Each of these was believed until a
+control contradicted it:
+
+- `service.iris.edu/fdsnws/availability` answers **HTML**, and
+  `service.earthscope.org/.../availability` answers **410**. That produced the
+  withdrawn "0 of 553 with data", and the retired endpoint was reached for a
+  SECOND time a year later. Use `dataselect` and measure bytes: it costs the
+  samples and cannot lie about whether they exist.
+- The FDSN **federator refuses a purely spatial query** — it needs `net` or
+  `sta` — and the 400 read as "no stations in this footprint".
+- A hand-written **datacentre-name to client map** silently fell back to IRIS for
+  every name outside it, so 59 of 76 stations were never measured and the audit
+  funnel looked clean. Build clients from the **service URLs the federator
+  already returns**; the map is redundant as well as wrong.
+- Hardcoding **ODC** for network `ES` returned 204 for every request and read as
+  "no neighbours exist" — the same bug, one hour after fixing it.
+- A bare `except: pass` around a fetch made all of the above invisible.
+
+The rule: **before believing a negative from a remote service, run the identical
+query against something whose answer you already know.** `NN.UNVG` returning
+48640 bytes is what proved the routing worked; `NP.2030` returning zero was only
+meaningful beside it. And **count failures by reason** — an audit that cannot say
+what it did not measure is not an audit. This is the same lesson as the zsh entry
+below, which is why both are here: a negative result from an unverified harness
+is not a negative result.
+
 **The shell here is zsh, which does NOT word-split unquoted parameters.** A loop
 of the form `for a in "" "--max-pulses 60000"; do prog $a; done` passes the whole
 string as ONE argument in zsh where bash would split it into two, so the flag is

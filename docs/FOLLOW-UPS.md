@@ -6962,3 +6962,64 @@ constant nor the null-calibrated version is.
 NOT IMPLEMENTED. Recorded because the negative result is what makes the
 requirement precise: two thresholds have now failed for the same reason, and the
 third has to normalise for bin count or it will fail identically.
+
+
+## 79. The literature does not threshold a spectral statistic. It reports a posterior.
+
+Items 76-78 chased a configuration-free threshold on the modal set's block: a
+constant (item 76), contingent on look count (item 77), then a null-calibrated
+version that failed for the same reason (item 78), ending with "the block needs
+a chance model". A search of the operational-modal-analysis literature says the
+premise is wrong.
+
+### Uncertainty instead of a gate
+
+**Bayesian operational modal analysis** fits a modal model and returns a
+POSTERIOR PER MODE, quantifying identification uncertainty from measurement
+noise and data limitations. Other frequency-domain lines estimate CONFIDENCE
+BOUNDS simultaneously with the modal parameters.
+
+Neither gates a spectral statistic. A mode with a wide posterior is reported as
+uncertain; it is not refused by a threshold. That dissolves item 78's problem
+rather than solving it -- there is no configuration-free constant to find,
+because the field does not use a constant. **The successor to
+`rs_spectrum_modal_set()` is per-mode uncertainty, not a better block null.**
+
+### Short records: model the transient, do not window it
+
+The most directly applicable finding, and it is a critique of code this project
+has had for years: frequency-domain methods for SHORT DATA RECORDS estimate
+TRANSIENT EFFECTS SIMULTANEOUSLY WITH THE MODAL PARAMETERS, *instead of*
+applying Hann windows to the record.
+
+`rs_spectrum_compute_opts()` applies a Hann window to a 128-sample series and
+`rs_microm_track()` fits carrier polynomials in a separate stage (items 51-53).
+The literature says that decomposition is wrong for records this short: the
+transient and the modes should be estimated JOINTLY. This is independent of
+everything items 69-78 tried and was never considered.
+
+### Two of our measurements are known properties, not defects
+
+- *"Dominant modes are reliably estimated with minimal decay data, while
+  challenging modes need multiple free decays."* That is item 77 exactly:
+  0.300-0.400 Hz recovered from one burst, nothing above 0.450 Hz. **The recall
+  limit is a property of single-record modal identification**, not of this
+  chain, and the remedy in the literature is MORE RECORDS -- which for a
+  satellite means more collects over the same structure.
+- Non-stationarity has established machinery: moving-window SOBI, wavelet
+  adaptive filtering, multivariate VMD. None resembles item 72's max-hold STFT.
+  Item 72's negative result stands and its cause is now clearer -- a
+  spectrum-analyser tool was used where the field uses time-varying SYSTEM
+  IDENTIFICATION.
+
+### What this changes
+
+Item 78's Monte Carlo block null is no longer the obvious next step. The larger
+and better-supported direction is per-mode uncertainty, and the cheapest real
+improvement available before that is joint transient-and-mode estimation on the
+short record.
+
+Recorded, not implemented. **This is the fourth time a search has found the
+field already had what was being invented here** -- after `RS_MICROM_EST_ARGMAX`,
+the overlap figure of item 13, and `phaselink.c`'s ML solver in items 64-65.
+Search first.

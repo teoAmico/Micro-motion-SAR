@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 78 items and their status.
+an index of all 79 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -155,6 +155,21 @@ That cost a wrong diagnosis here: `--max-pulses` was reported as unimplemented i
 test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
+
+**THE FIELD DOES NOT THRESHOLD A SPECTRAL STATISTIC — IT REPORTS A POSTERIOR**
+(item 79). Bayesian OMA fits a modal model and returns a per-mode posterior with
+identification uncertainty; other lines estimate confidence bounds alongside the
+parameters. **That dissolves item 78's search for a configuration-free block
+constant rather than solving it** — the successor to `rs_spectrum_modal_set()` is
+per-mode uncertainty, not a better block null. Also a standing critique of code
+here: for SHORT records the field estimates the TRANSIENT JOINTLY with the modal
+parameters *instead of* Hann-windowing, where `rs_spectrum_compute_opts()`
+windows and items 51-53 fit carriers in a separate stage. And item 77's recall
+limit is a KNOWN property — "dominant modes are reliably estimated with minimal
+decay data, challenging modes need multiple free decays" — whose remedy is more
+records, i.e. more collects over one structure. **Fourth time a search found the
+field already had what was being invented here** (after `RS_MICROM_EST_ARGMAX`,
+item 13's overlap figure, and `phaselink.c` in items 64-65). Search first.
 
 **THE BLOCK NEEDS A CHANCE MODEL, NOT A NULL RUN** (item 78). Calibrating the
 block against a matched static run — this project's own doctrine — was tested on

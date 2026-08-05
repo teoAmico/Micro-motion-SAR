@@ -6907,3 +6907,58 @@ Hz at 128 looks, it is not only the sub-aperture response.
 `rs_track_fit()`'s bar and should not be quoted as a recovery.
 
 Run: `runs/synthetic/2026-08-05-phase-sweep/`.
+
+
+## 78. Null-calibrating the block does not fix it. The block needs a CHANCE model.
+
+Item 77 showed the block threshold is contingent on the look count. The obvious
+fix is this project's own doctrine -- calibrate against a null rather than a
+constant -- so compare the modal set's leading block against a MATCHED STATIC
+run's block at identical settings. Both sweeps' static runs were already on
+disk, so the rule was tested before it was implemented:
+
+```
+128 looks   threshold = max static block = 12
+   accepted & correct 3    false positives 1    missed 0
+
+48 looks    threshold = max static block = 23
+   accepted & correct 1    false positives 6    missed 3
+```
+
+**It does not work.** Better than a fixed constant, which would have accepted
+everything at 48 looks, and still six false positives.
+
+### Why, and it is the useful part
+
+At 48 looks the spectrum has **25 bins**; at 128 it has **65**. Fewer bins means
+more windows land on the same bin by chance, so blocks inflate EVERYWHERE --
+signal and noise together. The wrong answers at 48 looks reach 39, 31, 30, 26,
+25 and 24; the static's 23 is not an outlier in that distribution, it is typical
+of it. A null threshold cannot separate two things drawn from the same widened
+distribution.
+
+**The block statistic is not comparable across configurations, because the
+number of admissible bins changes with the look count and chance agreement
+scales with it.**
+
+### The gap this names in rs_spectrum_modal_set()
+
+`support_min` is derived from a binomial null over `n_bin` -- properly, with a
+family-wise budget and no tuned constant. The BLOCK is then gated by a fixed
+floor of 4, taken from the 2x2 window geometry. **Support is normalised for
+chance; the block is not.**
+
+What the block needs is the same treatment: given this bin count, this many
+voting windows and this nomination count, what is the largest 4-connected block
+CHANCE produces? A bin should be reported when its block exceeds that, not when
+it exceeds 4 and not when it exceeds a null run's.
+
+That is a percolation question on the window grid rather than a binomial one, so
+it likely wants a small Monte Carlo over the same null the support threshold
+already assumes -- shuffle nominations at random across bins, take the largest
+block, repeat. It is configuration-free by construction, which neither the
+constant nor the null-calibrated version is.
+
+NOT IMPLEMENTED. Recorded because the negative result is what makes the
+requirement precise: two thresholds have now failed for the same reason, and the
+third has to normalise for bin count or it will fail identically.

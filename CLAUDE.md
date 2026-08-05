@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 77 items and their status.
+an index of all 78 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -155,6 +155,19 @@ That cost a wrong diagnosis here: `--max-pulses` was reported as unimplemented i
 test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
+
+**THE BLOCK NEEDS A CHANCE MODEL, NOT A NULL RUN** (item 78). Calibrating the
+block against a matched static run — this project's own doctrine — was tested on
+both sweeps' existing static runs BEFORE being implemented, and fails: at 128
+looks 3 correct / 1 false positive, at 48 looks **1 correct / 6 false positives**.
+Because 48 looks gives **25 spectral bins against 65**, chance agreement inflates
+every block, so signal and static are drawn from the same widened distribution
+and no threshold separates them. The gap this names is exact:
+`rs_spectrum_modal_set()` derives `support_min` from a binomial null over
+`n_bin`, but gates the BLOCK on a fixed floor of 4 — **support is normalised for
+chance, the block is not**. The fix is a Monte Carlo over the same null (shuffle
+nominations across bins, take the largest 4-connected block) so the threshold is
+configuration-free. Not implemented.
 
 **THE BLOCK THRESHOLD IS CONTINGENT ON THE LOOK COUNT** (item 77). Item 76's
 clean separation — true modes at block 30-31, static at most 12 — survives a

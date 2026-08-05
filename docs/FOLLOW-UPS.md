@@ -131,6 +131,8 @@ said, not better) and item 7's line numbers.
 | 87 | answered, negative | INGV joined; Etna summit during a paroxysm is still 9x below the floor; ESM unqueried |
 | 88 | **withdraws part of 83, 86, 87** | ESM queried: Grande Dixence IS in a footprint; the structural instruments are EVENT-TRIGGERED |
 | 89 | open, untried | a continuous 6-sensor building record exists; its modes are 3.8 Hz, above the band at 128 looks |
+| 90 | external, converges | an independent refutation of the DEEP Giza claim endorses the front end and reproduces items 11, 38, 58 |
+| 91 | answered, negative | a building's AMBIENT motion injected: 1 of 24 correct, and 9 of 21 answers are the static scene's |
 
 ---
 
@@ -7774,3 +7776,124 @@ reason to quote any result from it with its look count attached, which is item
 building is a poor match for a long dwell**, because long dwell buys frequency
 resolution and spends Nyquist, and item 58's arithmetic runs the other way for
 stiff structures than for the 0.3-1 Hz motions this project was built around.
+
+
+---
+
+## 90. An independent refutation of the DEEP claim endorses the FRONT END, and its controls are this project's.
+
+Foreman, *No Reproducible Evidence for Deep Subsurface Structures Beneath the
+Giza Plateau* (June 2026 preprint; code at
+`github.com/Hassanforeman/subsurface-sar-tomo`, Zenodo 10.5281/zenodo.21065675,
+MIT). A faithful reproduction of Biondi & Malanga's method from the papers and
+patent WO2024008365A1, with controls added.
+
+**What it does NOT dispute is exactly what this project builds.** Verbatim: *"the
+surface-vibration front-end is legitimate and well-precedented... their
+peer-reviewed monitoring of ships, bridges, and the Mosul Dam measures real,
+millimetric surface deformation, and that work stands."* The critique is confined
+to the DEPTH INVERSION -- the "steering matrix" that this project does not
+implement and has never claimed. `--subap paper` is the sub-aperture sweep, block
+7 and earlier; blocks 8-11 are the disputed part.
+
+### Its added controls are the ones this project arrived at separately
+
+- **look-order-shuffle null** -- `rs_shuffle_looks()` and `--null-static`. Note
+  this project's own extra caveat, which the paper does not need: shuffling is
+  NOT valid for `RS_MICROM_EST_PHASE`, because a phase series is unwrapped ACROSS
+  looks.
+- **in-data positive control** -- `--inject-vib`. Item 38 goes further with the
+  ZERO-AMPLITUDE TWIN, which the paper does not have and which is the control
+  that caught prominence endorsing a motionless scatterer at 56.3.
+- **surface-leakage and depth-of-peak guards** -- specific to the depth stage,
+  no analogue here.
+
+### Three findings that confirm this project's, from outside it
+
+1. **"Stacking manufactures agreement, not evidence."** Five same-geometry Umbra
+   passes over Bingham Canyon, a bare open-pit mine with no subsurface void:
+   each pass gives a peak at 117.8x its own null, the stack preserves it at 96.7x
+   against a stacked null of 1.5x, and the reinforced feature sits at ~3 m depth
+   over ground known to contain nothing. **That is item 11 exactly** -- agreement
+   is blind to whatever the operator puts in every scene -- and items 64-65 from
+   the other side, where statistically homogeneous pixels turned out to be
+   homogeneous in the ARTEFACT.
+2. **A contrast-vs-null ratio of 1720x can be an artefact.** The Butte tomogram
+   passes a naive contrast test and is surface-pinned, matching none of the
+   documented workings. This project has the same hazard in its own units --
+   item 38's prominence 56.3 for a target that does not move, item 49's real
+   desert reaching 34.4. **A large ratio against a null is not a detection**, and
+   here is a fourth independent demonstration.
+3. **Free archives are in the wrong MODE.** The repository's own data map:
+   Sentinel-1 and NISAR are systematic and free but stripmap, while the vibration
+   method needs spotlight tasking. **That is item 58**, and it is the same
+   conclusion items 83-89 reached from the sensor side -- what is left is a
+   TASKED collect.
+
+### And one caution aimed straight at this project
+
+The paper's mechanism for a false positive is *"a DFT returns a structured,
+peaked spectrum from any input vector -- signal, noise, or a residual processing
+trend alike."* Strip the depth axis and that is a statement about
+`rs_spectrum_compute_opts()`: a periodogram of a tracked residual always has a
+peak. Everything in items 11, 37, 38, 47 and 80 is this project discovering the
+same thing in its own domain. **The front end is endorsed; the habit of reading
+a peak as a detection is what both bodies of work keep having to unlearn.**
+
+Not yet read: 16 further documents under `docs/` in that repository, including
+`VALIDATION_PROTOCOL.md`, `TECHNICAL_BIBLE.md` and `BUTTE_GROUND_TRUTH.md`.
+
+---
+
+## 91. A real building's AMBIENT motion goes in, and the answer is the static scene's.
+
+Item 89's Hospital Real record, injected and swept: **six target frequencies x
+two independent segments x two clutter seeds, 128 looks, `--estimator phase` at
+2 mm** -- settings identical to items 74/77/80/81 so the answer is comparable.
+Each segment's playback rate was computed from ITS OWN dominant displacement
+frequency, so the injected mode lands on the target in every run.
+
+### The result
+
+```
+  24 injected points, 21 answered, 3 refused
+  correct within half a bin:  1 of 24
+  most common answer: 1.512 Hz, SEVEN times
+  static controls report:      1.512 and 1.210 Hz
+  injected runs returning a value a STATIC control also returns:  9 of 21
+```
+
+**Nine of twenty-one answers are literally the number a motionless scene
+produces**, and 1.512 Hz is the common-mode artefact item 76 identified in all
+three scenes. One correct answer in 24 is chance.
+
+### It is WORSE than the earthquake burst, and that is the point
+
+| injected motion | correct |
+|---|---|
+| pure sine (item 80) | 6 of 6 seeds |
+| earthquake burst, item 77 | 3 of 12 |
+| **building AMBIENT, this item** | **1 of 24** |
+
+The ordering is not an accident. A sine is one line with all the energy; a burst
+is a transient with a dominant arrival; **ambient response is stationary,
+broadband and multi-modal, with no single line ever prominent** -- so
+`rs_spectrum_best_window()` and the modal set both fall through to the loudest
+thing in the band, which is the processing's own artefact.
+
+**Every synthetic recovery in this project used the easiest possible motion, and
+the ordering above measures how much that mattered.** Item 68 said every
+injection before item 69 was a pure sinusoid; item 69 added a real earthquake;
+this adds the case a structure actually spends its life in, and the chain does
+not recover it at all.
+
+It also converges with item 90 from the inside: the reported frequency is the
+shared operator's, not the ground's, and it is identical on a driven scene and a
+motionless one.
+
+### What it does not say
+
+The injected amplitude was 2 mm, far above the building's real 0.68-1.97 um.
+This is a failure of the SELECTION and the estimator at generous amplitude, not a
+sensitivity result -- the real building is 3-8x below the floor before any of
+this applies.

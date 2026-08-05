@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 89 items and their status.
+an index of all 91 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,37 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**A REAL BUILDING'S AMBIENT MOTION GOES IN AND THE ANSWER IS THE STATIC SCENE'S**
+(item 91). Item 89's Granada record injected and swept at settings identical to
+items 74/77/80/81: **1 of 24 correct, which is chance**; the most common answer
+is **1.512 Hz seven times** — item 76's common-mode artefact — and **9 of 21
+answers are a value a STATIC control also returns**. Ordered against the earlier
+injections: **sine 6/6, earthquake burst 3/12, ambient 1/24**. That ordering is
+the finding: a sine is one line holding all the energy, a burst has a dominant
+arrival, and **AMBIENT response is stationary, broadband and multi-modal so no
+line is ever prominent** — the selection falls through to the processing's own
+artefact. Every synthetic recovery here used the easiest possible motion and this
+measures how much that mattered. Waveform prep matters and is recorded: the
+2.5 Hz high-pass was chosen by measurement, because below 2 Hz the dominant
+DISPLACEMENT frequency tracks the filter corner rather than the building.
+
+**AN INDEPENDENT REFUTATION OF THE DEEP GIZA CLAIM ENDORSES THE FRONT END**
+(item 90). Foreman (June 2026 preprint) reproduces Biondi & Malanga from the
+patent and refutes the DEPTH inversion while stating that the surface-vibration
+front end — what this project builds — "is legitimate and well-precedented" and
+"that work stands". Its added controls are the ones arrived at here separately:
+a **look-order-shuffle null** (`rs_shuffle_looks`, `--null-static`) and an
+**in-data positive control** (`--inject-vib`; item 38's zero-amplitude twin goes
+further). Three of its results confirm this project's from outside: **stacking
+five passes over a known-empty pit reinforces a surface-pinned artefact at 96.7x
+the null** (item 11, and items 64-65 from the other side); **a contrast-vs-null
+ratio of 1720x can be an artefact** (item 38's prominence 56.3 on a motionless
+target, item 49's desert at 34.4) — **a large ratio against a null is not a
+detection**; and **free archives are in the wrong MODE**, spotlight tasking being
+required (item 58). Its mechanism for a false positive — "a DFT returns a
+structured, peaked spectrum from any input" — is, with the depth axis stripped, a
+statement about `rs_spectrum_compute_opts()`.
 
 **A CONTINUOUS 6-SENSOR BUILDING RECORD EXISTS, AND ITS MODES ARE ABOVE THE BAND
 AT 128 LOOKS** (item 89). `zenodo.org/records/17358241` — Hospital Real, Granada,

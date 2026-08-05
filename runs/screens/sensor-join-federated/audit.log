@@ -1,0 +1,145 @@
+auditing 410 hits, 76 distinct stations
+  ABOVE FLOOR ES.CENR.HHE 5.87 um  El Paso (La Palma),Spain
+  ABOVE FLOOR AM.R349C.ENE 21.93 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENN 20.30 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENZ 18.52 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENE 22.37 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENN 22.56 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENZ 22.75 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENE 27.70 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENN 23.06 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENZ 23.68 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENE 21.99 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENN 23.00 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENZ 20.90 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENE 24.51 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENN 26.06 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENZ 19.89 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENE 25.96 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENN 24.16 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENZ 23.99 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENE 29.98 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENN 23.82 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENZ 29.11 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENE 28.33 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENN 24.73 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENZ 19.73 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENE 27.69 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENN 24.02 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.R349C.ENZ 26.50 um  Raspberry Shake Citizen Science St
+ WARNING (norm_resp): computed and reported sensitivities differ by more than 5 percent. 
+	 Execution continuing.
+ WARNING (norm_resp): computed and reported sensitivities differ by more than 5 percent. 
+	 Execution continuing.
+ WARNING (norm_resp): computed and reported sensitivities differ by more than 5 percent. 
+	 Execution continuing.
+  25/410  stations measured 13
+  50/410  stations measured 27
+  ABOVE FLOOR HV.UWB.HHE 11.78 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.WRM.HHE 5.59 um  West Rim Hawaii Digital
+  75/410  stations measured 34
+  ABOVE FLOOR HV.WRM.HHZ 45.23 um  West Rim Hawaii Digital
+  ABOVE FLOOR HV.WRM.HHZ 10.09 um  West Rim Hawaii Digital
+  ABOVE FLOOR HV.WRM.HHZ 9.64 um  West Rim Hawaii Digital
+  ABOVE FLOOR HV.UWB.HHE 8.19 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.WRM.HHZ 8.01 um  West Rim Hawaii Digital
+  100/410  stations measured 34
+  125/410  stations measured 34
+  150/410  stations measured 35
+  ABOVE FLOOR HV.UWB.HHE 12.12 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHN 6.90 um  Uwekahuna Bluff Hawaii
+  175/410  stations measured 35
+  ABOVE FLOOR HV.BYL.HHE 46.58 um  Byron's Ledge
+  ABOVE FLOOR HV.BYL.HHN 80.52 um  Byron's Ledge
+  ABOVE FLOOR HV.BYL.HHZ 32.53 um  Byron's Ledge
+  ABOVE FLOOR HV.UWB.HHE 617.10 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHN 653.65 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHZ 689.89 um  Uwekahuna Bluff Hawaii
+  200/410  stations measured 35
+  ABOVE FLOOR HV.UWB.HHE 6.45 um  Uwekahuna Bluff Hawaii
+  225/410  stations measured 35
+  ABOVE FLOOR HV.WRM.HHE 7.89 um  West Rim Hawaii Digital
+  ABOVE FLOOR HV.UWB.HHE 855.49 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHN 604.75 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHZ 985.28 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHE 525.38 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHN 586.66 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHZ 745.11 um  Uwekahuna Bluff Hawaii
+  250/410  stations measured 35
+  ABOVE FLOOR HV.UWB.HHE 746.23 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHN 618.35 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHZ 949.05 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.BYL.HHE 33.40 um  Byron's Ledge
+  ABOVE FLOOR HV.BYL.HHN 57.75 um  Byron's Ledge
+  ABOVE FLOOR HV.BYL.HHZ 22.12 um  Byron's Ledge
+  ABOVE FLOOR HV.UWB.HHE 566.18 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHN 541.98 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHZ 585.97 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHE 1016.42 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHN 593.40 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHZ 1149.60 um  Uwekahuna Bluff Hawaii
+  275/410  stations measured 35
+  ABOVE FLOOR HV.UWB.HHE 646.50 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHN 598.51 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHZ 745.23 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHE 583.50 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHN 521.26 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHZ 678.98 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHE 1048.86 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHN 628.30 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHZ 1455.37 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHE 743.56 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHN 631.35 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHZ 1178.75 um  Uwekahuna Bluff Hawaii
+  300/410  stations measured 35
+  ABOVE FLOOR HV.UWB.HHE 559.96 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHN 598.44 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHZ 682.82 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHE 376.85 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHN 550.67 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHZ 628.84 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHE 697.18 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHN 798.07 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHZ 827.70 um  Uwekahuna Bluff Hawaii
+  325/410  stations measured 35
+  ABOVE FLOOR HV.UWB.HHE 728.80 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHN 657.60 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHZ 841.77 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHE 638.91 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHN 661.72 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHZ 892.15 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHE 794.19 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHN 695.45 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHZ 992.16 um  Uwekahuna Bluff Hawaii
+  350/410  stations measured 39
+  ABOVE FLOOR HV.UWB.HHE 742.98 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHN 595.69 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR HV.UWB.HHZ 826.07 um  Uwekahuna Bluff Hawaii
+  ABOVE FLOOR ES.CJED.HHZ 55.62 um  Jedey (El Paso - La Palma),Spain
+  375/410  stations measured 53
+  ABOVE FLOOR AM.RE1C2.ENE 17.83 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.RE1C2.ENN 14.07 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.RE1C2.ENZ 9.09 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.RE6A9.ENE 15.85 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.RE6A9.ENN 12.58 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.RE6A9.ENZ 16.96 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.S89F6.ENE 10.52 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.S89F6.ENN 7.92 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.S89F6.ENZ 11.85 um  Raspberry Shake Citizen Science St
+  400/410  stations measured 69
+  ABOVE FLOOR AM.S7BC1.ENE 8.22 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.S7BC1.ENN 10.43 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.S7BC1.ENZ 9.53 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.RAA61.ENE 12.99 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.RAA61.ENN 13.10 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.RAA61.ENZ 8.63 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.RAA61.ENE 17.64 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.RAA61.ENN 13.42 um  Raspberry Shake Citizen Science St
+  ABOVE FLOOR AM.RAA61.ENZ 8.57 um  Raspberry Shake Citizen Science St
+
+COVERAGE: 72 of 76 distinct stations measured
+FAILURES BY REASON:
+      136  not a motion channel
+       58  sample rate below 2x band
+       10  get_waveforms: FDSNNoDataException
+AUDIT2_DONE

@@ -625,6 +625,14 @@ ratio must exceed **19** before `p < 0.05`. A single-look pair therefore cannot
 call a modest excess, however large the raw difference looks. Multilooking is the
 remedy and this chain has no independent looks to offer it.
 
+**The p-value assumes the twin is an INDEPENDENT observation**, i.e. a second
+acquisition whose noise realisation differs. A twin from a deterministic
+simulator at the same seed is bit-identical — measured — so under the null the
+ratio is exactly 1 on every window rather than F(2,2)-distributed, and the
+p-value is then grossly conservative: there is no noise floor and *any* ratio
+above 1 is the motion. `mmotion` detects that case (windows whose ratio is 1 to
+within the evidence file's own precision) and says so.
+
 **Do not read the per-window p as corrected.** It is not; the line reporting how
 many windows clear 0.05 against how many are expected by chance is there because
 testing 49 windows is the look-elsewhere effect (item 1), and this project has

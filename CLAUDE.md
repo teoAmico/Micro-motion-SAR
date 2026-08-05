@@ -173,7 +173,14 @@ Kilauea collects fail it on a 24 GB machine.
 `rs_twin_llr()` is the two-sample GLRT for exponentially-distributed periodogram
 bins: **`LLR = 2 log((1+r)/2) - log r`**, one-sided, **scale-free** (only the
 ratio matters, where a difference is part level and part change), with the
-**EXACT** p-value **`1/(1+r)`** from the F(2,2) tail — no simulation. `--twin`
+p-value **`1/(1+r)`** from the F(2,2) tail — no simulation. **THAT p-VALUE
+ASSUMES THE TWIN IS AN INDEPENDENT OBSERVATION, WHICH A SIMULATOR TWIN IS NOT**:
+measured, `sim_cphd` at one seed produces a BIT-IDENTICAL file, so under the null
+the ratio is exactly 1 on every window rather than F(2,2)-distributed, and the p
+is then grossly conservative — there is no noise floor and any ratio above 1 is
+the motion. `mmotion` detects the case (ratio 1 to within the evidence file's
+`%.12g` round-trip) and warns. The p is right for two SEPARATE acquisitions of
+one scene, which is where CCD uses it. `--twin`
 reports it; the CSV carries `twin_llr` and `twin_p`. **Do NOT use a chi-squared
 asymptotic**: Wilks is asymptotic in sample size and there is ONE periodogram
 sample per mean — measured, `2*LLR` reaches 4.67 at p95 against the half-mass

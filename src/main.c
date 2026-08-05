@@ -2884,7 +2884,8 @@ static int rs_cmd_mmotion(int argc, char **argv)
              * ranks above a difference (item 98). Computed on the PSD, because
              * the exponential model is a statement about the periodogram and
              * not about a ratio to the band mean. */
-            double llr_best = 0.0, p_best = 1.0; size_t w_llr = 0, n_sig = 0;
+            double llr_best = 0.0, p_best = 1.0;
+            size_t w_llr = 0, n_sig = 0, n_exact = 0;
             for (size_t w = 0; w < spec.n_win; w++) {
                 double p_psd = 0.0, p_prom = 0.0, l = 0.0, pv = 1.0;
                 rs_spectrum_prominence_at(&spec, w, probe_hz, NULL,
@@ -2893,6 +2894,14 @@ static int rs_cmd_mmotion(int argc, char **argv)
                     rs_twin_llr(p_psd, twin_psd[w], &l, &pv) == RS_OK &&
                     l > llr_best) { llr_best = l; p_best = pv; w_llr = w; }
                 if (pv < 0.05) n_sig++;
+                /* A power ratio of one to within the CSV's own round-trip
+                 * precision means the two samples are the same numbers, so the
+                 * twin shares this run's noise realisation and the p-value's
+                 * independence assumption fails. The tolerance is 1e-9 because
+                 * the evidence file stores %.12g, not because 1e-9 is
+                 * physically meaningful. */
+                if (twin_psd[w] > 0.0 &&
+                    fabs(p_psd / twin_psd[w] - 1.0) < 1e-9) n_exact++;
             }
             printf("  twin LLR at %.4f Hz: best %.3f at window %zu (%zu,%zu), "
                    "exact p = %.4f\n"
@@ -2907,10 +2916,20 @@ static int rs_cmd_mmotion(int argc, char **argv)
                    "            %zu of %zu windows reach p < 0.05, against %.1f "
                    "expected by chance:\n"
                    "            the per-window p is UNCORRECTED for testing %zu "
-                   "of them (item 1).\n",
+                   "of them (item 1).\n%s",
                    probe_hz, llr_best, w_llr, w_llr / spec.n_win_rg,
                    w_llr % spec.n_win_rg, p_best,
-                   n_sig, spec.n_win, 0.05 * (double)spec.n_win, spec.n_win);
+                   n_sig, spec.n_win, 0.05 * (double)spec.n_win, spec.n_win,
+                   n_exact > 0
+                     ? "            NOTE: some windows have a power ratio of "
+                       "EXACTLY 1, so the twin shares\n"
+                       "            this run's noise realisation (a deterministic "
+                       "simulator twin). The\n"
+                       "            p-value assumes INDEPENDENT samples and is "
+                       "then grossly conservative:\n"
+                       "            there is no noise floor, and any ratio above "
+                       "1 is the motion.\n"
+                     : "");
             printf("  twin difference at %.4f Hz, against %s:\n"
                    "            %zu of %zu windows gained; median %+.3f "
                    "(scene-wide), best %+.3f at window %zu (%zu,%zu)\n"

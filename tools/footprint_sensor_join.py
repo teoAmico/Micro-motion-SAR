@@ -26,6 +26,13 @@ exist.
 """
 import argparse, json, math, sys, urllib.parse, urllib.request
 
+# THE FEDERATOR, NOT ONE ARCHIVE. service.iris.edu/fdsnws answers only for what
+# IRIS holds, and that is not the world: the first screen run with it returned
+# 289 of its 315 hits from IRISDMC, five from INGV and none from Japan or from
+# most of EIDA. The federator resolves a query across EVERY FDSN data centre and
+# reports which archive holds each channel, so Europe, Japan and the national
+# networks are reachable in the same call rather than one endpoint at a time.
+FDSN_FEDCATALOG = "https://service.iris.edu/irisws/fedcatalog/1/query"
 FDSN_STATION = "https://service.iris.edu/fdsnws/station/1/query"
 FDSN_AVAIL = "https://service.iris.edu/fdsnws/availability/1/query"
 
@@ -69,7 +76,11 @@ def stations_in(ring, start, end):
     then filtered -- which is where almost everything is eliminated."""
     lats = [p[0] for p in ring]
     lons = [p[1] for p in ring]
-    text = get(FDSN_STATION, {
+    text = get(FDSN_FEDCATALOG, {
+        # The federator refuses a purely spatial query -- it needs a network or
+        # station argument -- and get() returns None on the 400, which is
+        # indistinguishable from an empty result. Both cost a wrong answer once.
+        "net": "*",
         "minlatitude": min(lats), "maxlatitude": max(lats),
         "minlongitude": min(lons), "maxlongitude": max(lons),
         "starttime": start, "endtime": end,
@@ -77,22 +88,41 @@ def stations_in(ring, start, end):
     })
     if not text:
         return [], 0
-    found, n_box = [], 0
+    # The federator's text format is the station format in blocks, each preceded
+    # by DATACENTER= and the archive's own service URLs. Those lines carry no
+    # pipes and are skipped by the field count, but the datacentre is worth
+    # keeping: it is what says WHERE a waveform must then be asked for.
+    found, n_box, centre = [], 0, "?"
     for line in text.splitlines():
-        if not line or line.startswith("#"):
+        line = line.strip()
+        if line.startswith("DATACENTER="):
+            centre = line.split("=", 1)[1].split(",")[0]
+            continue
+        if not line or line.startswith("#") or "=" in line.split("|")[0]:
             continue
         parts = line.split("|")
         if len(parts) < 6:
             continue
         n_box += 1
-        lat, lon = float(parts[2]), float(parts[3])
+        try:
+            lat, lon = float(parts[2]), float(parts[3])
+        except ValueError:
+            continue
         if inside(lat, lon, ring):
-            found.append((parts[0], parts[1], lat, lon, parts[5]))
+            found.append((parts[0], parts[1], lat, lon, parts[5], centre))
     return found, n_box
 
 
 def has_waveform(net, sta, start, end):
-    """Whether any channel actually has samples across the aperture. A station
+    """Whether any channel actually has samples across the aperture.
+
+    STILL ASKS IRIS ONLY, WHICH IS NOW THE WEAK LINK. stations_in() federates
+    and therefore returns stations whose waveforms live at EIDA, NIED or a
+    national archive; this availability call does not, so such a station reads
+    as having no data when it has plenty. That is the same failure that once
+    reported "0 of 553 with data" from a dead endpoint, and it is why the
+    federator returns each station's datacentre -- routing this query to it is
+    the next change, not an optional refinement. A station
     being OPEN is not the same as it having recorded -- strong-motion
     instruments in buildings are usually triggered, so they are open for
     decades and hold data for minutes of it."""
@@ -122,16 +152,16 @@ def main():
         ring = ring_of(item["geometry"])
         found, n_box = stations_in(ring, start, end)
         recording = []
-        for net, sta, lat, lon, name in found:
+        for net, sta, lat, lon, name, centre in found:
             if has_waveform(net, sta, start, end):
-                recording.append((net, sta, lat, lon, name))
+                recording.append((net, sta, lat, lon, name, centre))
             if args.verbose:
                 print(f"      {net}.{sta:<6} {lat:8.4f},{lon:9.4f}  {name}")
         verdict = ("MEASUREMENT" if recording else
                    "in footprint, no data" if found else
                    "nearby but outside" if n_box else "nothing in the box")
         print(f"{item['id'][:52]:<52} {n_box:>4} {len(found):>3} {len(recording):>4}  {verdict}")
-        for net, sta, lat, lon, name in recording:
+        for net, sta, lat, lon, name, centre in recording:
             print(f"      -> {net}.{sta} {lat:.4f},{lon:.4f}  {name}")
 
 

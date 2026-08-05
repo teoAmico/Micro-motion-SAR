@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 98 items and their status.
+an index of all 99 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,27 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**ITEM 1 IS ANSWERED AND THE ANSWER IS NO** (item 99). Multiplicity does not
+explain item 96's 100% false-positive rate. The modelled family-wise threshold
+over 49 windows x 62 bins is prominence **11.01**; the twelve motionless scenes
+report **20.1-36.9**, all clearing it, with implied family-wise p from 5.7e-6 to
+2.9e-13. The **empirical null** (588 per-window prominences over 12 motionless
+scenes, `runs/synthetic/2026-08-06-null-distribution/`) shows why the model is
+useless: **mean 14.21 against Exp(1)'s 1.00, p95 27.06 against 3.00 — fourteen
+times too large.** Since prominence is the peak over the mean of 62 bins, **a
+prominence of 14 means one bin holds 23% of the band's power on a scene where
+NOTHING MOVES**, and the worst holds 60%. That is a COHERENT LINE, not a chance
+maximum, and item 63's per-realisation residual carrier is the mechanism.
+**Both candidate explanations are now eliminated** — the frequency search costs
+only ~20% in SNR (item 98), and multiplicity cannot bridge 11 to 37. **What
+remains is that the artefact is REAL SIGNAL in the tracked series, so the
+CARRIER REMOVAL (items 51-53, 63) is where to attack it** — a different half of
+the codebase from everything items 91-98 touched. A self-calibrated threshold
+above all twelve statics must exceed 36.9, which admits item 38's real
+injections at 38-47 **and its motionless bright scatterer at 56.3**: it separates
+motionless CLUTTER from an injection and still cannot separate a motionless
+SCATTERER from a moving one.
 
 **THE TWIN LIKELIHOOD RATIO IS IMPLEMENTED, AND ITS CEILING IS THE FINDING.**
 `rs_twin_llr()` is the two-sample GLRT for exponentially-distributed periodogram

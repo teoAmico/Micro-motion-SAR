@@ -42,7 +42,7 @@ said, not better) and item 7's line numbers.
 
 | # | status | what it is about |
 |---|---|---|
-| 1 | open, partly implemented | the quantisation floor has no multiplicity correction |
+| 1 | **answered, negative (99)** | the quantisation floor has no multiplicity correction |
 | 2 | answered, negative | no distributed-texture fixture on which the chain works |
 | 3 | open, premise unestablished | the Capella SGN override is keyed on a vendor string |
 | 4 | open, untried | long dwells may need deliberate truncation |
@@ -140,6 +140,7 @@ said, not better) and item 7's line numbers.
 | 96 | **bounds 95** | 12 of 12 motionless scenes report a confident frequency, 9 distinct; there is no clean seed |
 | 97 | **locates the defect** | the paired twin finds the injected frequency in 76% of runs whose report is wrong: the SELECTION loses it |
 | 98 | external, actionable | --twin is CCD and the LLR beats it; the peak search is the look-elsewhere effect, which is item 1 |
+| 99 | **answers 1** | multiplicity does NOT explain the false positives; the artefact is a coherent line holding 23% of the band |
 
 ---
 
@@ -8432,3 +8433,89 @@ collect there is no baseline library, which is a sharper way of saying what item
    this project has never tried.
 
 None is implemented.
+
+
+---
+
+## 99. ITEM 1 ANSWERED, NEGATIVELY: multiplicity does not explain the false positives. The artefact is a real coherent line.
+
+Item 1 -- *"the quantisation floor is a per-window test with no multiplicity
+correction"* -- is this project's oldest entry, open since before everything else
+in this file. Item 98 gave it its name, the LOOK-ELSEWHERE EFFECT, and item 96
+gave it a target: a 100% false-positive rate on motionless clutter. This tests
+whether the one explains the other.
+
+**It does not.**
+
+### The modelled trials factor is not nearly enough
+
+Prominence of a single bin against a white-noise band is approximately Exp(1), so
+`P(prom > x) = exp(-x)` and a family-wise 5% threshold over `W x K` tests is
+`-log(0.05/(W*K))`:
+
+| tests | threshold |
+|---|---|
+| one bin | 3.00 |
+| one window, 62 bins | 7.12 |
+| **49 windows x 62 bins = 3038** | **11.01** |
+
+Item 96's twelve motionless scenes reported prominence **20.1 to 36.9**. **All
+twelve clear the 3038-trial threshold**, with implied family-wise p from 5.7e-6
+down to 2.9e-13. No trials factor over this many tests can excuse them.
+
+### And the empirical null shows why: the model is wrong by 14x
+
+Re-run keeping every window: **588 per-window prominences over 12 motionless
+scenes** (`runs/synthetic/2026-08-06-null-distribution/`).
+
+```
+  measured   mean 14.21   median 12.53   p95 27.06   p99 32.86   max 36.87
+  Exp(1)     mean  1.00   median  0.69   p95  3.00   p99  4.61
+```
+
+**The null is 14x too large in the mean.** Prominence on a motionless scene is
+not a chance maximum at all -- it is a systematic property of every window.
+
+### What a prominence of 14 actually means
+
+Prominence is the peak over the mean of `K = 62` admissible bins, so the peak's
+share of the band's power is `prominence / K`:
+
+```
+  null mean          14.2  ->  the peak holds 23% of the band's power
+  worst static scene 36.9  ->                 60%
+```
+
+**On a scene where nothing moves, one bin routinely holds a quarter of the band
+and sometimes three fifths.** That is a coherent line, not noise -- consistent
+with item 63's mechanism, where each clutter realisation's scatterer geometry
+sets its own residual carrier `(4*pi/lambda)*dX*dx/R`.
+
+### Both candidate explanations are now eliminated
+
+- **the frequency search**: item 98 measured the GLRT-over-unknown-frequency
+  penalty at ~20% in SNR. Too small.
+- **multiplicity**: this item. The peaks are 20-37 where 11 would be generous.
+
+**What is left is that the artefact is REAL SIGNAL in the tracked series**, and
+the place to attack it is the CARRIER REMOVAL (items 51-53, 63), not the
+statistics. That is a different half of the codebase from everything items 91-98
+touched.
+
+### The empirical null does buy one usable thing, and it is not detection
+
+A threshold above all twelve motionless scenes must sit above **36.9**. Against
+item 38's numbers:
+
+```
+  real injections                  38-47  ADMITTED
+  MOTIONLESS bright scatterer       56.3  ADMITTED TOO
+```
+
+So a self-calibrated prominence threshold **separates motionless CLUTTER from an
+injection, and still cannot separate a motionless SCATTERER from a moving one**.
+Item 38 is unchanged, and recoverability and detectability stay apart.
+
+**Bounds:** one fixture family, `--estimator phase`, 128 looks, 12 realisations.
+The 95th percentile of a 12-sample maximum is itself uncertain; 12 controls give
+`p_min = 1/13`, which is item 49's arithmetic.

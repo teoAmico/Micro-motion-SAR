@@ -156,6 +156,19 @@ test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
 
+**`--rbins` MEANS TWO DIFFERENT THINGS AND THE DOMAIN DECIDES WHICH.** On a
+TIME-domain product the samples are delay bins, so it selects a near-range window
+and costs scene extent. On an **FX-domain** product — which is what **Capella and
+Umbra both ship** — the samples are TRANSMITTED FREQUENCIES and the cap is
+applied BEFORE the inverse transform (`cphd.c:704` against the transform at 885),
+so it narrows the BANDWIDTH and coarsens range resolution in proportion. Keeping
+4000 of 21343 FX samples is a **5.3x loss of range resolution, not a smaller
+scene**, and nothing warns. It is not a memory remedy: expressing "a range window
+at full bandwidth" on an FX product needs the window applied AFTER the transform,
+or a streaming read. Related: **`info` loads the whole signal array**, so it
+cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
+Kilauea collects fail it on a 24 GB machine.
+
 **ALL THREE PUBLIC LONG-DWELL ARCHIVES ARE NOW JOINED, AND THE SEARCH IS
 FINISHED** (item 85). Capella 940 collects / 12 structures / **0 bridges, 0
 dams**; Umbra 12,404 / 81 / **4 bridges**, 0 dams; ICEYE 391 / **0 structures**

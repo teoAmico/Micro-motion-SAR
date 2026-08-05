@@ -11,6 +11,37 @@ would reintroduce them from memory. The reasoning behind a fix lives in the
 commit and beside the code; what is kept here is the *shape* of the mistake,
 because several of these are patterns rather than incidents.
 
+## `--rbins` means two different things and documents only one
+
+`src/readers/cphd.c:704` caps `n_rbin` from `n_samp` **before** the FX-to-delay
+inverse transform at line 885, so for an **FX-domain** product the flag truncates
+the TRANSMITTED FREQUENCY BAND rather than selecting a range window. The usage
+text in `src/main.c` said "--rbins reads a window of range bins", which is true
+only for a TIME-domain product.
+
+**Capella and Umbra both ship FX-domain CPHD**, so on every real collect this
+project uses, the flag is a bandwidth cut. On the Kilauea collect
+`CAPELLA_C10_SP_CPHD_HH_20240609091921` -- `NumSamples` 21343, `FxMin` 9.40 GHz,
+`FxMax` 9.90 GHz -- `--rbins 4000` keeps 18.7% of a 500 MHz band and coarsens
+range resolution about **5.3x**. Nothing warns.
+
+**How it surfaced.** The queued Kilauea job needed a memory remedy: 282,972
+pulses x 27,650 bins is 62.6 GB against 24 GB of RAM, and `info` on the finished
+download failed outright. `--rbins 4000` made `mmotion` run in 4.96 GB with the
+full dwell intact (0.0334 Hz resolution, 29.9 s), which looked like the right
+answer and is not one -- the run was at a fifth of the collect's range
+resolution.
+
+**Done:** the usage text now states the DomainType dependence and quantifies it.
+**Not done:** the flag still cannot express "a range window at full bandwidth" on
+an FX product, which is the operation actually wanted. That needs the window
+applied AFTER the inverse transform, or a streaming read; both are changes to the
+reader's memory model rather than to a flag.
+
+**Second, smaller finding beside it:** `info` loads the whole signal array to
+report geometry and timing, so it cannot describe a product larger than RAM --
+the one command whose entire job is to tell you what you have.
+
 ## Reviews performed
 
 | date | commit | scope | outcome |

@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 85 items and their status.
+an index of all 86 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,25 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**RESIF ADDS ONE EUROPEAN PAIRING AND IT IS PROVEN-STATIC** (item 86). The
+French FDSN node, **5932 stations / 118 networks**, closes item 83's US-only
+limit. It HAS the structures CESMD-style typing would want — four dam stations
+including **Barrage de la Manzo at BASE and TOP**, and `RA.PYTO` "Tour Ophite
+Terrasse" — but **no `sttype` field**, so they are found by site name, and
+**every bridge match is a false positive** because French communes contain
+"Pont". **The operating-period filter is where this turns**: space-only counts
+are 1 / 45 / **292** for Capella / Umbra / ICEYE, and after filtering to stations
+actually RUNNING at collect time they are 1 / 5 / 48, then after dwell >= 15 s
+they are **1 / 0 / 0**. ICEYE's 292 is real Piton de la Fournaise coverage that
+dies at 10.0 s dwell; Umbra's 243-collect Yasur coverage does not survive the
+time filter at all. **Quote a footprint-join count with its time filter attached
+or not at all.** The one pairing — `FR.CURIE`, Paris, 26.6 s Capella, 40,960
+bytes during the aperture against a 430,080-byte control — measures **0.5101 um
+RMS in 0.3-3 Hz, 10.8x BELOW the floor**, with a midday traffic control at
+0.4132 um. **A second Oroville**: interpretable null, not a positive control.
+**And no dam again** — two networks, two continents, three archives, and no
+instrumented dam has ever been imaged by a long-dwell collect.
 
 **ALL THREE PUBLIC LONG-DWELL ARCHIVES ARE NOW JOINED, AND THE SEARCH IS
 FINISHED** (item 85). Capella 940 collects / 12 structures / **0 bridges, 0

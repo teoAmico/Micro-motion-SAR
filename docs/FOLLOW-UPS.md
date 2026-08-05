@@ -127,6 +127,7 @@ said, not better) and item 7's line numbers.
 | 83 | answered, negative | instrumented structures are ABOVE the floor and never observed moving; 0 bridges and 0 dams ever in a footprint |
 | 84 | **partly withdraws 63** | Umbra has 228 collects >= 30 s, not none, and covers two instrumented bridges |
 | 85 | done | all three public archives joined; ICEYE covers no structure; one bridge pairing exists in total |
+| 86 | answered, negative | RESIF joined; one European pairing and it is proven-static; still no dam anywhere |
 
 ---
 
@@ -7469,3 +7470,78 @@ So the search across public archives is finished, and it returns one candidate.
 Whether that candidate is worth anything turns on a question no archive can
 answer: whether a bridge under traffic clears item 53's 5.5 um floor. That is a
 measurement on data already identified, not another search.
+
+
+---
+
+## 86. RESIF joined: one pairing in Europe, and it is another proven-static scene.
+
+Item 83's screen was CESMD, which is US-only, and said so. `ws.resif.fr` is the
+French FDSN node and the first non-US network joined here: **5932 stations over
+118 networks**, put through the same containment test and the same control.
+
+### RESIF has the structures CESMD's typing would have found, and no field to find them by
+
+There is no `sttype`, so structures must be found by SITE NAME. That works and it
+is a heuristic, not a classification:
+
+- **dams**: `FR.OGGM` Grand'Maison, `FR.SMPL` Sampolo, and `RA.CGMB`/`RA.CGMH` --
+  the Barrage de la Manzo instrumented at **BASE and TOP**, a genuine structural
+  array of exactly the kind this project has never had.
+- **buildings**: `RA.PYTO` "Tour Ophite Terrasse 01-02", `RA.CGCO`, `RA.OCLD`,
+  `FR.CURIE`, plus schools and town halls.
+- **bridges: every match is a FALSE POSITIVE.** French communes routinely contain
+  "Pont" -- Pont-de-Claix, Vallon-Pont-d'Arc, Pont de Salars. The heuristic finds
+  the word and not the structure, which is the cost of having no type field.
+
+### The operating-period filter is where this one turns
+
+Many RESIF networks are TEMPORARY experiments that were decommissioned before the
+SAR archives existed, so a space-only join badly overstates the coverage:
+
+| archive | inside a footprint | station OPERATING then | and dwell >= 15 s |
+|---|---|---|---|
+| Capella | 1 | 1 | **1** |
+| Umbra | 45 | 5 | **0** |
+| ICEYE | **292** | 48 | **0** |
+
+ICEYE's 292 is genuine coverage of the Piton de la Fournaise network -- its open
+programme points at catastrophes and a volcano network is what sits under one --
+and it dies on dwell, every collect being 10.0 s. Umbra's apparent 243-collect
+Yasur coverage does not survive the operating filter at all. **Quote a
+footprint-join count with its time filter attached or not at all**; this is the
+same shape as item 84's tail-from-a-sample.
+
+### The one pairing, measured
+
+`FR.CURIE`, bâtiment Curie, Paris, inside
+`CAPELLA_C02_SP_CPHD_HH_20210212074546_20210212074612`, **dwell 26.6 s**. HH
+channels at 100 Hz, so the SEED band code is right. **40,960 bytes during the
+aperture**, against a control window returning 430,080.
+
+Displacement, response removed, 0.3-3 Hz:
+
+```
+  during the aperture   3-component 0.5101 um   ->  10.8x BELOW the 5.5 um floor
+  midday control        3-component 0.4132 um   ->  13.3x below
+```
+
+**A second Oroville** (item 60): a PROVEN-STATIC scene, where a null is
+interpretable and a reported frequency would be a proven false positive. It is
+not a positive control and cannot become one. The midday traffic window is no
+higher, so nothing about the hour rescues it.
+
+### And no dam, again
+
+Not one of RESIF's four dam stations is inside any footprint of any of the three
+archives. Item 83 found the same across CESMD's 14 dams. **Two independent
+sensor networks on two continents, three SAR archives, and no instrumented dam
+has ever been imaged by a long-dwell collect.**
+
+### What it does not do
+
+The join tests space and the station's operating period. It does NOT test
+earthquake coincidence: RESIF station metadata carries no event list, unlike
+CESMD's, so items 83's shaking-overlap question would need a separate catalogue
+query. Nothing here contradicts item 83's duty-cycle arithmetic; it simply was
+not re-asked.

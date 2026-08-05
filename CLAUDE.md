@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 92 items and their status.
+an index of all 93 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,19 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**PRE-REGISTRATION IS NOW SEEDED WITH EVERY RUN** (item 92, adopted).
+`docs/PREREGISTRATION.md` holds the form and the reasoning; `tools/new-run.sh`
+writes a filled-in `PREREG.md` beside `RUN.md` and prints **"commit it BEFORE
+running anything"**, so the git history shows the hypotheses predate the data. It
+encodes this project's own failures as checks: H1 needs a SWEEP not a point
+(item 2), H2 is scored on the INJECTION GEOMETRY (item 40), H4 requires the
+ZERO-AMPLITUDE TWIN (item 38), the pipeline freeze demands `sigma_px` be checked
+against the injected amplitude before anything is built on a tracked series
+(item 76), the null section records that a SHUFFLE NULL IS INVALID for
+`--estimator phase`, and the reporting rules bind every figure to its
+configuration (items 77, 84, 86). Runs may be marked **exploratory** — that is
+legitimate; exploration reported as confirmation is not.
 
 **FOUR THINGS TRANSFER FROM THAT REPOSITORY'S VALIDATION PRACTICE** (item 92).
 **(1)** Their `ERRATUM_KOMATI.md` is this project's recurring rule from outside: a

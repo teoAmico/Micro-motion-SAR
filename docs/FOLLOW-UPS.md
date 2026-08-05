@@ -134,6 +134,7 @@ said, not better) and item 7's line numbers.
 | 90 | external, converges | an independent refutation of the DEEP Giza claim endorses the front end and reproduces items 11, 38, 58 |
 | 91 | answered, negative | a building's AMBIENT motion injected: 1 of 24 correct, and 9 of 21 answers are the static scene's |
 | 92 | external, adopt | their validation practice: an erratum that is our recurring rule, a derived threshold, and a pre-registration template |
+| 93 | answered, negative | the Butte ground-truth chain is geometry only; two "dead" links are 403/429 refusals |
 
 ---
 
@@ -7984,3 +7985,57 @@ control passing -- and **REAL 3.3x against a null of 1.4x, leakage 0.28: null.**
 A densely-mapped shallow void network, undetected, at the site most likely to
 succeed. Their `docs/BUTTE_GROUND_TRUTH.md` cites NMMR, MBMG's depth-coded 3-D
 model and USGS I-2050-C, which is where the user's citation [8] came from.
+
+
+---
+
+## 93. The Butte ground-truth chain audited: geometry, no motion, and two "dead" links that are not dead.
+
+The user's citation [8] traces to `BUTTE_GROUND_TRUTH.md` in the external
+repository. Its nine links were fetched and checked rather than assumed.
+
+### Link audit
+
+| status | source |
+|---|---|
+| 200 | `mmr.osmre.gov` (National Mine Map Repository), `osmre.gov` NMMR programme page |
+| 200 | `mbmg627_Butte-miningdistrict.pdf` (2.4 MB), `pubs.usgs.gov/imap/2050c/report.pdf` (7.7 MB) |
+| 200 | `pitwatch.org` 3-D tunnel model, `storyofbutte.org` |
+| **429** | `mtstandard.com` -- RATE LIMITED |
+| **403** x2 | `mindat.org` loc-6850, loc-27746 -- BOT-BLOCKED |
+
+**The 403s and the 429 are refusals to serve, not missing pages**, and this
+project has now been caught by that distinction twice in one session -- the
+`MB` station query returned HTTP 307 with 0 bytes and would have been recorded as
+"0 stations" (item 87's addendum). A non-200 is a reason to look again, not a
+result.
+
+### What the sources actually contain
+
+Both primary PDFs were text-extracted and searched:
+
+```
+  MBMG 627 (Geology of the Butte mining district), 31,743 chars
+      "seismic" x2   "monitor" x0   "vibrat" x0   "accelerom" x0
+  USGS I-2050-C (mines and prospects, Butte 1x2 quadrangle), 446,661 chars
+      "monitor" x6   "seismic" x0   "vibrat" x0   "accelerom" x0
+```
+
+**Neither contains a displacement time series, an instrument, or a monitoring
+record.** They are void geometry and geology: where the workings are, at what
+depth, in what rock.
+
+### The conclusion, now verified rather than asserted
+
+Item 57's rule holds against the actual sources: **a proxy is not a
+measurement.** Mine maps establish that voids exist and where -- which is exactly
+what the external work needed, because its hypothesis was about STRUCTURE. They
+supply nothing this project needs, because its hypothesis is about MOTION, and no
+frequency or amplitude can be validated against a map.
+
+The one motion-bearing source in the Butte area is the **MBMG seismic network
+(`MB`)**, joined earlier in this session: 61 stations, two of them in Butte
+(`MB.BUT`, `MB.NQBU`), both inside a single Umbra collect of **10.8 s dwell with
+no CPHD** -- below item 58's dwell bar and unprocessable by the phase-history
+route. Butte is therefore a good ground truth for the question the external work
+asked and not for this one.

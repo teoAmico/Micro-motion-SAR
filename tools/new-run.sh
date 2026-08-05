@@ -38,4 +38,21 @@ mkdir -p "$dir"
   echo
   echo "*To be completed. A null result stays here rather than being deleted.*"
 } > "$dir/RUN.md"
+
+# The pre-registration is seeded BESIDE the run record and is meant to be
+# committed BEFORE the first processing command, so the git history shows the
+# hypotheses predate the data. See docs/PREREGISTRATION.md for why: everything in
+# FOLLOW-UPS.md was scored after the numbers were in, and items 2, 38, 40, 69-74,
+# 77, 84 and 86 are what that cost.
+# Only the FORM is copied, from the "# PREREG" heading down; the rationale stays
+# in docs/PREREGISTRATION.md so it is maintained in one place.
+{
+  echo "<!-- Why this form exists, and the failures it is aimed at:"
+  echo "     docs/PREREGISTRATION.md -->"
+  awk '/^# PREREG/,0' docs/PREREGISTRATION.md
+} | sed -e "s|<scene>|$scene|" -e "s|<suffix>|$suffix|" \
+      -e "s|\`<date>\`|\`$(date -u +%Y-%m-%d)\`|" \
+      -e "s|\`<sha>\`|\`$(git rev-parse --short HEAD 2>/dev/null || echo unknown)\`|" \
+  > "$dir/PREREG.md"
 echo "$dir"
+echo "seeded $dir/PREREG.md -- fill it in and COMMIT IT BEFORE running anything" >&2

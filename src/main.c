@@ -1332,7 +1332,7 @@ static int rs_cmd_mmotion(int argc, char **argv)
                "                          [--null-scatterers N] [--null-alpha F]\n"
                "                          [--pulse-start N] [--max-pulses N]\n"
                "                          [--inject-vib FREQ_HZ[,AMP_MM[,REL]]]\n"
-               "                          [--inject-at DX,DY]\n"
+               "                          [--inject-at DX,DY] [--stft LOOKS]\n"
                "                          [--inject-wave FILE[,RATE_HZ[,AMP_MM[,REL]]]]\n"
                "                          [--stream N]\n"
                "                          [--estimator correlation|phase|splitband|argmax]\n"
@@ -2012,6 +2012,46 @@ static int rs_cmd_mmotion(int argc, char **argv)
         rs_microm_free(&m); rs_subap_stack_free(&stack);
         rs_cphd_free(&c);
         return 1;
+    }
+
+
+    /* --stft L replaces the whole-dwell periodogram with a short-time max-hold
+     * over segments of L looks. Item 71: the whole-dwell estimator assumes the
+     * motion lasts the dwell, and a real structure under transient excitation
+     * does not -- a burst present for a quarter of the record is diluted by its
+     * duty cycle while the noise it competes with is not. Costs frequency
+     * resolution, which is why it is opt-in and not the default. */
+    {
+        const char *stft = rs_opt(argc, argv, "--stft");
+        if (stft) {
+            const long seg = strtol(stft, NULL, 10);
+            if (seg < 4 || (size_t)seg > m.n_looks) {
+                fprintf(stderr, "mmotion: --stft wants a segment of 4..%zu "
+                                "looks, got '%s'\n", m.n_looks, stft);
+                rs_spectrum_free(&spec); rs_microm_free(&m);
+                rs_subap_stack_free(&stack); rs_cphd_free(&c);
+                return 1;
+            }
+            st = rs_spectrum_maxhold(&spec, &m, src, (size_t)seg, f_min,
+                                     rs_opt_flag(argc, argv, "--no-detrend")
+                                         ? RS_DETREND_NONE : RS_DETREND_LINEAR);
+            if (st != RS_OK) {
+                rs_report_error("mmotion", st);
+                rs_spectrum_free(&spec); rs_microm_free(&m);
+                rs_subap_stack_free(&stack); rs_cphd_free(&c);
+                return 1;
+            }
+            printf("SHORT-TIME MAX-HOLD: %ld-look segments, hop %ld, over %zu "
+                   "looks.\n"
+                   "  Resolution is now %.4f Hz, not %.4f -- two modes closer "
+                   "than that MERGE,\n"
+                   "  whatever the bin spacing says. Absolute levels are not "
+                   "comparable with a\n"
+                   "  whole-dwell run: a maximum over segments sits above their "
+                   "mean.\n",
+                   seg, seg / 2, m.n_looks,
+                   spec.df * (double)m.n_looks / (double)seg, spec.df);
+        }
     }
 
     printf("spectra: %zu bins, %.4f Hz resolution\n", spec.n_freq, spec.df);

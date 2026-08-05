@@ -1663,6 +1663,59 @@ typedef struct {
 resonarsat_status_t rs_spectrum_local_window(const rs_spectrum_t *spec,
                                              rs_local_peak_t *out);
 
+/* SHORT-TIME MAX-HOLD, FOR MOTION THAT DOES NOT LAST THE WHOLE DWELL.
+ *
+ * WHY. Every spectrum this project computes is one periodogram over the entire
+ * dwell, and that estimator assumes the motion is STATIONARY across it. Item 71
+ * found the precondition unstated and unmet: an earthquake record injected into
+ * the fixture has an envelope that rises and decays inside 20 s, and its
+ * dominant mode does not appear on contiguous ground in any window at all --
+ * not because the selection policy discards it but because the whole-dwell
+ * periodogram dilutes a burst by its duty cycle. A tone present for a quarter
+ * of the record loses 6 dB against a tone present throughout, and the noise it
+ * competes with does not.
+ *
+ * WHAT. The series is cut into overlapping segments of 'seg_len' looks, each
+ * detrended, Hann-windowed and transformed, and the per-bin result is the
+ * MAXIMUM over segments rather than the mean. Welch's average is the wrong
+ * combination here: averaging re-imposes exactly the dilution being escaped.
+ * Max-hold keeps a transient at the level it reached while it was present,
+ * which is what makes it visible against a floor that was there throughout.
+ *
+ * The literature is clear that this is the trade: a short-time transform
+ * preserves transients that a multitaper estimator smears, and pays for it in
+ * frequency resolution and variance. Multitaper is the better choice when the
+ * signal is stationary and weak; it is the wrong one when the signal is strong
+ * but brief, which is this case.
+ *
+ * THE COST IS REAL AND IS NOT HIDDEN. A segment of L looks resolves 'fs/L', so
+ * halving the segment doubles the resolvable spacing. Segments are zero-padded
+ * back to the full length so the BIN SPACING and every downstream index are
+ * unchanged -- but padding restores spacing, never resolution, and two modes
+ * closer than fs/L merge whatever the bin count says. Choose 'seg_len' from the
+ * mode spacing the record actually has, and if the motion IS stationary this
+ * function can only lose: it discards the coherent gain of the full record.
+ *
+ * Taking a maximum over segments also raises the noise floor, because the
+ * maximum of several noisy estimates exceeds their mean. That inflates every
+ * bin, so 'prominence' -- a ratio against the band mean -- is only mildly
+ * affected, while any absolute level from this spectrum is not comparable with
+ * one from rs_spectrum_compute_opts().
+ *
+ * Rewrites 'spec->psd', 'dominant_freq', 'amplitude' and 'prominence' in place
+ * and leaves everything else -- excursion, quality, the correlation-surface
+ * statistics, d_a -- as the tracker set it. 'f_min' must be the value the
+ * spectrum was built with, so the band floor stays the same one.
+ *
+ * Returns RS_ERR_ARG on a NULL argument or a 'seg_len' below 4 or above the
+ * look count. */
+resonarsat_status_t rs_spectrum_maxhold(rs_spectrum_t *spec,
+                                        const rs_microm_t *m,
+                                        rs_spectrum_source_t source,
+                                        size_t seg_len,
+                                        double f_min,
+                                        rs_detrend_t detrend);
+
 /* One mode of a reported modal set. See rs_spectrum_modal_set(). */
 typedef struct {
     size_t bin;           /* its spectral bin */

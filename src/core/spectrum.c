@@ -1039,6 +1039,124 @@ resonarsat_status_t rs_spectrum_am_check(const rs_microm_t *m,
     return RS_OK;
 }
 
+/* Short-time max-hold spectrum. See microm.h for why a maximum and not a mean,
+ * and for the resolution this trades away to get it. */
+resonarsat_status_t rs_spectrum_maxhold(rs_spectrum_t *spec,
+                                        const rs_microm_t *m,
+                                        rs_spectrum_source_t source,
+                                        size_t seg_len,
+                                        double f_min,
+                                        rs_detrend_t detrend)
+{
+    if (!spec || !m || !spec->psd || !m->disp_los || !m->vel_los) {
+        rs_set_error("maxhold: NULL spectrum or tracking result");
+        return RS_ERR_ARG;
+    }
+    const size_t n = m->n_looks, n_freq = spec->n_freq;
+    if (seg_len < 4 || seg_len > n) {
+        rs_set_error("maxhold: segment of %zu looks is outside 4..%zu",
+                     seg_len, n);
+        return RS_ERR_ARG;
+    }
+    const double *all = (source == RS_SPEC_DISPLACEMENT) ? m->disp_los : m->vel_los;
+
+    /* Half-segment hop: enough overlap that a burst falling on a segment
+     * boundary is still whole in the neighbouring segment, without the strongly
+     * correlated segments a finer hop would produce. */
+    const size_t hop = seg_len / 2 > 0 ? seg_len / 2 : 1;
+    const size_t n_seg = (n >= seg_len) ? 1 + (n - seg_len) / hop : 0;
+    if (n_seg == 0) {
+        rs_set_error("maxhold: no whole segment of %zu fits in %zu looks",
+                     seg_len, n);
+        return RS_ERR_RANGE;
+    }
+
+    double *win = malloc(seg_len * sizeof *win);
+    /* Zero-padded to the full length, so bin spacing and every downstream index
+     * are the ones rs_spectrum_compute_opts() produced. */
+    float complex *buf = malloc(n * sizeof *buf);
+    double *hold = malloc(n_freq * sizeof *hold);
+    rs_fft_plan *plan = NULL;
+    if (!win || !buf || !hold || rs_fft_plan_create(n, &plan) != RS_OK) {
+        free(win); free(buf); free(hold);
+        rs_set_error("maxhold: out of memory");
+        return RS_ERR_ALLOC;
+    }
+    double win_power = 0.0;
+    for (size_t i = 0; i < seg_len; i++) {
+        win[i] = 0.5 * (1.0 - cos(2.0 * M_PI * (double)i / (double)(seg_len - 1)));
+        win_power += win[i] * win[i];
+    }
+    if (win_power <= 0.0) win_power = 1.0;
+    const double fs = (spec->df > 0.0) ? spec->df * (double)n : 1.0;
+
+    for (size_t w = 0; w < spec->n_win; w++) {
+        for (size_t k = 0; k < n_freq; k++) hold[k] = 0.0;
+        const double *series = all + w * n;
+
+        for (size_t sgi = 0; sgi < n_seg; sgi++) {
+            const double *seg = series + sgi * hop;
+
+            /* Detrended per SEGMENT, not once over the record. A trend removed
+             * globally leaves a local slope inside each segment, which is the
+             * same leakage the band floor exists to keep out. */
+            double sx = 0.0, sxx = 0.0, sy = 0.0, sxy = 0.0;
+            for (size_t i = 0; i < seg_len; i++) {
+                sx += (double)i; sxx += (double)i * (double)i;
+                sy += seg[i];    sxy += (double)i * seg[i];
+            }
+            const double det = (double)seg_len * sxx - sx * sx;
+            double a = 0.0, b = 0.0;
+            if (detrend == RS_DETREND_LINEAR && det != 0.0) {
+                b = ((double)seg_len * sxy - sx * sy) / det;
+                a = (sy - b * sx) / (double)seg_len;
+            } else if (detrend == RS_DETREND_LINEAR || detrend == RS_DETREND_MEAN) {
+                a = sy / (double)seg_len;
+            }
+
+            for (size_t i = 0; i < n; i++) buf[i] = 0.0f;
+            for (size_t i = 0; i < seg_len; i++)
+                buf[i] = (float complex)((seg[i] - (a + b * (double)i)) * win[i]);
+
+            if (rs_fft_forward(plan, buf) != RS_OK) continue;
+            for (size_t k = 0; k < n_freq; k++) {
+                const double mag = (double)cabsf(buf[k]);
+                const double scale =
+                    (k == 0 || (n % 2 == 0 && k == n_freq - 1)) ? 1.0 : 2.0;
+                const double p = scale * mag * mag / (win_power * fs);
+                if (p > hold[k]) hold[k] = p;
+            }
+        }
+
+        double *psd = spec->psd + w * n_freq;
+        for (size_t k = 0; k < n_freq; k++) psd[k] = hold[k];
+
+        /* The band floor and the prominence definition are
+         * rs_spectrum_compute_opts()'s, unchanged, so the two spectra are read
+         * by every downstream policy in exactly the same way. */
+        size_t k_min = RS_SPECTRUM_LEAKAGE_BINS;
+        if (f_min > 0.0 && spec->df > 0.0) {
+            const double kf = ceil(f_min / spec->df);
+            if (kf > (double)k_min) k_min = (size_t)kf;
+        }
+        if (k_min >= n_freq) k_min = n_freq - 1;
+        size_t best = k_min;
+        for (size_t k = k_min + 1; k < n_freq; k++) if (psd[k] > psd[best]) best = k;
+
+        spec->dominant_freq[w] = spec->freq[best];
+        spec->amplitude[w] = sqrt(psd[best]);
+        double sum = 0.0;
+        for (size_t k = k_min; k < n_freq; k++) sum += psd[k];
+        const double mean_power = (n_freq > k_min)
+                                ? sum / (double)(n_freq - k_min) : 0.0;
+        spec->prominence[w] = (mean_power > 0.0) ? psd[best] / mean_power : 0.0;
+    }
+
+    rs_fft_plan_destroy(plan);
+    free(win); free(buf); free(hold);
+    return RS_OK;
+}
+
 /* The local background ratio for bin k: its power over the median of its own
  * neighbourhood, with the Hann main lobe guarded out. Returns -1 when there are
  * too few reference bins to call it an estimate of noise. 'ref' is scratch of

@@ -595,10 +595,40 @@ controls still answering. It is opt-in and it is not a result. `--tfit` and
 the frequency `--probe-hz` names. It requires `--probe-hz` and refuses without it.
 
 ```
+  twin LLR at 0.7500 Hz: best 5.260 at window 35 (5,0), exact p = 0.0013
+            Two degrees of freedom per bin, so the power RATIO must exceed 19
+            before p < 0.05 -- a single-look pair cannot call a modest excess,
+            whatever the difference below looks like. Multilooking is the remedy
+            and this run has no independent looks to give it (item 98).
+            10 of 49 windows reach p < 0.05, against 2.5 expected by chance:
+            the per-window p is UNCORRECTED for testing 49 of them (item 1).
   twin difference at 0.7500 Hz, against tw2_windows.csv:
             35 of 49 windows gained; median +1.601 (scene-wide), best +21.025 at window 4 (0,4)
             excess of best over median +19.425 -- that is the LOCALISED part;
 ```
+
+**Two statistics, and the LLR is the principled one.** The change-detection
+literature ranks the log likelihood ratio above a difference (item 98). A
+periodogram bin is exponentially distributed about the true PSD, so for the pair
+`r = P_injected / P_twin` gives
+
+```
+    LLR = 2*log((1+r)/2) - log(r)        one-sided, zero when r <= 1
+    p   = 1 / (1 + r)                    EXACT, the F(2,2) tail
+```
+
+The LLR is **scale-free** — only the ratio matters — where the difference is
+not. `twin_llr` and `twin_p` join `twin_delta` in the CSV.
+
+**The ceiling is the thing to read.** With two degrees of freedom per bin the
+ratio must exceed **19** before `p < 0.05`. A single-look pair therefore cannot
+call a modest excess, however large the raw difference looks. Multilooking is the
+remedy and this chain has no independent looks to offer it.
+
+**Do not read the per-window p as corrected.** It is not; the line reporting how
+many windows clear 0.05 against how many are expected by chance is there because
+testing 49 windows is the look-elsewhere effect (item 1), and this project has
+had that open since the beginning.
 
 **Why it exists.** `FOLLOW-UPS.md` item 96 measured a **100% false-positive rate
 on motionless clutter** — twelve of twelve scenes returned a confident frequency

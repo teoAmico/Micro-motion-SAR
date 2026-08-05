@@ -1339,18 +1339,19 @@ static int rs_cmp_double_asc(const void *a, const void *b)
  * in the twin's header comes back in 'out_hz' so the caller can refuse a pairing
  * taken at a DIFFERENT frequency: differencing two runs probed at different bins
  * is meaningless, which is the mistake item 39 exists to prevent. */
-static size_t rs_load_twin_probe(const char *path, double **out, double *out_hz,
-                                 const char **why)
+static size_t rs_load_twin_probe(const char *path, double **out, double **out_psd,
+                                 double *out_hz, const char **why)
 {
-    *out = NULL; *out_hz = -1.0; *why = "";
+    *out = NULL; *out_psd = NULL; *out_hz = -1.0; *why = "";
     FILE *fh = fopen(path, "r");
     if (!fh) { *why = "cannot be opened"; return 0; }
 
     char line[8192];
-    int col_probe = -1, col_win = -1;
+    int col_probe = -1, col_psd = -1, col_win = -1;
     size_t cap = 64, n = 0;
     double *v = malloc(cap * sizeof *v);
-    if (!v) { fclose(fh); *why = "out of memory"; return 0; }
+    double *q = malloc(cap * sizeof *q);
+    if (!v || !q) { free(v); free(q); fclose(fh); *why = "out of memory"; return 0; }
 
     while (fgets(line, sizeof line, fh)) {
         if (line[0] == '#') {
@@ -1364,31 +1365,36 @@ static size_t rs_load_twin_probe(const char *path, double **out, double *out_hz,
             char *save = NULL, *tok = strtok_r(line, ",\n\r", &save);
             for (int i = 0; tok; i++, tok = strtok_r(NULL, ",\n\r", &save)) {
                 if (strcmp(tok, "probe_prominence") == 0) col_probe = i;
+                if (strcmp(tok, "probe_psd") == 0) col_psd = i;
                 if (strcmp(tok, "window") == 0) col_win = i;
             }
-            if (col_probe < 0 || col_win < 0) {
-                free(v); fclose(fh);
+            if (col_probe < 0 || col_psd < 0 || col_win < 0) {
+                free(v); free(q); fclose(fh);
                 *why = "has no probe_prominence column; it was written without --probe-hz";
                 return 0;
             }
             continue;
         }
         char *save = NULL, *tok = strtok_r(line, ",\n\r", &save);
-        double got = 0.0; int have = 0;
-        for (int i = 0; tok; i++, tok = strtok_r(NULL, ",\n\r", &save))
+        double got = 0.0, gotq = 0.0; int have = 0;
+        for (int i = 0; tok; i++, tok = strtok_r(NULL, ",\n\r", &save)) {
             if (i == col_probe) { got = atof(tok); have = 1; }
+            if (i == col_psd)   gotq = atof(tok);
+        }
         if (!have) continue;
         if (n == cap) {
             cap *= 2;
             double *t = realloc(v, cap * sizeof *t);
-            if (!t) { free(v); fclose(fh); *why = "out of memory"; return 0; }
-            v = t;
+            double *u = realloc(q, cap * sizeof *u);
+            if (!t || !u) { free(t ? t : v); free(u ? u : q); fclose(fh);
+                            *why = "out of memory"; return 0; }
+            v = t; q = u;
         }
-        v[n++] = got;
+        q[n] = gotq; v[n++] = got;
     }
     fclose(fh);
-    if (n == 0) { free(v); *why = "contains no data rows"; return 0; }
-    *out = v;
+    if (n == 0) { free(v); free(q); *why = "contains no data rows"; return 0; }
+    *out = v; *out_psd = q;
     return n;
 }
 
@@ -2198,7 +2204,8 @@ static int rs_cmd_mmotion(int argc, char **argv)
     /* --twin PATH differences this run against a previous one at the probed
      * frequency; see rs_load_twin_probe() and the report below. */
     const char *twin_path = rs_opt(argc, argv, "--twin");
-    double *twin_probe = NULL; size_t twin_n = 0; double twin_hz = -1.0;
+    double *twin_probe = NULL, *twin_psd = NULL;
+    size_t twin_n = 0; double twin_hz = -1.0;
 
     if (probe_hz > 0.0) {
         if (rs_spectrum_prominence_at(&spec, 0, probe_hz, &probe_bin,
@@ -2246,7 +2253,8 @@ static int rs_cmd_mmotion(int argc, char **argv)
             rs_subap_stack_free(&stack); rs_cphd_free(&c);
             return 1;
         }
-        twin_n = rs_load_twin_probe(twin_path, &twin_probe, &twin_hz, &why);
+        twin_n = rs_load_twin_probe(twin_path, &twin_probe, &twin_psd,
+                                    &twin_hz, &why);
         if (twin_n == 0) {
             fprintf(stderr, "mmotion: twin '%s' %s\n", twin_path, why);
             rs_spectrum_free(&spec); rs_microm_free(&m);
@@ -2257,7 +2265,7 @@ static int rs_cmd_mmotion(int argc, char **argv)
             fprintf(stderr, "mmotion: twin has %zu windows, this run has %zu -- "
                             "the grids differ, so no row corresponds\n",
                     twin_n, spec.n_win);
-            free(twin_probe);
+            free(twin_probe); free(twin_psd);
             rs_spectrum_free(&spec); rs_microm_free(&m);
             rs_subap_stack_free(&stack); rs_cphd_free(&c);
             return 1;
@@ -2266,7 +2274,7 @@ static int rs_cmd_mmotion(int argc, char **argv)
             fprintf(stderr, "mmotion: twin was probed at %.6f Hz and this run at "
                             "%.6f Hz -- differencing different bins measures "
                             "nothing\n", twin_hz, probe_hz);
-            free(twin_probe);
+            free(twin_probe); free(twin_psd);
             rs_spectrum_free(&spec); rs_microm_free(&m);
             rs_subap_stack_free(&stack); rs_cphd_free(&c);
             return 1;
@@ -2872,6 +2880,37 @@ static int rs_cmd_mmotion(int argc, char **argv)
                     : 0.5 * (srt[spec.n_win / 2 - 1] + srt[spec.n_win / 2]);
                 free(srt);
             }
+            /* The likelihood ratio, which the change-detection literature
+             * ranks above a difference (item 98). Computed on the PSD, because
+             * the exponential model is a statement about the periodogram and
+             * not about a ratio to the band mean. */
+            double llr_best = 0.0, p_best = 1.0; size_t w_llr = 0, n_sig = 0;
+            for (size_t w = 0; w < spec.n_win; w++) {
+                double p_psd = 0.0, p_prom = 0.0, l = 0.0, pv = 1.0;
+                rs_spectrum_prominence_at(&spec, w, probe_hz, NULL,
+                                          &p_psd, &p_prom);
+                if (twin_psd[w] > 0.0 && p_psd > 0.0 &&
+                    rs_twin_llr(p_psd, twin_psd[w], &l, &pv) == RS_OK &&
+                    l > llr_best) { llr_best = l; p_best = pv; w_llr = w; }
+                if (pv < 0.05) n_sig++;
+            }
+            printf("  twin LLR at %.4f Hz: best %.3f at window %zu (%zu,%zu), "
+                   "exact p = %.4f\n"
+                   "            Two degrees of freedom per bin, so the power "
+                   "RATIO must exceed 19\n"
+                   "            before p < 0.05 -- a single-look pair cannot "
+                   "call a modest excess,\n"
+                   "            whatever the difference below looks like. "
+                   "Multilooking is the remedy\n"
+                   "            and this run has no independent looks to give it "
+                   "(item 98).\n"
+                   "            %zu of %zu windows reach p < 0.05, against %.1f "
+                   "expected by chance:\n"
+                   "            the per-window p is UNCORRECTED for testing %zu "
+                   "of them (item 1).\n",
+                   probe_hz, llr_best, w_llr, w_llr / spec.n_win_rg,
+                   w_llr % spec.n_win_rg, p_best,
+                   n_sig, spec.n_win, 0.05 * (double)spec.n_win, spec.n_win);
             printf("  twin difference at %.4f Hz, against %s:\n"
                    "            %zu of %zu windows gained; median %+.3f "
                    "(scene-wide), best %+.3f at window %zu (%zu,%zu)\n"
@@ -3307,7 +3346,7 @@ static int rs_cmd_mmotion(int argc, char **argv)
                         "excursion_px,snr,sigma_px,d_a,passed_gates,"
                         "agrees_with_consensus,passed_cull%s%s\n",
                     probe_hz > 0.0 ? ",probe_psd,probe_prominence" : "",
-                    twin_probe ? ",twin_delta" : "");
+                    twin_probe ? ",twin_delta,twin_llr,twin_p" : "");
             for (size_t w = 0; w < spec.n_win; w++) {
                 const double exc = spec.excursion_px ? spec.excursion_px[w] : 0.0;
                 const int passed = (spec.quality[w] >= q_min_rep) &&
@@ -3347,8 +3386,13 @@ static int rs_cmd_mmotion(int argc, char **argv)
                     rs_spectrum_prominence_at(&spec, w, probe_hz, NULL,
                                               &p_psd, &p_prom);
                     fprintf(wf, ",%.12g,%.12g", p_psd, p_prom);
-                    if (twin_probe)
-                        fprintf(wf, ",%.12g", p_prom - twin_probe[w]);
+                    if (twin_probe) {
+                        double l = 0.0, pv = 1.0;
+                        if (twin_psd[w] > 0.0 && p_psd > 0.0)
+                            rs_twin_llr(p_psd, twin_psd[w], &l, &pv);
+                        fprintf(wf, ",%.12g,%.12g,%.12g",
+                                p_prom - twin_probe[w], l, pv);
+                    }
                 }
                 fputc('\n', wf);
             }

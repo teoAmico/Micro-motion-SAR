@@ -198,6 +198,67 @@ int main(void)
         }
     }
 
+    /* THE TWIN CHANGE STATISTIC. It lives in this file rather than its own
+     * because it is the other half of the same question -- what a paired run can
+     * say about a frequency -- and the harness is already here. Values are
+     * checked against the direct likelihood evaluation, not against themselves. */
+    RS_CASE("twin LLR matches the closed form and is scale-free");
+    {
+        double l = 0.0, p = 0.0;
+        RS_CHECK_OK(rs_twin_llr(2.0, 1.0, &l, &p));
+        RS_CHECK_NEAR(l, 0.117783, 1e-5);
+        RS_CHECK_OK(rs_twin_llr(10.0, 1.0, &l, &p));
+        RS_CHECK_NEAR(l, 1.106913, 1e-5);
+        RS_CHECK_OK(rs_twin_llr(100.0, 1.0, &l, &p));
+        RS_CHECK_NEAR(l, 3.238784, 1e-5);
+        /* Scale-free: only the ratio may matter. */
+        double l2 = 0.0;
+        RS_CHECK_OK(rs_twin_llr(2.0e-9, 1.0e-9, &l2, NULL));
+        RS_CHECK_NEAR(l2, 0.117783, 1e-5);
+        RS_CHECK_OK(rs_twin_llr(2.0e9, 1.0e9, &l2, NULL));
+        RS_CHECK_NEAR(l2, 0.117783, 1e-5);
+    }
+
+    RS_CASE("twin LLR is one-sided and zero at no change");
+    {
+        double l = 1.0, p = 0.0;
+        RS_CHECK_OK(rs_twin_llr(1.0, 1.0, &l, &p));
+        RS_CHECK_NEAR(l, 0.0, 1e-12);
+        RS_CHECK_NEAR(p, 1.0, 1e-12);
+        /* Less power in the injected run is the H0 boundary, not evidence. */
+        RS_CHECK_OK(rs_twin_llr(1.0, 5.0, &l, &p));
+        RS_CHECK_NEAR(l, 0.0, 1e-12);
+        RS_CHECK_NEAR(p, 1.0, 1e-12);
+    }
+
+    /* The exact F(2,2) tail, and the ceiling it puts on a single-look pair:
+     * the ratio must exceed 19 before p < 0.05, whatever the difference looks
+     * like. That number is the reason multilooking is the stated remedy. */
+    RS_CASE("twin p-value is the exact F(2,2) tail");
+    {
+        double p = 0.0;
+        RS_CHECK_OK(rs_twin_llr(19.0, 1.0, NULL, &p));
+        RS_CHECK_NEAR(p, 0.05, 1e-12);
+        RS_CHECK_OK(rs_twin_llr(99.0, 1.0, NULL, &p));
+        RS_CHECK_NEAR(p, 0.01, 1e-12);
+        RS_CHECK_OK(rs_twin_llr(3.0, 1.0, NULL, &p));
+        RS_CHECK_NEAR(p, 0.25, 1e-12);
+        double p18 = 0.0;
+        RS_CHECK_OK(rs_twin_llr(18.0, 1.0, NULL, &p18));
+        RS_CHECK(p18 > 0.05);
+    }
+
+    RS_CASE("twin LLR error contract");
+    {
+        double l = 0.0, p = 0.0;
+        RS_CHECK_ERR(rs_twin_llr(0.0, 1.0, &l, &p), RS_ERR_ARG);
+        RS_CHECK_ERR(rs_twin_llr(1.0, 0.0, &l, &p), RS_ERR_ARG);
+        RS_CHECK_ERR(rs_twin_llr(-1.0, 1.0, &l, &p), RS_ERR_ARG);
+        /* A refused call must leave the outputs at their neutral values. */
+        RS_CHECK_NEAR(l, 0.0, 1e-12);
+        RS_CHECK_NEAR(p, 1.0, 1e-12);
+    }
+
     /* Contract: malformed input produces a status and a message, never a crash
      * or a partly-written result. */
     RS_CASE("error contract");

@@ -1880,6 +1880,29 @@ static double rs_median_inplace(double *v, size_t n)
     return (n % 2) ? v[n / 2] : 0.5 * (v[n / 2 - 1] + v[n / 2]);
 }
 
+/* Two-sample change statistic for a paired run. See microm.h for the model, the
+ * derivation and the two-degrees-of-freedom ceiling this carries. */
+resonarsat_status_t rs_twin_llr(double p_injected, double p_twin,
+                                double *out_llr, double *out_p)
+{
+    if (out_llr) *out_llr = 0.0;
+    if (out_p)   *out_p   = 1.0;
+    if (!(p_injected > 0.0) || !(p_twin > 0.0)) {
+        rs_set_error("twin llr: powers must be positive, got %g and %g",
+                     p_injected, p_twin);
+        return RS_ERR_ARG;
+    }
+    const double r = p_injected / p_twin;
+    /* One-sided: below r = 1 the injected run has LESS power, which is the H0
+     * boundary, so the statistic is zero rather than negative. */
+    if (out_llr)
+        *out_llr = (r <= 1.0) ? 0.0
+                 : 2.0 * log1p(r) - 2.0 * M_LN2 - log(r);
+    /* Exact under H0: the ratio of two i.i.d. exponentials is F(2,2). */
+    if (out_p) *out_p = (r <= 1.0) ? 1.0 : 1.0 / (1.0 + r);
+    return RS_OK;
+}
+
 /* One (index, key) pair, so reference windows can be ranked by how close their
  * amplitude dispersion is to the candidate's without disturbing the spectrum. */
 typedef struct { double key; size_t idx; } rs_keyed_t;

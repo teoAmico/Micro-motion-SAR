@@ -169,6 +169,21 @@ or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
 
+**THE TWIN LIKELIHOOD RATIO IS IMPLEMENTED, AND ITS CEILING IS THE FINDING.**
+`rs_twin_llr()` is the two-sample GLRT for exponentially-distributed periodogram
+bins: **`LLR = 2 log((1+r)/2) - log r`**, one-sided, **scale-free** (only the
+ratio matters, where a difference is part level and part change), with the
+**EXACT** p-value **`1/(1+r)`** from the F(2,2) tail — no simulation. `--twin`
+reports it; the CSV carries `twin_llr` and `twin_p`. **Do NOT use a chi-squared
+asymptotic**: Wilks is asymptotic in sample size and there is ONE periodogram
+sample per mean — measured, `2*LLR` reaches 4.67 at p95 against the half-mass
+chi-squared's 2.71. **Two degrees of freedom means the power RATIO must exceed 19
+before p < 0.05**, so a single-look pair cannot call a modest excess however
+large the raw difference looks; multilooking is the remedy and this chain has no
+independent looks to give it. The report also states how many windows clear 0.05
+against how many chance expects, because **the per-window p is UNCORRECTED for
+testing 49 of them — item 1, open since the beginning**.
+
 **`--twin` IS COHERENT CHANGE DETECTION AND THE PEAK SEARCH IS THE LOOK-ELSEWHERE
 EFFECT** (item 98). **Sixth time the field already had this.** (1) CCD is a mature
 SAR discipline doing exactly this paired same-scene difference, with the same

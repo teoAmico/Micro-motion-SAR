@@ -1869,6 +1869,55 @@ resonarsat_status_t rs_transient_fit_windows(rs_spectrum_t *spec,
                                              double f_min,
                                              rs_transient_stats_t *out_stats);
 
+/* THE TWO-SAMPLE CHANGE STATISTIC FOR A PAIRED RUN, AND ITS EXACT p-VALUE.
+ *
+ * WHY THIS RATHER THAN A DIFFERENCE. `--twin` first reported `P_inj - P_twin`,
+ * which is item 97's statistic and the crude member of a family the coherent
+ * change detection literature has already ranked: the LOG LIKELIHOOD RATIO
+ * change statistic beats the power ratio and the sample coherence (item 98). A
+ * difference is also not scale-free, so two runs whose overall level differs at
+ * all produce a difference that is partly level and partly change.
+ *
+ * THE MODEL. A periodogram bin of a zero-mean Gaussian process is exponentially
+ * distributed about the true power spectral density: P ~ Exp(S), two degrees of
+ * freedom. For the pair, H0 is S_inj = S_twin and H1 is S_inj > S_twin.
+ *
+ * THE DERIVATION. Under H1 the maximum-likelihood means are the observations
+ * themselves; under H0 the common mean is their average. Writing r = P_inj /
+ * P_twin, everything but the ratio cancels:
+ *
+ *     LLR(r) = 2*log((1+r)/2) - log(r)
+ *
+ * which is SCALE-FREE, zero at r = 1, and symmetric under r <-> 1/r -- so on its
+ * own it detects change in either direction. The one-sided form wanted here
+ * clamps it to zero when the injected run has LESS power, since that is the H0
+ * boundary. Verified against the direct likelihood evaluation to 1e-12.
+ *
+ * THE p-VALUE IS EXACT AND NEEDS NO SIMULATION. Under H0 the two samples are
+ * i.i.d. exponential, so their ratio is F(2,2) and
+ *
+ *     P(r > x) = 1 / (1 + x)
+ *
+ * exactly. Do NOT use a chi-squared asymptotic here: Wilks' theorem is
+ * asymptotic in sample size and there is exactly ONE periodogram sample per
+ * mean, so it is wrong -- measured, 2*LLR reaches 4.67 at the 95th percentile
+ * and 7.84 at the 99th where the chi-squared half-mass approximation predicts
+ * 2.71 and 5.41.
+ *
+ * WHAT THIS COSTS, AND IT IS THE POINT. With two degrees of freedom the ratio
+ * must exceed **19** before p < 0.05. A single-bin, single-look twin comparison
+ * therefore cannot be significant on a modest excess, whatever the difference
+ * looks like. The remedy is multilooking -- averaging L independent periodogram
+ * estimates makes the ratio F(2L, 2L) and sharpens the test quickly -- which
+ * this function does not do and the caller currently has no independent looks to
+ * give it.
+ *
+ * Writes the one-sided LLR to 'out_llr' and the exact one-sided p-value to
+ * 'out_p'; either may be NULL. Returns RS_ERR_ARG on a non-positive input, since
+ * a zero or negative power has no place in this model. */
+resonarsat_status_t rs_twin_llr(double p_injected, double p_twin,
+                                double *out_llr, double *out_p);
+
 /* One mode of a reported modal set. See rs_spectrum_modal_set(). */
 typedef struct {
     size_t bin;           /* its spectral bin */

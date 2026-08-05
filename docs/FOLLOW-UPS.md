@@ -8416,7 +8416,16 @@ collect there is no baseline library, which is a sharper way of saying what item
 ### What is actionable
 
 1. **Replace the difference with a likelihood ratio** -- named by CCD as superior,
-   derived rather than tuned.
+   derived rather than tuned. **DONE**: `rs_twin_llr()` implements the two-sample
+   GLRT for exponentially-distributed periodogram bins,
+   `LLR = 2 log((1+r)/2) - log r` with the EXACT F(2,2) p-value `1/(1+r)`,
+   one-sided and scale-free, verified against the direct likelihood to 1e-12 and
+   pinned by four test cases. `--twin` reports it and the CSV carries `twin_llr`
+   and `twin_p`. **Its ceiling is the finding**: two degrees of freedom per bin
+   means the ratio must exceed **19** before `p < 0.05`, so a single-look pair
+   cannot call a modest excess. A chi-squared asymptotic is WRONG here -- Wilks
+   is asymptotic in sample size and there is one sample per mean; measured,
+   `2*LLR` reaches 4.67 at p95 where the half-mass chi-squared predicts 2.71.
 2. **Item 1 is the look-elsewhere effect** and has a modern self-calibrating
    solution that needs no Monte Carlo.
 3. **A second twin** (CCD's double change map) is a known false-alarm reduction

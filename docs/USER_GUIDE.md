@@ -555,6 +555,40 @@ that was not. `FOLLOW-UPS.md` items 30 and 31.
 
 Without a null you now get the frequency and an explicit `NOT ADJUDICATED`:
 
+### The joint transient-and-mode fit
+
+`--tfit N` replaces the periodogram with a fit of N exponentially damped
+sinusoids **with onsets**, to the **unwindowed** series:
+
+```
+JOINT TRANSIENT-AND-MODE FIT: up to 3 damped modes per window, no window
+  applied. Fitted 49 of 49 windows, 147 modes total; median damping 0.0051,
+  median onset 1.24 s, median residual 0.496 of the window's variance.
+```
+
+The point is that a Hann window applied to a burst removes the part of the
+record that carries it, so for a short transient the field fits the transient
+**together with** the modal parameters rather than tapering it off. Unlike a
+periodogram this reports **damping**, which no spectrum can.
+
+Two things to know before reading a number from it.
+
+**The damping ceiling is frequency-dependent.** The grid runs to a decay of
+`RS_TFIT_DECAY_MAX` across the record, so the largest representable damping is
+`zeta_max = RS_TFIT_DECAY_MAX / (2*pi*f*T)` — 0.080 at 0.8 Hz over a 20 s dwell,
+0.021 at 3 Hz over the same one. A mode damped harder comes back **at** the
+ceiling, so a zeta sitting on it means *at least that*, not *that*.
+
+**The spectrum it writes is the fit's, not the data's.** Its floor is the fit
+residual and its lines are narrow because damping is a fitted parameter rather
+than a smear left in the data. Do not compare its levels with a periodogram run.
+
+`FOLLOW-UPS.md` item 81 is the caveat, and it is a large one: **at the chain
+level this is not better than the periodogram** — 2 of 12 injected frequencies
+recovered against the periodogram's 3 of 12 on the same sweep, with both static
+controls still answering. It is opt-in and it is not a result. `--tfit` and
+`--stft` both replace the spectrum and cannot be combined.
+
 ### The modal set
 
 A structure does not have *a* frequency, so `mmotion` also prints a **modal

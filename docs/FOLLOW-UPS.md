@@ -122,6 +122,8 @@ said, not better) and item 7's line numbers.
 | 78 | answered, negative | calibrating the block against a matched static run fails; it needs a chance model |
 | 79 | recorded, not implemented | the field reports a per-mode posterior, not a threshold on a spectral statistic |
 | 80 | implemented, does not detect | the chance model is built: it prices the block correctly and refuses nothing that matters |
+| 81 | implemented, changes nothing | joint transient-and-mode estimation; the limit is not the spectral estimator |
+| 82 | explains 81 | the threshold effect predicts it; matrix pencil and LSCF transient terms are untried |
 
 ---
 
@@ -7120,3 +7122,167 @@ items 69-79 have been circling, and item 79's diagnosis stands unaltered --
 the remaining direction is a **modal model fitted to the data with a genuine
 posterior**, and before that, **joint transient-and-mode estimation** on the
 short record. Neither is attempted here.
+
+
+---
+
+## 81. Joint transient-and-mode estimation is built. It changes nothing.
+
+Item 79's second open direction, and it closes the same way item 80 closed the
+first. `rs_transient_fit()` / `mmotion --tfit N` fits the transient and the modes
+TOGETHER instead of Hann-windowing the transient away.
+
+### What was built
+
+The model is a sum of exponentially damped sinusoids with onsets,
+
+    y(t) = sum_k A_k exp(-alpha_k (t - t0_k)) cos(2 pi f_k (t - t0_k) + phi_k)
+
+for t >= t0_k, fitted to the UNWINDOWED series by separable (variable-projection)
+least squares: for fixed (f, alpha, t0) the model is linear in two coefficients,
+so only the three nonlinear parameters are searched and the rest is a 2x2 solve.
+Modes are taken greedily. That is the standard free-decay model of the
+operational-modal-analysis literature -- what a structure struck by a seismic
+arrival actually does -- and unlike a periodogram it reports DAMPING.
+
+`tests/test_modalfit.c` is the unit test, scored the way this project scores
+everything: a sweep, never a point.
+
+- frequency sweep, six points with noise: **slope 0.9929, rms 0.0072 Hz**
+  against a half-bin bound of 0.0250
+- damping sweep, six points: **slope 1.1016, rms 0.0027** against a grid step
+  of 0.0088
+- a sustained tone returns **zeta ~ 0**, an onset at 5.0 s is located to within
+  one grid step, two simultaneous modes are separated
+
+**The damping ceiling is frequency-dependent and documented**:
+`zeta_max = RS_TFIT_DECAY_MAX / (2 pi f T)` -- 0.080 at 0.8 Hz over a 20 s dwell,
+0.021 at 3 Hz. Past it the fit SATURATES, so a zeta on the ceiling means "at
+least", not "equal to". Pinned by a test.
+
+### At the chain level it is not better, and on the sweep it is worse
+
+Twelve injected burst points and two static controls at 128 looks,
+`--estimator phase` at 2 mm, seeds 7 and 11, otherwise identical to items 74/77/80:
+
+| estimator | correct within half a bin | statics answering |
+|---|---|---|
+| periodogram | **3 of 12** | 2 of 2 |
+| joint transient fit | **2 of 12** | 2 of 2 |
+
+### Two hypotheses formed on this data, both killed by their own controls
+
+**"The fitted damping separates driven from motionless."** On the sweep's two
+static controls it looked clean and with no overlap -- driven 0.0047-0.0079,
+static 0.0026-0.0028. Run against **TEN** static realisations instead of two it
+dies: statics reach **0.0044** and bursts fall to **0.0023**. The n=2 separation
+was the coincidence this project's own bar exists to catch.
+
+What DID survive is a physics check worth keeping: a **sustained sine returns
+zeta ~ 0.0000 on five of six seeds**, sitting with the static scenes rather than
+with the bursts. So zeta measures TRANSIENCE and not the presence of signal,
+which is what it is supposed to do. It is simply not separating at this SNR.
+
+**"It is better on sustained tones."** The sine arm returns the correct 0.504 Hz
+on 6 of 6 seeds at blocks 36-47 against statics at 6-14 -- a clean separation,
+and it is **not the estimator's**. The paired periodogram run on the same six
+seeds gives blocks **43, 47, 30, 44, 47, 47** against the fit's 43, 45, 36, 47,
+47, 47. Identical. The sine's large block is a property of a sine being easy.
+
+### What this means
+
+**The limiting factor is not the spectral estimator.** Item 71 located the loss
+in the per-window spectrum rather than in the reporting stage; item 81 narrows
+it further -- it is not in the CHOICE OF ESTIMATOR for that spectrum either.
+Windowed periodogram, max-hold STFT (item 72) and a fitted modal model with the
+transient in it all give the same answer, because they are all estimating the
+same tracked series and the mode is not reliably in it. Items 79's two
+directions are now both closed, and neither was where the problem is.
+
+### The honest limit of the integration
+
+`rs_transient_fit_windows()` expresses the fit AS A SPECTRUM so every existing
+policy reads it unchanged -- residual periodogram for the floor, each fitted
+mode's power at its nearest bin. That deliberately discards the fit's own
+sub-bin frequency and its damping before the selection policies see it. It does
+not explain the negative result, since the sweep's errors are whole bins and
+more, but a fuller integration would aggregate the fitted PARAMETERS across
+windows rather than re-binning them. Not attempted.
+
+Kept because it is correct, opt-in, unit-tested and prints its own caveats --
+the same grounds item 72 was kept on. It is not a result.
+
+
+---
+
+## 82. The literature explains item 81, and names two things it is not.
+
+Searched after building item 81, per this project's standing rule. Three
+findings, and the first predicts item 81's result rather than merely agreeing
+with it.
+
+### The THRESHOLD EFFECT predicts that estimator choice stops mattering
+
+Frequency estimation has a documented **threshold SNR**: as SNR falls below it
+with the record length fixed, the estimate's variance departs sharply from the
+Cramer-Rao bound and **no estimator attains the bound any more**. Above
+threshold, estimators separate by their efficiency; below it they all fail
+together, and which one you chose stops being the question.
+
+That is item 81's result stated in advance. A windowed periodogram, a max-hold
+STFT (item 72) and a fitted damped-sinusoid model with the transient in it give
+the same answers on this chain because the tracked series is BELOW THRESHOLD --
+not because the three are equally good. **Item 81's conclusion should be quoted
+in that form**: the limit is not the estimator, and the reason is a known
+property of estimation rather than an observation about this code. It also says
+where the gain is if there is one -- SNR on the tracked series, which is items
+51-53 and 64-65 territory, not the spectrum stage.
+
+The damped case sharpens it further: the CRB for a damped sinusoid degrades as
+the damping approaches zero and as the observation shortens relative to the
+signal's time constant, and the achievable accuracy DECOUPLES into
+(amplitude, damping) against (frequency, phase). So the damping is not merely
+harder to get than the frequency -- it is bounded by a different quantity.
+
+### What was built is the WEAKER member of its own family
+
+`rs_transient_fit()` is nonlinear least squares over a damped-sinusoid model,
+which is the Prony family. The comparative literature is consistent that the
+**matrix pencil** method has **lower estimate variance than Prony, is more
+robust to noise, and is computationally cheaper**, with the eigensystem
+realization algorithm the third standard member. Prony specifically "has
+difficulty extracting the modes of noisy signals".
+
+Since noise is precisely the regime this chain sits in, **item 81 has not tested
+the best available time-domain estimator**, and its conclusion is correspondingly
+weaker than it reads. That said, the threshold-effect finding above predicts a
+lower-variance estimator does not rescue a below-threshold record -- so this is
+worth stating as untried rather than as the obvious next experiment.
+
+### And it is NOT the mechanism item 79 was describing
+
+Item 79 recorded that the field "estimates the TRANSIENT JOINTLY with the modal
+parameters instead of Hann-windowing". That is real, but the mechanism is
+**frequency-domain**: Cauberghe and Guillaume generalise the least-squares
+complex frequency estimator (LSCF, the basis of PolyMAX) by modelling the
+**initial and final conditions of each data block** as extra transient terms in
+the model. The purpose is to remove **LEAKAGE** without an exponential window,
+and the paper reports it improves the modal estimates and **the damping
+estimates in particular**.
+
+Fitting decaying envelopes in the time domain, which is what item 81 built, is a
+different thing that shares a description. **The frequency-domain transient-term
+approach remains untried here.** It is also the one aimed at the defect this
+project actually has a name for -- item 47's leakage and red floor.
+
+### Status
+
+Item 81 stands as a measurement and its explanation is now external rather than
+local. Two named, unbuilt alternatives: **matrix pencil / ERA** in place of the
+Prony-family fit, and **LSCF with initial-and-final-condition transient terms**
+in place of windowing. Neither is predicted to help while the series is below
+threshold.
+
+**Fifth time a search has found the field already had what was being built or
+puzzled over here** -- after `RS_MICROM_EST_ARGMAX`, item 13's overlap figure,
+`phaselink.c` in items 64-65, and item 79's posterior. Search first.

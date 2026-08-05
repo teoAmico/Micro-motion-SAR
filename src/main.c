@@ -1333,6 +1333,7 @@ static int rs_cmd_mmotion(int argc, char **argv)
                "                          [--pulse-start N] [--max-pulses N]\n"
                "                          [--inject-vib FREQ_HZ[,AMP_MM[,REL]]]\n"
                "                          [--inject-at DX,DY] [--stft LOOKS]\n"
+               "                          [--tfit MODES]\n"
                "                          [--inject-wave FILE[,RATE_HZ[,AMP_MM[,REL]]]]\n"
                "                          [--stream N]\n"
                "                          [--estimator correlation|phase|splitband|argmax]\n"
@@ -2051,6 +2052,64 @@ static int rs_cmd_mmotion(int argc, char **argv)
                    "mean.\n",
                    seg, seg / 2, m.n_looks,
                    spec.df * (double)m.n_looks / (double)seg, spec.df);
+        }
+    }
+
+    /* --tfit N replaces the periodogram with a joint transient-and-mode fit:
+     * N damped sinusoids with onsets, fitted to the unwindowed series. Item 79
+     * -- for a record this short the field estimates the transient TOGETHER
+     * with the modal parameters rather than Hann-windowing it away, and item
+     * 72's --stft was the wrong shape of fix because segmenting pays a
+     * resolution cost everywhere including on the stationary cases that
+     * already worked. */
+    {
+        const char *tfit = rs_opt(argc, argv, "--tfit");
+        if (tfit) {
+            const long nm = strtol(tfit, NULL, 10);
+            if (nm < 1 || (size_t)nm > RS_TFIT_MAX_MODES) {
+                fprintf(stderr, "mmotion: --tfit wants 1..%u modes, got '%s'\n",
+                        RS_TFIT_MAX_MODES, tfit);
+                rs_spectrum_free(&spec); rs_microm_free(&m);
+                rs_subap_stack_free(&stack); rs_cphd_free(&c);
+                return 1;
+            }
+            if (rs_opt(argc, argv, "--stft")) {
+                fprintf(stderr, "mmotion: --tfit and --stft both replace the "
+                                "spectrum; pick one\n");
+                rs_spectrum_free(&spec); rs_microm_free(&m);
+                rs_subap_stack_free(&stack); rs_cphd_free(&c);
+                return 1;
+            }
+            rs_transient_stats_t ts;
+            st = rs_transient_fit_windows(&spec, &m, src, (size_t)nm, f_min, &ts);
+            if (st != RS_OK) {
+                rs_report_error("mmotion", st);
+                rs_spectrum_free(&spec); rs_microm_free(&m);
+                rs_subap_stack_free(&stack); rs_cphd_free(&c);
+                return 1;
+            }
+            const double T = (spec.df > 0.0)
+                           ? 1.0 / spec.df : (double)m.n_looks;
+            printf("JOINT TRANSIENT-AND-MODE FIT: up to %ld damped mode%s per "
+                   "window, no window\n"
+                   "  applied. Fitted %zu of %zu windows, %zu modes total; "
+                   "median damping %.4f,\n"
+                   "  median onset %.2f s, median residual %.3f of the "
+                   "window's variance.\n"
+                   "  The spectrum below is the FIT'S, not the data's: its "
+                   "lines are narrow because\n"
+                   "  the damping is a fitted parameter rather than a smear "
+                   "left in the data, and\n"
+                   "  its floor is the fit residual. Do NOT compare its levels "
+                   "with a periodogram run.\n"
+                   "  Damping above %.4f at 1 Hz is not representable over this "
+                   "%.1f s dwell and\n"
+                   "  saturates -- a zeta on that ceiling means AT LEAST, not "
+                   "equal to.\n",
+                   nm, nm == 1 ? "" : "s", ts.n_fitted, spec.n_win,
+                   ts.n_mode_total, ts.median_zeta, ts.median_onset_s,
+                   ts.median_resid,
+                   RS_TFIT_DECAY_MAX / (2.0 * M_PI * 1.0 * T), T);
         }
     }
 

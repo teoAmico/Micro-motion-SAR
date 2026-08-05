@@ -1716,6 +1716,159 @@ resonarsat_status_t rs_spectrum_maxhold(rs_spectrum_t *spec,
                                         double f_min,
                                         rs_detrend_t detrend);
 
+/* One mode from a joint transient-and-mode fit. See rs_transient_fit(). */
+typedef struct {
+    double freq_hz;    /* damped natural frequency */
+    double zeta;       /* damping ratio alpha/(2*pi*f), dimensionless, >= 0 */
+    double onset_s;    /* when it starts, seconds from the first look */
+    double amp;        /* envelope at onset, in the series' own units (m or m/s) */
+    double phase_rad;  /* cosine phase at onset */
+    double var_frac;   /* fraction of the ORIGINAL variance this mode removes */
+} rs_transient_mode_t;
+
+/* Most modes one window's fit will report. Four 5-parameter modes against a
+ * 128-sample record is already 20 free parameters; more is curve-fitting. */
+#define RS_TFIT_MAX_MODES 4u
+
+/* The onset grid stops at half the record. A mode starting later than that is
+ * fitted to fewer samples than it has parameters' worth of evidence, and the
+ * search will happily place one on a late noise excursion. */
+#define RS_TFIT_ONSET_MAX_FRAC 0.5
+
+/* Decay across the whole record, alpha*T, at which the grid is sampled. Zero is
+ * a SUSTAINED mode -- the stationary case the periodogram assumes -- and 8 is a
+ * decay to 3e-4 of its onset amplitude, well past the point where the tail
+ * carries information.
+ *
+ * THIS PUTS A CEILING ON THE REPORTABLE DAMPING AND IT IS FREQUENCY-DEPENDENT.
+ * Since zeta = alpha/(2*pi*f) and alpha = (alpha*T)/T, the largest zeta the grid
+ * can express is
+ *
+ *     zeta_max = RS_TFIT_DECAY_MAX / (2*pi*f*T)
+ *
+ * -- 0.080 at 0.8 Hz over a 20 s dwell, 0.021 at 3 Hz over the same dwell. A
+ * mode damped harder than that is reported AT the ceiling, so a returned zeta
+ * sitting exactly on it means "at least this", not "this". Civil structures run
+ * 0.005-0.05, which the low half of the band covers comfortably and the high end
+ * does not; the resolution is the same arithmetic, one grid step being
+ * zeta_max/(RS_TFIT_N_DECAY-1). */
+#define RS_TFIT_DECAY_MAX 8.0
+#define RS_TFIT_N_DECAY 10u
+
+/* Frequency grid, as a fraction of a spectral bin. A damped line is broader than
+ * a bin, so a quarter-bin grid is finer than the thing being located. */
+#define RS_TFIT_FREQ_OVERSAMPLE 4u
+
+/* What one window's series was fitted with. */
+typedef struct {
+    rs_transient_mode_t mode[RS_TFIT_MAX_MODES];
+    size_t n_mode;
+    double resid_frac;  /* residual variance after all modes, over the original */
+    double var_total;   /* the detrended series' variance, series units squared */
+} rs_transient_fit_t;
+
+/* FIT THE TRANSIENT AND THE MODES TOGETHER, INSTEAD OF WINDOWING THE TRANSIENT
+ * AWAY.
+ *
+ * WHY THIS EXISTS. rs_spectrum_compute_opts() applies a Hann window to the
+ * tracked series and takes a periodogram. That is the right estimator for a
+ * STATIONARY record and the wrong one here, and item 71 named the cost without
+ * naming the cure: a structure under transient excitation does not have a
+ * stationary spectrum, every synthetic recovery in this project satisfied the
+ * stationarity precondition by construction, and a real earthquake record does
+ * not. Item 79 found the field's answer -- for short records the transient is
+ * estimated JOINTLY with the modal parameters rather than tapered off, because a
+ * window applied to a burst that lives in the first eighth of the record removes
+ * most of the evidence and broadens what is left.
+ *
+ * Item 72's --stft was the wrong shape of fix. Segmenting trades resolution for
+ * time-locality and pays that cost everywhere, including on the stationary cases
+ * that were working; the measured result was 3.175 Hz for a sine the whole-dwell
+ * periodogram gets right. Fitting a model with the transient IN IT costs
+ * resolution nowhere.
+ *
+ * THE MODEL. Each mode is an exponentially damped sinusoid with an onset:
+ *
+ *     y(t) = sum_k A_k exp(-alpha_k (t - t0_k)) cos(2 pi f_k (t - t0_k) + phi_k)
+ *
+ * for t >= t0_k and zero before, plus a linear trend removed first. That is the
+ * impulse response of a lightly damped second-order system started at t0 -- the
+ * standard free-decay model of the operational-modal-analysis literature, which
+ * is what a structure struck by a seismic arrival actually does.
+ *
+ * HOW IT IS FITTED. Separable (variable-projection) least squares. For fixed
+ * (f, alpha, t0) the model is LINEAR in the two coefficients of the in-phase and
+ * quadrature basis, so those come from a 2x2 normal-equation solve and only the
+ * three nonlinear parameters are searched on a grid. The grid is derived from
+ * the record rather than tuned: frequency at RS_TFIT_FREQ_OVERSAMPLE points per
+ * spectral bin over the admissible band, decay at RS_TFIT_N_DECAY points from
+ * sustained to RS_TFIT_DECAY_MAX across the record, onset over the first
+ * RS_TFIT_ONSET_MAX_FRAC of it. Modes are taken greedily, strongest first, each
+ * subtracted before the next is sought -- the same greedy scheme
+ * rs_spectrum_modal_set() nominates with.
+ *
+ * NO WINDOW IS APPLIED. That is the point, and it has a consequence to state
+ * plainly: an unwindowed record leaks, so a mode with a genuinely large
+ * amplitude will smear energy into neighbouring frequencies of the RESIDUAL.
+ * The trade is deliberate -- leakage costs a broadened residual floor, a Hann
+ * window costs the transient itself.
+ *
+ * WHAT IT DOES NOT DO. It does not adjudicate and it does not gate. 'var_frac'
+ * says what each mode removed, not whether it is real: a 3-parameter nonlinear
+ * search over thousands of candidates will always remove SOMETHING from noise,
+ * and this function deliberately reports rather than thresholds because a
+ * threshold measured against a fixture is what items 74 to 78 spent themselves
+ * on. Run it against a static control and read the difference. It also assumes
+ * light damping in reading zeta back from alpha/(2*pi*f) -- for zeta above about
+ * 0.2 the damped and natural frequencies separate and that identity is the
+ * first-order one, not the exact one.
+ *
+ * 'series' is n samples at 'fs' Hz. 'f_min' and 'f_max' bound the search; pass
+ * f_max <= 0 for Nyquist. 'n_mode_max' is clamped to RS_TFIT_MAX_MODES. Returns
+ * RS_ERR_ARG on a NULL argument, a non-positive rate or fewer than 16 samples,
+ * and RS_ERR_RANGE when the band holds no grid point. 'out' is cleared first. */
+resonarsat_status_t rs_transient_fit(const double *series, size_t n, double fs,
+                                     double f_min, double f_max,
+                                     size_t n_mode_max,
+                                     rs_transient_fit_t *out);
+
+/* What the per-window transient fits collectively looked like. */
+typedef struct {
+    double median_zeta;    /* over every mode fitted in every window */
+    double median_onset_s;
+    double median_resid;   /* median residual fraction */
+    size_t n_fitted;       /* windows a fit succeeded for */
+    size_t n_mode_total;   /* modes fitted across all of them */
+} rs_transient_stats_t;
+
+/* RUN THE FIT OVER EVERY WINDOW AND WRITE ITS ANSWER INTO THE SPECTRUM, so that
+ * every existing selection policy reads it unchanged -- the same contract
+ * rs_spectrum_maxhold() has.
+ *
+ * THE SPECTRUM THIS WRITES IS THE FIT'S, NOT THE DATA'S, and the difference is
+ * the whole point rather than an approximation to apologise for. Each window's
+ * psd becomes the periodogram of the fit RESIDUAL -- the floor, which is what
+ * the local-background statistics need to be meaningful -- plus each fitted
+ * mode's power placed at its own nearest bin. The lines are narrow because the
+ * damping has been MODELLED and removed from the frequency estimate rather than
+ * left in the data to broaden it. Do not read an absolute level from it, and do
+ * not compare one to a level from rs_spectrum_compute_opts().
+ *
+ * Rewrites 'spec->psd', 'dominant_freq', 'amplitude' and 'prominence' and leaves
+ * the tracker's own statistics -- excursion, quality, d_a, the correlation
+ * surface figures -- alone. 'f_min' must be the value the spectrum was built
+ * with. 'out_stats' may be NULL.
+ *
+ * Returns RS_ERR_ARG on a NULL spectrum or tracking result. A window whose fit
+ * fails keeps a zero spectrum and is counted out of 'n_fitted' rather than
+ * failing the whole call. */
+resonarsat_status_t rs_transient_fit_windows(rs_spectrum_t *spec,
+                                             const rs_microm_t *m,
+                                             rs_spectrum_source_t source,
+                                             size_t n_mode_max,
+                                             double f_min,
+                                             rs_transient_stats_t *out_stats);
+
 /* One mode of a reported modal set. See rs_spectrum_modal_set(). */
 typedef struct {
     size_t bin;           /* its spectral bin */

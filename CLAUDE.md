@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 80 items and their status.
+an index of all 82 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -155,6 +155,43 @@ That cost a wrong diagnosis here: `--max-pulses` was reported as unimplemented i
 test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
+
+**THE THRESHOLD EFFECT PREDICTS ITEM 81, AND NAMES TWO THINGS IT IS NOT**
+(item 82). Frequency estimation has a documented **threshold SNR**: below it the
+variance departs sharply from the Cramer-Rao bound and **no estimator attains
+the bound**, so above threshold estimators separate by efficiency and below it
+they fail together. That is item 81 stated in advance — periodogram, max-hold
+STFT and a fitted transient model agree here because the tracked series is BELOW
+THRESHOLD, not because they are equally good. **Quote item 81 in that form**,
+and note where it points: SNR on the tracked series (items 51-53, 64-65), not
+the spectrum stage. Two named, unbuilt alternatives — **matrix pencil / ERA**,
+which the comparative literature reports as lower-variance, more noise-robust and
+cheaper than the Prony family `rs_transient_fit()` belongs to; and **LSCF with
+initial-and-final-condition transient terms** (Cauberghe & Guillaume), which is
+what item 79 was actually describing — a FREQUENCY-DOMAIN leakage fix that
+improves damping estimates in particular, not the time-domain envelope fit item
+81 built. Neither is predicted to help below threshold. **Fifth time a search
+found the field already had what was being built here.**
+
+**JOINT TRANSIENT-AND-MODE ESTIMATION IS BUILT AND CHANGES NOTHING** (item 81).
+`rs_transient_fit()` / `mmotion --tfit N` fits damped sinusoids WITH ONSETS to
+the unwindowed series by variable-projection least squares — the free-decay
+model of the OMA literature, and unlike a periodogram it reports DAMPING. As an
+estimator it works: frequency sweep **slope 0.9929, rms 0.0072 Hz** against a
+0.0250 bound, damping sweep **slope 1.1016**, a sustained tone returning zeta ~ 0.
+**The damping ceiling is `RS_TFIT_DECAY_MAX/(2*pi*f*T)`** — 0.080 at 0.8 Hz over
+20 s, 0.021 at 3 Hz — and past it the fit SATURATES, so a zeta on the ceiling
+means AT LEAST. At the chain level it is **worse: 2 of 12 against the
+periodogram's 3 of 12**, and both statics still answer. **Two hypotheses formed
+on its output and both died to their own controls** — "fitted damping separates
+driven from static" looked clean on n=2 statics (0.0047-0.0079 against
+0.0026-0.0028) and dies at n=10 (statics reach 0.0044, bursts fall to 0.0023);
+"better on sustained tones" dies to the paired periodogram run, which gives the
+SAME blocks on the same six sine seeds. **The limiting factor is not the
+spectral estimator** — windowed periodogram, max-hold STFT and a fitted modal
+model all agree, because the mode is not reliably in the tracked series to be
+estimated. Item 79's two directions are now both closed and neither was where
+the problem is.
 
 **THE CHANCE MODEL IS BUILT, PRICES THE BLOCK CORRECTLY, AND DETECTS NOTHING**
 (item 80). `rs_spectrum_modal_set()` now reports a per-mode `p_chance` from a

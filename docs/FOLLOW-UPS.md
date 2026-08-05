@@ -139,6 +139,7 @@ said, not better) and item 7's line numbers.
 | 95 | **bounds 76** | item 91 replicates on a second building; the 1.512 Hz artefact is SEED-BOUND, not common-mode |
 | 96 | **bounds 95** | 12 of 12 motionless scenes report a confident frequency, 9 distinct; there is no clean seed |
 | 97 | **locates the defect** | the paired twin finds the injected frequency in 76% of runs whose report is wrong: the SELECTION loses it |
+| 98 | external, actionable | --twin is CCD and the LLR beats it; the peak search is the look-elsewhere effect, which is item 1 |
 
 ---
 
@@ -8340,3 +8341,85 @@ What the tool cannot check is whether the twin is the RIGHT KIND of control.
 in 20 of 24 is not a detection either -- it is measured with the truth known, and
 on a real collect there is no twin to pair against. That is exactly why
 `--null-static` exists and why item 96 matters.
+
+
+---
+
+## 98. The twin difference is COHERENT CHANGE DETECTION, the peak search is the LOOK-ELSEWHERE EFFECT, and both fields have a better statistic than this one.
+
+Searched after implementing `--twin`. **Sixth time the field already had what was
+being built here** -- after `RS_MICROM_EST_ARGMAX`, item 13's overlap figure,
+`phaselink.c` (items 64-65), item 79's posterior, and item 82's threshold effect.
+
+### 1. `--twin` is Coherent Change Detection, and its best statistic is not a difference
+
+CCD is a mature SAR discipline built on exactly this operation: two acquisitions
+of the same scene, differenced. Its stated precondition is the one `--twin`
+prints -- *"two images of the same scene collected from substantially different
+imaging geometries will not work"* -- and the field has already ranked the
+candidate statistics:
+
+> **the log likelihood ratio change statistic is superior to the commonly used
+> mean backscatter power ratio and sample coherence change statistics**
+
+`--twin` reports a raw difference of prominences, which is the crude member of
+that family. **The LLR change statistic is a direct, named improvement** and it
+is derived rather than invented. Also standard there and absent here: a
+three-image *double change map* to cut false alarms, i.e. two twins rather than
+one.
+
+### 2. Searching for the peak costs less than expected -- so it is not the whole story
+
+For detecting a sinusoid, the GLRT over unknown frequency needs about **20% more
+SNR than a known-frequency detector, at a 95% detection rate**. That is a real
+penalty and a MODEST one.
+
+**It therefore does not explain item 96.** A 20% SNR penalty does not turn a
+working detector into a 100% false-positive rate on motionless clutter. What
+`--probe-hz` buys over peak-picking is roughly that 20%; what item 96 measured is
+something else, and this bounds the diagnosis rather than confirming it.
+
+### 3. The peak search is the LOOK-ELSEWHERE EFFECT, and item 1 has been open since the start
+
+This project's oldest unresolved entry, **item 1**, is *"the quantisation floor is
+a per-window test with no multiplicity correction"*. That is the look-elsewhere
+effect, named and standard in cosmology and particle physics:
+
+> *when searching for the highest peak in each periodogram, one must account for
+> the fact that the frequency is not known a priori*
+
+Corrected by a **trials factor**, normally computed by simulation -- which is
+exactly what item 80's `p_chance` does with 1000 reshuffles. So item 80
+independently reinvented the standard remedy. **But there is a cheaper modern
+one**: Bayer & Seljak (MNRAS 508, 1346, 2021) *self-calibrate the look-elsewhere
+effect from the heights of the highest peaks*, avoiding the simulation entirely.
+That is a direct replacement for `rs_modal_null()` and it applies per window,
+where `p_chance` applies to the block.
+
+### 4. The twin's failure mode is SHM's best-documented one
+
+Baseline subtraction is standard in structural health monitoring, and its known
+defect is precisely the caveat `--twin` prints:
+
+> *operational and environmental variations tend to distort the signals and
+> masquerade as damage, generating a significant number of false positive
+> results*
+
+Their mitigations are named -- **Optimal Baseline Subtraction**, which keeps a
+library of baselines in small temperature steps, and **Optimal Signal Stretch**,
+which interpolates between them by stretching in time. The analogue here is that
+a twin must match the scene in everything but the motion, and this project
+currently guarantees that only by construction in a simulator. **On a real
+collect there is no baseline library, which is a sharper way of saying what item
+97 said: there is no twin to pair against.**
+
+### What is actionable
+
+1. **Replace the difference with a likelihood ratio** -- named by CCD as superior,
+   derived rather than tuned.
+2. **Item 1 is the look-elsewhere effect** and has a modern self-calibrating
+   solution that needs no Monte Carlo.
+3. **A second twin** (CCD's double change map) is a known false-alarm reduction
+   this project has never tried.
+
+None is implemented.

@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 97 items and their status.
+an index of all 98 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,29 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**`--twin` IS COHERENT CHANGE DETECTION AND THE PEAK SEARCH IS THE LOOK-ELSEWHERE
+EFFECT** (item 98). **Sixth time the field already had this.** (1) CCD is a mature
+SAR discipline doing exactly this paired same-scene difference, with the same
+stated geometry precondition, and it has already ranked the statistics: **the LOG
+LIKELIHOOD RATIO change statistic beats the power ratio and the sample coherence**
+— `--twin`'s raw prominence difference is the crude member of that family, and
+CCD's **double change map** (two twins, not one) is a known false-alarm reduction
+never tried here. (2) The GLRT over unknown frequency costs about **20% more SNR
+than a known-frequency detector at 95% detection** — real but MODEST, so it
+**does not explain item 96's 100% false-positive rate**; that bounds the
+diagnosis rather than confirming it. (3) **Item 1 — this project's OLDEST open
+entry, "no multiplicity correction" — is the LOOK-ELSEWHERE EFFECT**, standard in
+cosmology and particle physics, normally corrected by a simulated trials factor,
+which is what item 80's `p_chance` reinvented; **Bayer & Seljak (MNRAS 508, 1346,
+2021) self-calibrate it from the observed peak heights with no simulation**, a
+direct replacement that works PER WINDOW where `p_chance` works on the block.
+(4) The twin's failure mode is SHM's best-documented one — baseline subtraction,
+where "operational and environmental variations masquerade as damage"; their
+remedies are **Optimal Baseline Subtraction** (a library of baselines in small
+temperature steps) and **Optimal Signal Stretch**, and the absence of any such
+library on a real collect is a sharper statement of item 97's "there is no twin
+to pair against".
 
 **`--twin WINDOWS_CSV` REPORTS THE TWIN-DIFFERENCED STATISTIC** (item 97,
 implemented). It differences this run against a previous run's evidence file at

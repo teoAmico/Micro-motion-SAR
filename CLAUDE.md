@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 72 items and their status.
+an index of all 73 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -126,6 +126,21 @@ That cost a wrong diagnosis here: `--max-pulses` was reported as unimplemented i
 test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
+
+**ON A REAL BURST THE SHAPE-RANKED MODAL SET ANSWERS AND THE CONTROL REFUSES**
+(item 73). A burst was cut from the same Oroville record -- the earthquake's
+ARRIVAL, 76% of its energy in a quarter of the dwell. The modal set returns
+**0.353 Hz at block 6**, the record's second mode to three decimals and 1.05 bins
+from its dominant, while the **static control refuses** through identical
+processing. `best_window` is wrong on the burst (2.571) and confidently wrong on
+the static scene at a HIGHER prominence, 8.6 against 8.5 -- item 38 unchanged.
+**This is the first policy here to return a true frequency from a real
+structural waveform and refuse on a motionless control.** It also kills `--stft`:
+on the very case it was written for, the short-time run reports 2.520 and the
+modal set refuses. **NOT a recovery yet** -- one burst, one seed, no sweep, and
+`rs_track_fit()`'s slope-and-rms bar is unrun. Item 72's `--stft` result looked
+this good and was a coincidence; the difference here is the control, not the
+sweep.
 
 **THE SHORT-TIME ESTIMATOR IS BUILT AND FAILS ITS CONTROLS** (item 72).
 `rs_spectrum_maxhold()` / `mmotion --stft L` segments the tracked series and

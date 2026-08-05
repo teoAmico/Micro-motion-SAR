@@ -113,7 +113,8 @@ said, not better) and item 7's line numbers.
 | 69 | done, amended by 70 | a real structure's motion is injected for the first time, and the REPORTED answer goes wrong where a sine is correct |
 | 70 | done, extended by 71 | reporting a modal SET is the right shape and does NOT fix it; cross-window support gives a noise bin the same 12/49 as the true mode |
 | 71 | done | ranking the set by SPATIAL CONTIGUITY makes the wrong answer a refusal -- and the true mode is not in the tracking to be found, so the limit is upstream of selection |
-| 72 | **the current state** | the short-time max-hold estimator is built and FAILS its controls: it breaks the sine whole-dwell recovers and answers confidently on a motionless scene |
+| 72 | done | the short-time max-hold estimator is built and FAILS its controls: it breaks the sine whole-dwell recovers and answers confidently on a motionless scene |
+| 73 | **the current state** | on a real BURST the shape-ranked modal set returns a true mode and the static control refuses -- the first policy here to do both -- and `--stft` makes it WORSE |
 
 ---
 
@@ -6581,3 +6582,59 @@ result, and no run should quote it without the static control beside it.
 
 **The honest state after items 69-72: nothing in this project recovers a real
 structure's motion, and the reason is now located rather than guessed.**
+
+
+## 73. A real burst: the shape-ranked modal set answers, and the control refuses
+
+Item 72 ended with one hypothesis left for `--stft`: it was built for a
+low-duty-cycle burst and the fixture contained 20 s of continuous shaking. So a
+burst was built from the same Oroville record -- the window of the Lake Almanor
+earthquake containing the ARRIVAL rather than the coda, chosen by searching all
+20 s slices for the one concentrating most energy in a quarter of its length.
+
+```
+  burst_20s   start 17.2 s   76% of energy in the strongest 5 s of 20
+              peak 91.00 um  rms 20.97 um
+              at the dwell's resolution: 0.300Hz(1.00) 0.350Hz(0.65) 0.200Hz(0.38)
+              tracker-side: 38% of samples above a quarter of peak
+```
+
+### The result, with its control
+
+| scene | `best_window` | **modal set (whole dwell)** |
+|---|---|---|
+| **burst**, true 0.300 / 0.350 | 2.571 Hz wrong | **0.353 Hz, block 6, support 12/49** |
+| sine, true 0.500 | 0.504 correct | 0.504 Hz, block 4 |
+| record (continuous), true 0.550 | 1.966 wrong | refuses |
+| **static, nothing moving** | 2.974 Hz, prominence **8.6** | **refuses** |
+
+0.353 Hz is the record's second mode to three decimals and is 1.05 bins from its
+dominant. **This is the first policy in this project that returns a true
+frequency from a real structural waveform and refuses on a motionless control
+through the identical processing.** Prominence, on the same four runs, is wrong
+on the burst and confidently wrong on the static scene at a HIGHER prominence
+(8.6) than it gave the burst (8.5) -- item 38's failure again, unchanged.
+
+### And it kills `--stft`
+
+The burst is the case `--stft` was written for, and it makes it worse: the
+short-time run reports 2.520 Hz and the modal set, which answers correctly on the
+whole-dwell spectrum, refuses. Segmentation costs more than the transient
+recovers even at 76% energy concentration. Item 72's remaining hypothesis is
+disproved rather than untested. `rs_spectrum_maxhold()` stays because it is
+correct, opt-in and documented, but nothing here has ever been improved by it.
+
+### What this is NOT
+
+One burst, one seed, one placement, one amplitude. **The project's own bar is
+`rs_track_fit()` -- slope near 1 and rms under half a bin across a sweep of
+injected frequencies, pooled over independent clutter realisations -- and that
+has not been run.** A single frequency matched once is what item 2 records
+several of. Item 72's `--stft 64` reporting 0.504 Hz against a true 0.550 looked
+exactly this good and was a coincidence, caught only by its control; this has its
+control, which is the difference, and it still has no sweep.
+
+The sweep is the next thing, and it is now a well-defined experiment rather than
+a direction: inject the burst at a range of time-scalings so its modes land at
+known different frequencies, and score the modal set's leading mode by slope and
+rms with a static control at every point.

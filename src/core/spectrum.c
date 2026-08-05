@@ -1205,6 +1205,147 @@ static double rs_binom_tail(size_t n, double p, size_t s)
     return sum > 1.0 ? 1.0 : sum;
 }
 
+/* The largest 4-connected block of set windows in 'v', by flood fill over the
+ * naz x nrg window grid. This is the mode SHAPE measure: a structure occupies
+ * contiguous ground, a noise line does not. 'seen' and 'stack' are scratch of
+ * n_win each, supplied by the caller because the null below calls this tens of
+ * thousands of times and must allocate nothing inside its loop. */
+static size_t rs_largest_block(const unsigned char *v, size_t n_win,
+                               size_t naz, size_t nrg,
+                               unsigned char *seen, size_t *stack)
+{
+    memset(seen, 0, n_win * sizeof *seen);
+    size_t largest = 0;
+    for (size_t start = 0; start < n_win; start++) {
+        if (!v[start] || seen[start]) continue;
+        size_t top = 0, size = 0;
+        stack[top++] = start; seen[start] = 1;
+        while (top > 0) {
+            const size_t cur = stack[--top];
+            size++;
+            const size_t ia = (naz > 0) ? cur % naz : cur;
+            const size_t ir = (naz > 0) ? cur / naz : 0;
+            const long da[4] = { -1, 1, 0, 0 }, dr[4] = { 0, 0, -1, 1 };
+            for (int d = 0; d < 4; d++) {
+                const long a2 = (long)ia + da[d], r2 = (long)ir + dr[d];
+                if (a2 < 0 || r2 < 0 || (size_t)a2 >= naz || (size_t)r2 >= nrg)
+                    continue;
+                const size_t nb = (size_t)r2 * naz + (size_t)a2;
+                if (nb >= n_win || seen[nb] || !v[nb]) continue;
+                seen[nb] = 1; stack[top++] = nb;
+            }
+        }
+        if (size > largest) largest = size;
+    }
+    return largest;
+}
+
+/* xorshift64*, so a p-value quoted in the documentation reproduces on another
+ * machine. rand() does not: its sequence is a property of the C library. */
+static unsigned long long rs_modal_rand(unsigned long long *state)
+{
+    unsigned long long x = *state;
+    x ^= x >> 12; x ^= x << 25; x ^= x >> 27;
+    *state = x;
+    return x * 2685821657736338717ULL;
+}
+
+/* THE CHANCE MODEL FOR THE BLOCK. See microm.h: the 2x2 geometric floor is
+ * contingent on the look count, because the look count sets the bin count and
+ * the bin count sets how often windows agree by accident.
+ *
+ * Draws 'n_trial' realisations in which every voting window re-nominates
+ * RS_MODAL_PER_WINDOW bins uniformly over [k_lo, n_freq) under the same leakage
+ * separation the real nomination uses, and records each trial's LARGEST block
+ * among bins clearing 'support_min' -- a max statistic, so the look-elsewhere
+ * cost is inside it. Writes the counts into 'hist', indexed by block size and
+ * of length n_win + 1; the caller turns that into a tail probability.
+ *
+ * 'voting' is the real mask of which windows nominated anything, not a count:
+ * the windows that fall silent are a property of the scene, and drawing the
+ * null over a different set of grid positions would compare the candidate's
+ * shape against a differently-shaped lattice.
+ *
+ * Returns RS_ERR_ALLOC if its scratch cannot be had, in which case 'hist' is
+ * untouched and the caller must not read a p-value from it. */
+static resonarsat_status_t rs_modal_null(const unsigned char *voting, size_t n_win,
+                                         size_t naz, size_t nrg,
+                                         size_t k_lo, size_t n_freq,
+                                         size_t support_min, size_t n_trial,
+                                         unsigned long long seed, size_t *hist)
+{
+    const size_t n_bin = n_freq - k_lo;
+    size_t *support      = calloc(n_freq, sizeof *support);
+    unsigned char *voted = calloc(n_freq * n_win, sizeof *voted);
+    unsigned char *seen  = malloc(n_win * sizeof *seen);
+    size_t *stack        = malloc(n_win * sizeof *stack);
+    size_t *pick         = malloc(RS_MODAL_PER_WINDOW * sizeof *pick);
+    unsigned char *col   = calloc(n_win, sizeof *col);
+    if (!support || !voted || !seen || !stack || !pick || !col) {
+        free(support); free(voted); free(seen); free(stack); free(pick); free(col);
+        rs_set_error("modal null: out of memory");
+        return RS_ERR_ALLOC;
+    }
+
+    unsigned long long st = seed ? seed : 1ULL;
+    for (size_t t = 0; t < n_trial; t++) {
+        memset(support, 0, n_freq * sizeof *support);
+        memset(voted, 0, n_freq * n_win * sizeof *voted);
+        for (size_t w = 0; w < n_win; w++) {
+            if (!voting[w]) continue;
+            size_t n_pick = 0;
+            /* Rejection sampling against the leakage separation. The attempt cap
+             * matters: with a narrow band and six picks the draw can genuinely
+             * run out of room, and a window that nominates fewer bins is the
+             * honest outcome rather than a hang. */
+            for (size_t attempt = 0; attempt < 64 && n_pick < RS_MODAL_PER_WINDOW;
+                 attempt++) {
+                const size_t k = k_lo + (size_t)(rs_modal_rand(&st) % (unsigned long long)n_bin);
+                int blocked = 0;
+                for (size_t i = 0; i < n_pick; i++) {
+                    const size_t d = (k > pick[i]) ? k - pick[i] : pick[i] - k;
+                    if (d < RS_SPECTRUM_LEAKAGE_BINS) { blocked = 1; break; }
+                }
+                if (blocked) continue;
+                pick[n_pick++] = k;
+                support[k]++;
+                voted[k * n_win + w] = 1;
+            }
+        }
+        size_t largest = 0;
+        for (size_t k = k_lo; k < n_freq; k++) {
+            if (support[k] < support_min) continue;
+            const unsigned char *v = voted + k * n_win;
+            for (size_t i = 0; i < n_win; i++) col[i] = v[i];
+            const size_t b = rs_largest_block(col, n_win, naz, nrg, seen, stack);
+            if (b > largest) largest = b;
+        }
+        hist[largest]++;
+    }
+
+    free(support); free(voted); free(seen); free(stack); free(pick); free(col);
+    return RS_OK;
+}
+
+/* The sub-bin position of a peak at bin k, by parabolic interpolation of the
+ * log-power across it -- the standard estimator for a windowed line, exact for a
+ * Gaussian and close for a Hann main lobe. Returns the offset in BINS, clamped
+ * to +-0.5 because a larger excursion means the peak is not at k, and 0 when the
+ * three points do not describe a maximum or sit at the band edge. */
+static double rs_parabolic_offset(const double *P, size_t k, size_t k_lo,
+                                  size_t n_freq)
+{
+    if (k <= k_lo || k + 1 >= n_freq) return 0.0;
+    if (!(P[k - 1] > 0.0) || !(P[k] > 0.0) || !(P[k + 1] > 0.0)) return 0.0;
+    const double a = log(P[k - 1]), b = log(P[k]), c = log(P[k + 1]);
+    const double den = a - 2.0 * b + c;
+    if (!(den < 0.0)) return 0.0;          /* not a maximum */
+    double d = 0.5 * (a - c) / den;
+    if (d > 0.5) d = 0.5;
+    if (d < -0.5) d = -0.5;
+    return d;
+}
+
 /* Sort key for ranking modes: support first, then how far each stood above its
  * own background. */
 static int rs_cmp_mode(const void *a, const void *b)
@@ -1256,10 +1397,13 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
     unsigned char *voted = calloc(n_freq * spec->n_win, sizeof *voted);
     unsigned char *seen  = malloc(spec->n_win * sizeof *seen);
     size_t *stack   = malloc(spec->n_win * sizeof *stack);
+    /* Which windows nominated anything, so the chance model below draws over
+     * the same grid positions rather than over an equally-sized different set. */
+    unsigned char *voting = calloc(spec->n_win, sizeof *voting);
     if (!ref || !ratio || !support || !acc || !pick || !nom || !voted ||
-        !seen || !stack) {
+        !seen || !stack || !voting) {
         free(ref); free(ratio); free(support); free(acc); free(pick); free(nom);
-        free(voted); free(seen); free(stack);
+        free(voted); free(seen); free(stack); free(voting);
         rs_set_error("modal set: out of memory");
         return RS_ERR_ALLOC;
     }
@@ -1268,7 +1412,7 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
         if (!nom[k]) {
             for (size_t j = 0; j < k; j++) free(nom[j]);
             free(ref); free(ratio); free(support); free(acc); free(pick); free(nom);
-            free(voted); free(seen); free(stack);
+            free(voted); free(seen); free(stack); free(voting);
             rs_set_error("modal set: out of memory");
             return RS_ERR_ALLOC;
         }
@@ -1306,7 +1450,7 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
             voted[best * spec->n_win + w] = 1;
             pick[n_pick++] = best;
         }
-        if (n_pick > 0) n_voting++;
+        if (n_pick > 0) { voting[w] = 1; n_voting++; }
     }
 
     /* The threshold: the smallest support at which fewer than half a bin is
@@ -1328,6 +1472,48 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
     out->support_min  = support_min;
     out->expected_false = expected;
 
+    /* What chance alone reaches at THIS configuration, which is the number the
+     * fixed floor could not know (items 77-78). */
+    size_t *hist = calloc(spec->n_win + 1, sizeof *hist);
+    if (!hist) {
+        for (size_t k = 0; k < n_freq; k++) free(nom[k]);
+        free(ref); free(ratio); free(support); free(acc); free(pick); free(nom);
+        free(voted); free(seen); free(stack); free(voting);
+        rs_set_error("modal set: out of memory");
+        return RS_ERR_ALLOC;
+    }
+    const resonarsat_status_t st_null =
+        rs_modal_null(voting, spec->n_win, spec->n_win_az, spec->n_win_rg,
+                      k_lo, n_freq, support_min, RS_MODAL_NULL_TRIALS,
+                      0x9E3779B97F4A7C15ULL, hist);
+    if (st_null != RS_OK) {
+        free(hist);
+        for (size_t k = 0; k < n_freq; k++) free(nom[k]);
+        free(ref); free(ratio); free(support); free(acc); free(pick); free(nom);
+        free(voted); free(seen); free(stack); free(voting);
+        return st_null;                     /* rs_modal_null set the message */
+    }
+    out->n_trial = RS_MODAL_NULL_TRIALS;
+    /* Upper tail of the null: tail[b] trials reached a block of b or more. */
+    size_t *tail = calloc(spec->n_win + 2, sizeof *tail);
+    if (!tail) {
+        free(hist);
+        for (size_t k = 0; k < n_freq; k++) free(nom[k]);
+        free(ref); free(ratio); free(support); free(acc); free(pick); free(nom);
+        free(voted); free(seen); free(stack); free(voting);
+        rs_set_error("modal set: out of memory");
+        return RS_ERR_ALLOC;
+    }
+    for (size_t b = spec->n_win + 1; b > 0; b--) tail[b - 1] = tail[b] + hist[b - 1];
+    out->null_block_crit = spec->n_win + 1;
+    for (size_t b = 0; b <= spec->n_win; b++) {
+        if (hist[b] > 0) out->null_block_max = b;
+        if (out->null_block_crit > spec->n_win &&
+            (double)(1 + tail[b]) / (double)(1 + RS_MODAL_NULL_TRIALS) <= RS_MODAL_P_MAX)
+            out->null_block_crit = b;
+    }
+    free(hist);
+
     for (size_t k = k_lo; k < n_freq; k++) {
         if (out->n_mode >= RS_MODAL_MAX_MODES) break;
         /* Track the best refusal even when the support gate is what refused it,
@@ -1343,44 +1529,28 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
             continue;
         }
 
-        /* The largest 4-connected block of nominating windows, by flood fill
-         * over the window grid. This is the mode SHAPE test: a structure
-         * occupies contiguous ground, a noise line does not. */
+        /* The largest 4-connected block of nominating windows. This is the mode
+         * SHAPE test: a structure occupies contiguous ground, a noise line does
+         * not. */
         const unsigned char *v = voted + k * spec->n_win;
-        memset(seen, 0, spec->n_win * sizeof *seen);
-        size_t largest = 0;
-        const size_t naz = spec->n_win_az, nrg = spec->n_win_rg;
-        for (size_t start = 0; start < spec->n_win; start++) {
-            if (!v[start] || seen[start]) continue;
-            size_t top = 0, size = 0;
-            stack[top++] = start; seen[start] = 1;
-            while (top > 0) {
-                const size_t cur = stack[--top];
-                size++;
-                const size_t ia = (naz > 0) ? cur % naz : cur;
-                const size_t ir = (naz > 0) ? cur / naz : 0;
-                const long da[4] = { -1, 1, 0, 0 }, dr[4] = { 0, 0, -1, 1 };
-                for (int d = 0; d < 4; d++) {
-                    const long a2 = (long)ia + da[d], r2 = (long)ir + dr[d];
-                    if (a2 < 0 || r2 < 0 || (size_t)a2 >= naz || (size_t)r2 >= nrg)
-                        continue;
-                    const size_t nb = (size_t)r2 * naz + (size_t)a2;
-                    if (nb >= spec->n_win || seen[nb] || !v[nb]) continue;
-                    seen[nb] = 1; stack[top++] = nb;
-                }
-            }
-            if (size > largest) largest = size;
-        }
-        /* The geometric floor of rs_spectrum_consensus(): overlapping windows
-         * put any resolvable target in a 2x2 block at minimum. Applied rather
-         * than warned about, because this function selects. */
-        if (largest < 4) {
+        const size_t largest = rs_largest_block(v, spec->n_win, spec->n_win_az,
+                                                spec->n_win_rg, seen, stack);
+        const double p_chance = (double)(1 + tail[largest])
+                              / (double)(1 + RS_MODAL_NULL_TRIALS);
+
+        /* Two gates, and they are different in kind. The 2x2 geometric floor
+         * says a block this small cannot DESCRIBE a spatially resolved mode
+         * whatever else is true; the chance model says a block this large is
+         * what this configuration produces from nothing. Item 77: the geometric
+         * bound is a floor, never a separator, so both apply. */
+        if (largest < 4 || p_chance > RS_MODAL_P_MAX) {
             if (largest > out->near_miss.n_contiguous ||
                 !out->near_miss_had_support) {
                 out->near_miss.bin = k;
                 out->near_miss.freq_hz = spec->freq[k];
                 out->near_miss.n_support = support[k];
                 out->near_miss.n_contiguous = largest;
+                out->near_miss.p_chance = p_chance;
                 out->near_miss_had_support = 1;
             }
             continue;
@@ -1393,18 +1563,48 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
         m->n_support = support[k];
         m->n_contiguous = largest;
         m->median_ratio = rs_median_inplace(acc, support[k]);
+        m->p_chance = p_chance;
+
+        /* Sub-bin frequency across the windows that nominated it. The mean is
+         * the estimate, the spread is the honest uncertainty, and freq_se
+         * discounts for the overlap that makes a 2x2 block one look. */
+        const double bin_hz = (n_freq > 1) ? spec->freq[1] - spec->freq[0] : 0.0;
+        double sum = 0.0, sum2 = 0.0;
+        size_t n_est = 0;
+        for (size_t w = 0; w < spec->n_win; w++) {
+            if (!v[w]) continue;
+            const double d = rs_parabolic_offset(spec->psd + w * n_freq, k,
+                                                 k_lo, n_freq);
+            const double f = spec->freq[k] + d * bin_hz;
+            sum += f; sum2 += f * f; n_est++;
+        }
+        if (n_est > 0) {
+            m->freq_mean = sum / (double)n_est;
+            if (n_est > 1) {
+                double var = (sum2 - sum * sum / (double)n_est) / (double)(n_est - 1);
+                if (var < 0.0) var = 0.0;
+                m->freq_sd = sqrt(var);
+                const double n_eff = (double)n_est / 4.0;
+                m->freq_se = m->freq_sd / sqrt(n_eff > 1.0 ? n_eff : 1.0);
+            }
+        } else {
+            m->freq_mean = spec->freq[k];
+        }
     }
+    free(tail);
     qsort(out->mode, out->n_mode, sizeof out->mode[0], rs_cmp_mode);
 
     const size_t n_mode = out->n_mode;
     for (size_t k = 0; k < n_freq; k++) free(nom[k]);
     free(ref); free(ratio); free(support); free(acc); free(pick); free(nom);
-    free(voted); free(seen); free(stack);
+    free(voted); free(seen); free(stack); free(voting);
 
     if (n_mode == 0) {
         rs_set_error("modal set: no bin was nominated by %zu of %zu windows in a "
-                     "block of 4 or more, so nothing recurs with a shape",
-                     support_min, n_voting);
+                     "block of %zu or more, so nothing recurs with a shape "
+                     "chance does not reach here",
+                     support_min, n_voting,
+                     out->null_block_crit > 4 ? out->null_block_crit : 4);
         return RS_ERR_RANGE;
     }
     return RS_OK;

@@ -562,28 +562,49 @@ set** — every bin nominated by enough windows, ranked by the size of the large
 contiguous block of windows nominating it:
 
 ```
-  modal set: 1 mode recurring in >= 11 of 49 voting windows,
+  modal set: 3 modes recurring in >= 11 of 49 voting windows,
            ranked by the size of their largest contiguous block of windows
            (6 nominations each over 62 admissible bins; 0.39 bins expected
             to clear that by chance, so the threshold is a family-wise budget)
-            0.504 Hz   block   4   support  12/49   local ratio 6.0
+           chance alone reaches block 6 here (1000 trials, worst 7), so the
+           block a mode must beat is derived from this configuration, not fixed
+            0.302 Hz (sub-bin 0.309 +- 0.016)   block  31 (p 0.001)   support  34/49   ratio 7.1
+            1.512 Hz (sub-bin 1.521 +- 0.016)   block  17 (p 0.001)   support  17/49   ratio 13.2
+            0.655 Hz (sub-bin 0.646 +- 0.008)   block  12 (p 0.001)   support  13/49   ratio 3.2
 ```
 
 Nothing there is tuned. The support threshold is computed from a binomial null
-at a budget of half a bin over the band, and the block floor of 4 is the window
-geometry: windows are laid at half their width, so a resolvable target falls in a
-2×2 block at minimum.
+at a budget of half a bin over the band; the block floor of 4 is the window
+geometry, since windows are laid at half their width so a resolvable target falls
+in a 2×2 block at minimum; and the `p` beside each block is a Monte Carlo over
+that same null — nominations reshuffled across the band a thousand times, the
+statistic being the largest block *anywhere*, so the look-elsewhere cost is
+inside it.
+
+**The chance line is the one to read first.** That floor of 4 is a floor and
+never a separator (item 77): the number of admissible bins falls with the look
+count, so windows agree by accident more often, and `chance alone reaches block
+6` at 128 looks becomes **block 20 at 48 looks**. A block of 21 means opposite
+things at the two settings. The chance model prices that automatically, which a
+fixed constant cannot.
 
 **Read the block, not the support.** A noise line can be nominated by as many
 windows as a real mode — measured, 12 of 49 each — and loses only on shape. When
 nothing clears the gates the refusal says which one spoke, and that distinction
 is the useful part: *short of the support needed* means the tracker never carried
-the frequency, while *scattered over the scene* means it did and the energy is
-not on contiguous ground, which is what a processing artefact looks like.
+the frequency, while a block *chance reaches anyway* means it did and the shape
+is not evidence.
 
-It gates nothing, and `FOLLOW-UPS.md` item 71 is the caveat: on a real,
-non-stationary record it correctly refuses rather than recovers, because the
-mode is not in the per-window spectra to be selected.
+**The leading frequency is the bin centre**, which is what every measurement in
+`FOLLOW-UPS.md` is quoted at. The sub-bin figure interpolates the peak per window
+and reports the **spread** across the nominating windows — dispersion, not a
+posterior standard deviation. `FOLLOW-UPS.md` item 79 is the caveat: the modal
+analysis literature fits a modal model and gets a genuine posterior covariance
+including damping, and this does neither.
+
+It gates nothing, and item 71 is the other caveat: on a real, non-stationary
+record it correctly refuses rather than recovers, because the mode is not in the
+per-window spectra to be selected.
 
 
 ```

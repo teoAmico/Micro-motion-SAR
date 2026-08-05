@@ -1719,10 +1719,18 @@ resonarsat_status_t rs_spectrum_maxhold(rs_spectrum_t *spec,
 /* One mode of a reported modal set. See rs_spectrum_modal_set(). */
 typedef struct {
     size_t bin;           /* its spectral bin */
-    double freq_hz;
+    double freq_hz;       /* the BIN CENTRE, unchanged since item 70 */
     size_t n_support;     /* windows that listed it among their own peaks */
     size_t n_contiguous;  /* largest 4-connected block of those windows */
     double median_ratio;  /* median local ratio across those windows */
+
+    /* PER-MODE UNCERTAINTY (item 80). Two independent things can be wrong with
+     * a reported mode and they need separate numbers: it can be at a slightly
+     * different frequency, or it can not be a mode at all. */
+    double freq_mean;     /* sub-bin frequency, mean over nominating windows */
+    double freq_sd;       /* their dispersion, Hz -- SPREAD, not a standard error */
+    double freq_se;       /* freq_sd / sqrt(n_eff), n_eff = n_support/4 (see below) */
+    double p_chance;      /* P(a chance run reaches this block), Monte Carlo */
 } rs_mode_t;
 
 /* Most modes reported. A structure's low-order modes are what a dwell this
@@ -1742,6 +1750,17 @@ typedef struct {
  * it also loosens what is believed. */
 #define RS_MODAL_PER_WINDOW 6u
 
+/* Monte Carlo trials behind 'p_chance'. A thousand puts the resolution at 0.001,
+ * an order below the level being tested, and costs a few milliseconds: the null
+ * shuffles nominations rather than reprocessing anything. */
+#define RS_MODAL_NULL_TRIALS 1000u
+
+/* The level a mode's block must beat. This is a family-wise number already --
+ * the null statistic is the LARGEST block anywhere in the band, so the
+ * look-elsewhere cost items 49 and 55 were caught by is inside it and no
+ * further correction applies. */
+#define RS_MODAL_P_MAX 0.05
+
 /* A modal SET and the evidence for it. */
 typedef struct {
     rs_mode_t mode[RS_MODAL_MAX_MODES];
@@ -1753,13 +1772,22 @@ typedef struct {
     size_t support_min;   /* the derived threshold, in windows */
     double expected_false;/* bins expected to clear it by chance alone */
 
+    /* WHAT CHANCE ALONE PRODUCES AT THIS CONFIGURATION, which is the whole
+     * point of item 80: at 48 looks it is a much larger block than at 128, and
+     * a fixed floor cannot know that. */
+    size_t n_trial;       /* Monte Carlo trials run */
+    size_t null_block_crit; /* smallest block with p <= RS_MODAL_P_MAX */
+    size_t null_block_max;  /* largest block any trial reached */
+
     /* THE CLOSEST THING TO A MODE THAT WAS REFUSED, and why a refusal here is
      * diagnosable where a bare "nothing recurs" is not. A candidate can fail
      * either gate -- too little support, or enough support scattered over the
      * scene -- and those are different failures. The first says the tracker did
      * not carry the frequency; the second says it did and the energy is not on
      * contiguous ground, which is what a processing artefact looks like.
-     * 'n_contiguous' zero means nothing was nominated at all. */
+     * 'n_contiguous' zero means nothing was nominated at all. Its 'p_chance' is
+     * filled when it got far enough to be tested, so a refusal can distinguish
+     * "no block" from "a block chance produces at this configuration anyway". */
     rs_mode_t near_miss;
     int near_miss_had_support; /* it cleared support_min and failed on shape */
 } rs_modal_set_t;
@@ -1834,6 +1862,48 @@ typedef struct {
  * mode whatever its support says. That floor comes from the window geometry, not
  * from a tuned constant, and it is applied here rather than merely warned about
  * because this function selects.
+ *
+ * THE BLOCK IS NORMALISED FOR CHANCE, WHICH IS WHAT ITEM 80 ADDS. The 2x2 floor
+ * is a FLOOR AND NEVER A SEPARATOR (item 77): it is contingent on the look
+ * count, because the look count sets the number of admissible bins and the bin
+ * count sets how often windows agree by accident. Measured -- at 128 looks the
+ * true modes reach block 30-31 and a motionless control at most 12, but at 48
+ * looks, where 25 bins carry what 65 carried, BOTH static controls reach block
+ * 21-23 and one of them at 0.301 Hz, the frequency that reads as recovery of a
+ * true 0.300. Item 78 established that calibrating against a matched static run
+ * cannot fix this, because the static run is drawn from the same widened
+ * distribution as the signal: 1 correct against 6 false positives at 48 looks.
+ *
+ * So the block gets the treatment 'support_min' already had. Under the null the
+ * nominations are unrelated to any bin, so they are RESHUFFLED -- each voting
+ * window re-draws RS_MODAL_PER_WINDOW bins uniformly over the admissible band
+ * under the same leakage separation, the windows and their counts held fixed --
+ * and the trial's statistic is the largest block reached by ANY bin that clears
+ * 'support_min'. 'p_chance' is the fraction of trials reaching a block at least
+ * as large as the candidate's, by (1 + count) / (1 + trials) so a mode no trial
+ * matched is reported at 1/1001 rather than at zero. A mode is kept when
+ * p_chance <= RS_MODAL_P_MAX. Nothing in that is a constant chosen against a
+ * fixture: shrink the band and the null's blocks grow with it.
+ *
+ * PER-MODE FREQUENCY UNCERTAINTY. 'freq_hz' is the bin centre and stays what it
+ * was. Each nominating window also gives a sub-bin estimate by parabolic
+ * interpolation of the log-power across the peak -- the standard estimator for a
+ * Hann-windowed line -- and their mean and spread are 'freq_mean' and 'freq_sd'.
+ * Report the SPREAD by preference. 'freq_se' divides it by sqrt(n_support/4)
+ * rather than sqrt(n_support), because windows overlap at half their width so a
+ * 2x2 block is one independent look of the same ground; that is the same
+ * geometry the block floor comes from, and it is a correction of the right ORDER
+ * rather than an exact effective-sample-size -- treat freq_se as a lower bound on
+ * the uncertainty and never as a posterior standard deviation.
+ *
+ * WHAT THIS IS NOT. The operational-modal-analysis literature reports a genuine
+ * POSTERIOR per mode (item 79): a modal model is fitted to the data and the
+ * parameter covariance comes out of the fit, so frequency, damping and their
+ * identification uncertainty are estimated jointly. That is not what happens
+ * here. This is a chance model for the selection statistic plus an empirical
+ * dispersion of the frequency -- frequentist, and silent about damping, which
+ * this dwell cannot identify anyway at four bins across a mode. The gap is
+ * narrower than it was and it is not closed.
  *
  * Modes come back largest-block first, ties broken by support then local ratio.
  * Returns RS_ERR_RANGE when no bin clears the threshold, which is the honest

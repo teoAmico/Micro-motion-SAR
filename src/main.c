@@ -2609,30 +2609,43 @@ static int rs_cmd_mmotion(int argc, char **argv)
                    "family-wise budget)\n",
                    ms.n_mode, ms.n_mode == 1 ? "" : "s", ms.support_min,
                    ms.n_voting, ms.n_per_window, ms.n_bin, ms.expected_false);
+            printf("           chance alone reaches block %zu here (%zu trials, "
+                   "worst %zu), so the\n"
+                   "           block a mode must beat is derived from this "
+                   "configuration, not fixed\n",
+                   ms.null_block_crit, ms.n_trial, ms.null_block_max);
             for (size_t i = 0; i < ms.n_mode; i++)
-                printf("           %6.3f Hz   block %3zu   support %3zu/%zu   "
-                       "local ratio %.1f\n",
-                       ms.mode[i].freq_hz, ms.mode[i].n_contiguous,
-                       ms.mode[i].n_support, ms.n_voting,
+                printf("           %6.3f Hz (sub-bin %.3f +- %.3f)   block %3zu "
+                       "(p %.3f)   support %3zu/%zu   ratio %.1f\n",
+                       ms.mode[i].freq_hz, ms.mode[i].freq_mean,
+                       ms.mode[i].freq_sd, ms.mode[i].n_contiguous,
+                       ms.mode[i].p_chance, ms.mode[i].n_support, ms.n_voting,
                        ms.mode[i].median_ratio);
-            printf("           Support is cross-window AGREEMENT and adjudicates "
-                   "nothing: item 11's\n"
-                   "           blindness to common-mode artefacts applies to a "
-                   "set exactly as to\n"
-                   "           one frequency. Run --null-static N.\n");
+            printf("           The leading figure is the BIN CENTRE, which is what "
+                   "every earlier\n"
+                   "           measurement here is quoted at. The sub-bin +- is the "
+                   "SPREAD of the\n"
+                   "           per-window estimate, not a posterior: this fits no "
+                   "modal model and\n"
+                   "           estimates no damping (item 79). p is the chance model "
+                   "for the block\n"
+                   "           and it is not a detection -- item 11's blindness to "
+                   "common-mode\n"
+                   "           artefacts is unaffected by any of it. Run "
+                   "--null-static N.\n");
         } else if (mst == RS_ERR_RANGE) {
             printf("  modal set: nothing recurs across the windows\n");
             if (ms.near_miss_had_support)
                 printf("           the closest was %.3f Hz, nominated by %zu of "
-                       "%zu windows but\n"
-                       "           scattered over the scene (largest block %zu < "
-                       "4). Enough windows\n"
-                       "           carry it and they are not on contiguous "
-                       "ground, which is the\n"
-                       "           shape of a processing artefact rather than a "
-                       "structure.\n",
+                       "%zu windows in a\n"
+                       "           largest block of %zu (p %.3f against chance, "
+                       "which reaches %zu\n"
+                       "           here). Enough windows carry it; its shape is "
+                       "one this\n"
+                       "           configuration produces from nothing.\n",
                        ms.near_miss.freq_hz, ms.near_miss.n_support,
-                       ms.n_voting, ms.near_miss.n_contiguous);
+                       ms.n_voting, ms.near_miss.n_contiguous,
+                       ms.near_miss.p_chance, ms.null_block_crit);
             else if (ms.near_miss.n_support > 0)
                 printf("           the closest was %.3f Hz at %zu of %zu windows, "
                        "short of the %zu\n"

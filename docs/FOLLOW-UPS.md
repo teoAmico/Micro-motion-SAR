@@ -117,6 +117,11 @@ said, not better) and item 7's line numbers.
 | 73 | bounded by 74 | on a real BURST the shape-ranked modal set returns a true mode and the static control refuses -- the first policy here to do both -- and `--stft` makes it WORSE |
 | 74 | done | THE SWEEP REFUTES IT: 1 of 6 answers correct over 12 points and two seeds, so item 73 was one lucky point. Both static controls still refuse |
 | 75 | done | the screen was federated: 410 hits against 315, a continent the first one could not see, and 115 raw exceedances to ZERO credible |
+| 76 | **withdraws 71** | items 69-74 measured a tracker that could not see; on `--estimator phase` a real record recovers |
+| 77 | bounds 76 | the block threshold is contingent on the LOOK COUNT and dies at 48 looks |
+| 78 | answered, negative | calibrating the block against a matched static run fails; it needs a chance model |
+| 79 | recorded, not implemented | the field reports a per-mode posterior, not a threshold on a spectral statistic |
+| 80 | implemented, does not detect | the chance model is built: it prices the block correctly and refuses nothing that matters |
 
 ---
 
@@ -7023,3 +7028,95 @@ Recorded, not implemented. **This is the fourth time a search has found the
 field already had what was being invented here** -- after `RS_MICROM_EST_ARGMAX`,
 the overlap figure of item 13, and `phaselink.c`'s ML solver in items 64-65.
 Search first.
+
+
+---
+
+## 80. The chance model is built. It prices the block correctly and detects nothing.
+
+Item 78 specified this and item 79 named the better direction. Both are now
+implemented as far as this project's evidence supports: `rs_spectrum_modal_set()`
+reports a **per-mode `p_chance`** from a Monte Carlo over its own null, and a
+**per-mode frequency uncertainty** from the spread of the sub-bin estimate across
+the nominating windows.
+
+### What was built
+
+**The chance model.** Under the null a window's nominations are unrelated to any
+bin, so they are reshuffled: each voting window re-draws `RS_MODAL_PER_WINDOW`
+bins uniformly over the admissible band under the same leakage separation, over
+the same grid positions that actually voted, 1000 times. The trial statistic is
+the **largest 4-connected block reached by any bin clearing `support_min`** -- a
+max over the band, so the look-elsewhere cost items 49 and 55 were caught by is
+inside it. `p_chance = (1 + trials at least this large) / (1 + trials)`.
+
+**Per-mode frequency uncertainty.** Each nominating window's peak is interpolated
+parabolically on the log-power; `freq_mean` and `freq_sd` are the mean and spread
+over those windows. The reported leading figure is still the BIN CENTRE, so every
+number in this file stays comparable.
+
+### The threshold is configuration-dependent, and by a factor of three
+
+This is item 77's finding, now measured directly rather than inferred:
+
+| looks | admissible bins | block chance reaches (p <= 0.05) | worst trial |
+|---|---|---|---|
+| 128 | 62 | **6** | 7 |
+| 48 | 22 | **20** | 28 |
+
+A fixed floor of 4 cannot know that, and item 77's warning -- *quote the block
+with its look count attached or not at all* -- is now enforced by the code rather
+than by the reader. A block of 21 is overwhelming at 128 looks and is **what
+chance produces** at 48.
+
+### It changes almost no verdict, and no verdict that matters
+
+Both sweeps re-run, 12 injected points and 2 static controls at each look count,
+`--estimator phase` at 2 mm, seeds 7 and 11:
+
+- **128 looks.** 3 of 12 correct (0.302, 0.403, 0.302 against 0.300/0.400/0.300),
+  identical to item 77. Nothing is refused that was not refused before: the
+  lowest block among the twelve answers is 6, and the threshold is 6.
+- **48 looks.** 2 of 12 correct. Two answers are newly REFUSED (0.850/seed 7 at
+  block 19, 0.400/seed 11 at block 13) and **both were wrong**, so precision
+  improves from 2-of-12 to 2-of-10. That is the entire gain.
+- **Both static controls still pass, at both look counts.** 128: 1.512 Hz at
+  block 12 `p 0.001`, 1.210 Hz at block 7 `p 0.012`. 48: 0.301 Hz at block 21
+  `p 0.033`, 0.151 Hz at block 23 `p 0.019`.
+
+### Why it cannot refuse them, which is item 11 for the third time
+
+The statics are not agreeing *by chance*. They are agreeing because the
+processing put the same thing in every window: **1.512 Hz is the common-mode
+artefact** item 76 identified in all three scenes, and 0.151 Hz is the first
+admissible bin -- the trend field this project has documented since item 47. A
+null built by shuffling nominations across bins asks *"could this much agreement
+arise from independent windows?"*, and the answer for a common-mode artefact is
+correctly **no**, because it did not arise that way. It arose from a real feature
+of the processing.
+
+**A chance model over nominations cannot substitute for a null over scenes.**
+That is exactly what item 11 says and it is now demonstrated a third time, on the
+statistic built specifically to fix it. `--null-static` remains the only thing
+that adjudicates.
+
+### One diagnostic fell out that was not designed
+
+`freq_sd` is **exactly 0.000** on four of the 48-look answers -- 0.300/s11,
+0.550/s11, 0.850/s11 and STATIC/s11, all reporting 0.151 Hz. Every window's
+sub-bin estimate agrees to the last digit, which is not what independent
+estimates of a real mode do; it is what windows pinned to the band floor do.
+**A zero spread is the signature of the trend field, visible in the output for
+the first time.** The largest block anywhere in either sweep, **39 of 49**, is one
+of these -- a pure artefact. Block size is not evidence, and here is the proof in
+one number.
+
+### Status
+
+Implemented, tested, ASAN-clean, and it does not detect. What it fixes is real
+but narrow: the block threshold is no longer a constant that silently means
+different things at different look counts. What it does not fix is the thing
+items 69-79 have been circling, and item 79's diagnosis stands unaltered --
+the remaining direction is a **modal model fitted to the data with a genuine
+posterior**, and before that, **joint transient-and-mode estimation** on the
+short record. Neither is attempted here.

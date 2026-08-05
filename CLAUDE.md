@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 79 items and their status.
+an index of all 80 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -156,12 +156,33 @@ test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
 
+**THE CHANCE MODEL IS BUILT, PRICES THE BLOCK CORRECTLY, AND DETECTS NOTHING**
+(item 80). `rs_spectrum_modal_set()` now reports a per-mode `p_chance` from a
+Monte Carlo over its own null — nominations reshuffled across the band 1000
+times, the statistic being the LARGEST block anywhere, so look-elsewhere is
+inside it — plus a per-mode frequency spread from the sub-bin estimate across
+nominating windows. **The threshold it derives swings by a factor of three with
+the look count: chance reaches block 6 at 128 looks and block 20 at 48**, so
+item 77's "quote the block with its look count attached" is now enforced by the
+code. It changes almost nothing: at 128 looks no verdict moves, at 48 it refuses
+two answers and **both were already wrong** (2-of-12 correct becomes 2-of-10).
+**Both static controls still pass at both look counts** — because they are not
+agreeing by chance, they are agreeing because 1.512 Hz is the common-mode
+artefact and 0.151 Hz is the trend field. **A chance model over nominations
+cannot substitute for a null over scenes: item 11, third demonstration, on the
+statistic built to fix it.** One diagnostic fell out unplanned — `freq_sd`
+EXACTLY 0.000 is the band-floor pile-up's signature, and the largest block in
+either sweep, **39 of 49, is one of those artefacts**. Block size is not
+evidence. Report the BIN CENTRE as the leading figure; the sub-bin ± is a
+SPREAD, not a posterior.
+
 **THE FIELD DOES NOT THRESHOLD A SPECTRAL STATISTIC — IT REPORTS A POSTERIOR**
 (item 79). Bayesian OMA fits a modal model and returns a per-mode posterior with
 identification uncertainty; other lines estimate confidence bounds alongside the
 parameters. **That dissolves item 78's search for a configuration-free block
 constant rather than solving it** — the successor to `rs_spectrum_modal_set()` is
-per-mode uncertainty, not a better block null. Also a standing critique of code
+per-mode uncertainty, not a better block null. Item 80 built both and confirms
+it: the block null works and buys nothing. Also a standing critique of code
 here: for SHORT records the field estimates the TRANSIENT JOINTLY with the modal
 parameters *instead of* Hann-windowing, where `rs_spectrum_compute_opts()`
 windows and items 51-53 fit carriers in a separate stage. And item 77's recall

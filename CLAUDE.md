@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 86 items and their status.
+an index of all 87 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,24 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**INGV JOINED: A THIRD NETWORK, THE SAME FLOOR** (item 87). 1719 stations / 66
+networks. Italy instruments its structures and INGV publishes them — `IV.ME05`
+Diga Del Menta, **`7C.SPAOL` Catania Viadotto S. Paolo (ANAS)**, the `XO`
+Amandola array (Torre del Podestà, Ospedale, **and its BASE station**) — and
+**not one is inside any footprint of any archive**. Funnel space/operating/dwell:
+Capella 15/6/**5**, Umbra 33/17/**1**, ICEYE 0/0/0. The five are four **Etna
+summit** stations sharing ONE 29.1 s collect (2024-07-09, inside the Voragine
+paroxysm sequence) plus Venezia Lido. **Measured: 0.589-0.803 um RMS, 6.9-9.3x
+BELOW the floor** — about 2x each station's own 6-hours-earlier control, so the
+tremor is REAL and still an order of magnitude too small. **Items 83-87 together:
+motion above the floor exists (43% of CESMD structural records, up to 10.9 cm),
+is never inside an aperture (0 coincidences over 13,735 collects), and everything
+that IS inside one reads 7-20x below — Oroville 0.5-0.8, FR.CURIE 0.510, Etna
+0.589-0.803 um. The consistency is the finding.** NOT queried: **ESM
+(`esm-db.eu`) refuses every request with HTTP 413**, including `level=network`,
+and it is the European strong-motion archive where structural arrays with
+event-triggered records would live. Unqueried source, not a negative result.
 
 **RESIF ADDS ONE EUROPEAN PAIRING AND IT IS PROVEN-STATIC** (item 86). The
 French FDSN node, **5932 stations / 118 networks**, closes item 83's US-only

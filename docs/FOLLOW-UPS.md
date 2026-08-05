@@ -128,6 +128,7 @@ said, not better) and item 7's line numbers.
 | 84 | **partly withdraws 63** | Umbra has 228 collects >= 30 s, not none, and covers two instrumented bridges |
 | 85 | done | all three public archives joined; ICEYE covers no structure; one bridge pairing exists in total |
 | 86 | answered, negative | RESIF joined; one European pairing and it is proven-static; still no dam anywhere |
+| 87 | answered, negative | INGV joined; Etna summit during a paroxysm is still 9x below the floor; ESM unqueried |
 
 ---
 
@@ -7545,3 +7546,81 @@ earthquake coincidence: RESIF station metadata carries no event list, unlike
 CESMD's, so items 83's shaking-overlap question would need a separate catalogue
 query. Nothing here contradicts item 83's duty-cycle arithmetic; it simply was
 not re-asked.
+
+
+---
+
+## 87. INGV joined. A third network, a third continent-scale negative, same floor.
+
+`webservices.ingv.it` is the Italian FDSN node and the third sensor network put
+through this join: **1719 stations over 66 networks**, same containment test,
+same control, same operating-period filter item 86 showed is decisive.
+
+### Italy instruments its structures, and INGV publishes them
+
+- **dam** — `IV.ME05` Diga Del Menta
+- **bridge** — `7C.SPAOL` **Catania, Viadotto S. Paolo (ANAS)**, a genuine
+  instrumented road viaduct, which is the target class item 68 named and item 84
+  found only two of anywhere
+- **buildings** — the `XO` array at Amandola is a real structural set:
+  `AM01` Torre del Podestà, `AM02` Istituto Tecnico, `AM03` Ospedale and
+  **`AM04` Base Costone Ospedale**, a hospital with its own base station; plus
+  `6N.CMA14` Palazzo Raffaello and `6N.CMA05` Scuola Piaget in Ancona.
+
+**Not one of them is inside any footprint of any of the three archives.** The
+"Ponte" false-positive class recurs in Italian exactly as in French -- `IV.PONC`
+is Pontechianale, a commune.
+
+### The funnel
+
+| archive | inside a footprint | operating then | and dwell >= 15 s |
+|---|---|---|---|
+| Capella | 15 | 6 | **5** |
+| Umbra | 33 | 17 | **1** |
+| ICEYE | 0 | 0 | **0** |
+
+The five are four **Etna summit** stations plus Venezia Lido, and the four Etna
+stations share **one** dwell-adequate collect:
+`CAPELLA_C14_SP_CPHD_HH_20240709040329`, **29.1 s, 2024-07-09 04:03:57 UTC**,
+inside the Voragine paroxysm sequence of early July 2024. Umbra's single hit is
+`IV.FIR`, Firenze, 18.4 s.
+
+### Measured, and it is the same answer
+
+Displacement, response removed, 0.3-3 Hz:
+
+```
+  during the aperture   EBCN 0.589   ECPN 0.803   EPLC 0.589   ECNE 0.620 um RMS
+  control, 6 h earlier  EBCN 0.308   ECPN 0.422   EPLC 0.300   ECNE 0.275 um RMS
+```
+
+**6.9x to 9.3x BELOW the 5.5 um floor.** The tremor is REAL -- every station reads
+about twice its own six-hours-earlier control, so Etna was genuinely more active
+during the collect -- and it is still an order of magnitude too small.
+
+### What items 83-87 now say together
+
+Three sensor networks on two continents, three SAR archives, and the pattern does
+not move:
+
+- **Motion above the floor exists and is documented**: 43% of CESMD structural
+  records, up to 10.9 cm (item 83).
+- **It is never inside an aperture.** Zero earthquake coincidences over 13,735
+  collects.
+- **Everything that IS inside an aperture is 7x to 20x below the floor** --
+  Oroville 0.5-0.8 um (item 60), Kilauea's median (item 67), FR.CURIE 0.510 um
+  (item 86), Etna summit 0.589-0.803 um during a paroxysm sequence.
+- **No instrumented dam, bridge or structural array has ever been imaged**, now
+  across CESMD, RESIF and INGV.
+
+The consistency is the finding. Ambient and volcanic ground motion sits about an
+order of magnitude below this chain's floor everywhere it has been checked, and
+that is not a sampling accident.
+
+### What was NOT queried
+
+**ESM (Engineering Strong Motion, `esm-db.eu`) refused every request with HTTP
+413**, including `level=network`. It is the European strong-motion archive and
+would be the natural place to find structural arrays with event-triggered
+records, the way CESMD was. That is an unqueried source, not a negative result.
+ITACA (`itaca.mi.ingv.it`) was likewise not queried.

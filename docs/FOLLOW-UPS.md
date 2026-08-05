@@ -8322,11 +8322,19 @@ The pre-registered branch that fires is: *"the discriminator works and the failu
 is in what is REPORTED, not in what is measurable -- which would make a
 twin-differenced statistic the thing to report."*
 
-That is now the open work: `--probe-hz` exists and `D` is computable, but **nothing
-in `mmotion` reports a twin-differenced statistic as its answer**. Every policy in
-`spectrum.c` selects a peak from one scene's spectrum. The paired difference
-requires two runs and is therefore outside what a single invocation can report --
-which is a design question, not a bug.
+That was the open work when this item was written. **It is now implemented**:
+`mmotion --twin WINDOWS_CSV` reads a previous run's evidence file and reports the
+per-window difference at the probed frequency, adding a `twin_delta` column. It
+requires `--probe-hz` and refuses a twin probed at a different frequency, over a
+different grid, or without probe columns. It reports the BEST window's excess over
+the scene-wide median, which is the localised part. It gates nothing.
+
+Verified against this item's own data: the 0.75/seg02/seed7 point, whose reported
+frequency is the 1.512 Hz artefact, prints *"35 of 49 windows gained; median
++1.601 (scene-wide), best +21.025 at window 4; excess +19.425"* -- reproducing the
+hand-computed +19.531 at the centre window.
+
+What the tool cannot check is whether the twin is the RIGHT KIND of control.
 
 **Bounds:** one fixture family, whole-scene motion, one estimator, 2 mm. `D > 0`
 in 20 of 24 is not a detection either -- it is measured with the truth known, and

@@ -589,6 +589,37 @@ recovered against the periodogram's 3 of 12 on the same sweep, with both static
 controls still answering. It is opt-in and it is not a result. `--tfit` and
 `--stft` both replace the spectrum and cannot be combined.
 
+### The twin difference
+
+`--twin PATH` differences this run against a previous one's `_windows.csv`, at
+the frequency `--probe-hz` names. It requires `--probe-hz` and refuses without it.
+
+```
+  twin difference at 0.7500 Hz, against tw2_windows.csv:
+            35 of 49 windows gained; median +1.601 (scene-wide), best +21.025 at window 4 (0,4)
+            excess of best over median +19.425 -- that is the LOCALISED part;
+```
+
+**Why it exists.** `FOLLOW-UPS.md` item 96 measured a **100% false-positive rate
+on motionless clutter** — twelve of twelve scenes returned a confident frequency
+and nine were distinct, because every clutter realisation carries its own
+residual carrier. Item 97 then measured that differencing against a twin of the
+**same scene** recovers the injected frequency in **76% of the runs whose
+reported frequency is wrong**. The measurement survives what the report loses.
+
+**Read the excess, not the total.** The median is what the whole scene did; the
+best window's excess over it is the localised part. On a whole-scene fixture
+(`--clutter-vib`) a large median is expected behaviour, not a fault.
+
+**The pairing must differ in nothing but amplitude.** Paired against an
+*uninjected* run rather than a *zero-amplitude* one, the difference measures the
+scatterer's presence and exceeds a real signal — item 39. `mmotion` refuses a
+pairing probed at a different frequency or over a different grid, but it cannot
+tell whether the twin is the right kind of control; that is on you.
+
+**It gates nothing**, like consensus and contiguity. And on a real collect there
+is no twin to pair against, which is why `--null-static` exists.
+
 ### The modal set
 
 A structure does not have *a* frequency, so `mmotion` also prints a **modal

@@ -169,6 +169,20 @@ or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
 
+**`--twin WINDOWS_CSV` REPORTS THE TWIN-DIFFERENCED STATISTIC** (item 97,
+implemented). It differences this run against a previous run's evidence file at
+the frequency `--probe-hz` names, and **requires `--probe-hz`** — differencing
+dominant-peak columns when two runs peak at different frequencies is how a
+motionless control outscored a real injection (item 38). It refuses a twin
+probed at a different frequency, over a different grid, without probe columns, or
+that cannot be read. **Read the EXCESS of the best window over the median, not
+the total**: the median is what the whole scene did, and on a `--clutter-vib`
+fixture a large median is expected. It **gates nothing**, and on a real collect
+there is no twin to pair against — which is why `--null-static` exists. What it
+CANNOT check is whether the twin is the right kind of control: paired against an
+UNINJECTED run rather than a ZERO-AMPLITUDE one it measures the scatterer's
+presence and exceeds a real signal (item 39).
+
 **THE PAIRED SAME-SCENE TWIN FINDS THE SIGNAL THAT THE REPORT LOSES** (item 97).
 Pre-registered at `8543974`. 24 injected points each paired with a twin on the
 SAME seed and clutter differing only in whether the target moves;

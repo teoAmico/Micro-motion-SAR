@@ -1325,6 +1325,73 @@ static int rs_cmp_double_asc(const void *a, const void *b)
     return (x > y) - (x < y);
 }
 
+/* The per-window 'probe_prominence' column of a previous run's evidence file,
+ * for the twin-differenced statistic reported below.
+ *
+ * WHY A FILE AND NOT A SECOND PROCESSING PASS. The paired statistic of items
+ * 38-39 needs two scenes differing in ONE thing -- whether the target moves --
+ * and a single mmotion invocation sees one collect. Reading the twin's committed
+ * evidence file is therefore the only way to report the difference at all, and
+ * it has the side benefit that the twin stays a durable artefact.
+ *
+ * Returns the number of windows read and writes a malloc'd array to 'out', or 0
+ * on failure with 'why' set to a printable reason. The probe frequency recorded
+ * in the twin's header comes back in 'out_hz' so the caller can refuse a pairing
+ * taken at a DIFFERENT frequency: differencing two runs probed at different bins
+ * is meaningless, which is the mistake item 39 exists to prevent. */
+static size_t rs_load_twin_probe(const char *path, double **out, double *out_hz,
+                                 const char **why)
+{
+    *out = NULL; *out_hz = -1.0; *why = "";
+    FILE *fh = fopen(path, "r");
+    if (!fh) { *why = "cannot be opened"; return 0; }
+
+    char line[8192];
+    int col_probe = -1, col_win = -1;
+    size_t cap = 64, n = 0;
+    double *v = malloc(cap * sizeof *v);
+    if (!v) { fclose(fh); *why = "out of memory"; return 0; }
+
+    while (fgets(line, sizeof line, fh)) {
+        if (line[0] == '#') {
+            const char *p = strstr(line, "probe_hz=");
+            if (p) *out_hz = atof(p + 9);
+            continue;
+        }
+        if (col_probe < 0) {
+            /* Locate columns by NAME: the column set depends on whether the
+             * producing run used --probe-hz. */
+            char *save = NULL, *tok = strtok_r(line, ",\n\r", &save);
+            for (int i = 0; tok; i++, tok = strtok_r(NULL, ",\n\r", &save)) {
+                if (strcmp(tok, "probe_prominence") == 0) col_probe = i;
+                if (strcmp(tok, "window") == 0) col_win = i;
+            }
+            if (col_probe < 0 || col_win < 0) {
+                free(v); fclose(fh);
+                *why = "has no probe_prominence column; it was written without --probe-hz";
+                return 0;
+            }
+            continue;
+        }
+        char *save = NULL, *tok = strtok_r(line, ",\n\r", &save);
+        double got = 0.0; int have = 0;
+        for (int i = 0; tok; i++, tok = strtok_r(NULL, ",\n\r", &save))
+            if (i == col_probe) { got = atof(tok); have = 1; }
+        if (!have) continue;
+        if (n == cap) {
+            cap *= 2;
+            double *t = realloc(v, cap * sizeof *t);
+            if (!t) { free(v); fclose(fh); *why = "out of memory"; return 0; }
+            v = t;
+        }
+        v[n++] = got;
+    }
+    fclose(fh);
+    if (n == 0) { free(v); *why = "contains no data rows"; return 0; }
+    *out = v;
+    return n;
+}
+
 /* Run the full micro-motion chain on a phase-history file.
  *
  * Focus, decompose into sub-looks, track, and estimate spectra. Prints the
@@ -1342,7 +1409,7 @@ static int rs_cmd_mmotion(int argc, char **argv)
                "                          [--pulse-start N] [--max-pulses N]\n"
                "                          [--inject-vib FREQ_HZ[,AMP_MM[,REL]]]\n"
                "                          [--inject-at DX,DY] [--stft LOOKS]\n"
-               "                          [--tfit MODES]\n"
+               "                          [--tfit MODES] [--twin WINDOWS_CSV]\n"
                "                          [--inject-wave FILE[,RATE_HZ[,AMP_MM[,REL]]]]\n"
                "                          [--stream N]\n"
                "                          [--estimator correlation|phase|splitband|argmax]\n"
@@ -2128,6 +2195,11 @@ static int rs_cmd_mmotion(int argc, char **argv)
      * A probe inside the Hann skirt is allowed -- naming a frequency is not
      * searching for one -- but it is not separable from a trend, so it is
      * flagged rather than refused. See rs_spectrum_prominence_at(). */
+    /* --twin PATH differences this run against a previous one at the probed
+     * frequency; see rs_load_twin_probe() and the report below. */
+    const char *twin_path = rs_opt(argc, argv, "--twin");
+    double *twin_probe = NULL; size_t twin_n = 0; double twin_hz = -1.0;
+
     if (probe_hz > 0.0) {
         if (rs_spectrum_prominence_at(&spec, 0, probe_hz, &probe_bin,
                                       NULL, NULL) != RS_OK) {
@@ -2147,6 +2219,58 @@ static int rs_cmd_mmotion(int argc, char **argv)
                probe_hz, probe_bin, probe_bin_hz,
                (probe_bin < RS_SPECTRUM_LEAKAGE_BINS)
                  ? " INSIDE THE HANN SKIRT -- not separable from a trend" : "");
+    }
+
+    /* --twin PATH: the twin-differenced statistic (FOLLOW-UPS.md item 97).
+     *
+     * WHY IT IS REPORTED AT ALL. Item 96 measured a 100% false-positive rate on
+     * motionless clutter -- twelve of twelve scenes returned a confident
+     * frequency and nine were distinct -- because every clutter realisation
+     * carries its own residual carrier and each policy in spectrum.c selects a
+     * peak from ONE scene's spectrum. Item 97 then measured that differencing
+     * against a twin of the SAME scene recovers the injected frequency in 76% of
+     * the runs whose reported frequency is wrong. The measurement survives what
+     * the report loses, so the difference is worth printing.
+     *
+     * IT GATES NOTHING, exactly like consensus and contiguity. It is one more
+     * line of evidence beside the answer. */
+    if (twin_path) {
+        const char *why = "";
+        if (probe_hz <= 0.0) {
+            fprintf(stderr, "mmotion: --twin needs --probe-hz. Differencing the "
+                            "dominant-peak columns of two runs is meaningless "
+                            "when they peak at different frequencies -- that is "
+                            "how a motionless control outscored a real injection "
+                            "(FOLLOW-UPS.md item 38).\n");
+            rs_spectrum_free(&spec); rs_microm_free(&m);
+            rs_subap_stack_free(&stack); rs_cphd_free(&c);
+            return 1;
+        }
+        twin_n = rs_load_twin_probe(twin_path, &twin_probe, &twin_hz, &why);
+        if (twin_n == 0) {
+            fprintf(stderr, "mmotion: twin '%s' %s\n", twin_path, why);
+            rs_spectrum_free(&spec); rs_microm_free(&m);
+            rs_subap_stack_free(&stack); rs_cphd_free(&c);
+            return 1;
+        }
+        if (twin_n != spec.n_win) {
+            fprintf(stderr, "mmotion: twin has %zu windows, this run has %zu -- "
+                            "the grids differ, so no row corresponds\n",
+                    twin_n, spec.n_win);
+            free(twin_probe);
+            rs_spectrum_free(&spec); rs_microm_free(&m);
+            rs_subap_stack_free(&stack); rs_cphd_free(&c);
+            return 1;
+        }
+        if (twin_hz > 0.0 && fabs(twin_hz - probe_hz) > 1e-9) {
+            fprintf(stderr, "mmotion: twin was probed at %.6f Hz and this run at "
+                            "%.6f Hz -- differencing different bins measures "
+                            "nothing\n", twin_hz, probe_hz);
+            free(twin_probe);
+            rs_spectrum_free(&spec); rs_microm_free(&m);
+            rs_subap_stack_free(&stack); rs_cphd_free(&c);
+            return 1;
+        }
     }
 
     /* Report the window with the most prominent spectral peak.
@@ -2724,6 +2848,50 @@ static int rs_cmd_mmotion(int argc, char **argv)
         }
     }
 
+    /* The twin difference, reported beside the other statistics and gating
+     * nothing. See the --twin block above for why. */
+    if (twin_probe) {
+        double *d = malloc(spec.n_win * sizeof *d);
+        if (d) {
+            size_t n_pos = 0, w_max = 0;
+            for (size_t w = 0; w < spec.n_win; w++) {
+                double p_psd = 0.0, p_prom = 0.0;
+                rs_spectrum_prominence_at(&spec, w, probe_hz, NULL,
+                                          &p_psd, &p_prom);
+                d[w] = p_prom - twin_probe[w];
+                if (d[w] > 0.0) n_pos++;
+                if (d[w] > d[w_max]) w_max = w;
+            }
+            const double d_max = d[w_max];
+            double *srt = malloc(spec.n_win * sizeof *srt);
+            double med = 0.0;
+            if (srt) {
+                memcpy(srt, d, spec.n_win * sizeof *srt);
+                qsort(srt, spec.n_win, sizeof *srt, rs_cmp_double_asc);
+                med = (spec.n_win % 2) ? srt[spec.n_win / 2]
+                    : 0.5 * (srt[spec.n_win / 2 - 1] + srt[spec.n_win / 2]);
+                free(srt);
+            }
+            printf("  twin difference at %.4f Hz, against %s:\n"
+                   "            %zu of %zu windows gained; median %+.3f "
+                   "(scene-wide), best %+.3f at window %zu (%zu,%zu)\n"
+                   "            excess of best over median %+.3f -- that is the "
+                   "LOCALISED part;\n"
+                   "            the median is what the whole scene did and a "
+                   "whole-scene fixture\n"
+                   "            (--clutter-vib) is EXPECTED to move it (item 97).\n"
+                   "            The pairing must differ in NOTHING BUT AMPLITUDE."
+                   " Paired against an\n"
+                   "            UNINJECTED run instead of a zero-amplitude one, "
+                   "this measures the\n"
+                   "            scatterer's presence and exceeds a real signal "
+                   "(item 39).\n",
+                   probe_hz, twin_path, n_pos, spec.n_win, med, d_max, w_max,
+                   w_max / spec.n_win_rg, w_max % spec.n_win_rg, d_max - med);
+            free(d);
+        }
+    }
+
     {
         const double cf = cons_hz;
         const size_t n_agree = cons_agree, n_distinct = cons_distinct;
@@ -3137,8 +3305,9 @@ static int rs_cmd_mmotion(int argc, char **argv)
                           ? " INSIDE_THE_HANN_SKIRT" : "");
             fprintf(wf, "window,iaz,irg,dominant_hz,prominence,quality,"
                         "excursion_px,snr,sigma_px,d_a,passed_gates,"
-                        "agrees_with_consensus,passed_cull%s\n",
-                    probe_hz > 0.0 ? ",probe_psd,probe_prominence" : "");
+                        "agrees_with_consensus,passed_cull%s%s\n",
+                    probe_hz > 0.0 ? ",probe_psd,probe_prominence" : "",
+                    twin_probe ? ",twin_delta" : "");
             for (size_t w = 0; w < spec.n_win; w++) {
                 const double exc = spec.excursion_px ? spec.excursion_px[w] : 0.0;
                 const int passed = (spec.quality[w] >= q_min_rep) &&
@@ -3178,6 +3347,8 @@ static int rs_cmd_mmotion(int argc, char **argv)
                     rs_spectrum_prominence_at(&spec, w, probe_hz, NULL,
                                               &p_psd, &p_prom);
                     fprintf(wf, ",%.12g,%.12g", p_psd, p_prom);
+                    if (twin_probe)
+                        fprintf(wf, ",%.12g", p_prom - twin_probe[w]);
                 }
                 fputc('\n', wf);
             }

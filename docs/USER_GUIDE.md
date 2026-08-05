@@ -555,6 +555,37 @@ that was not. `FOLLOW-UPS.md` items 30 and 31.
 
 Without a null you now get the frequency and an explicit `NOT ADJUDICATED`:
 
+### The modal set
+
+A structure does not have *a* frequency, so `mmotion` also prints a **modal
+set** — every bin nominated by enough windows, ranked by the size of the largest
+contiguous block of windows nominating it:
+
+```
+  modal set: 1 mode recurring in >= 11 of 49 voting windows,
+           ranked by the size of their largest contiguous block of windows
+           (6 nominations each over 62 admissible bins; 0.39 bins expected
+            to clear that by chance, so the threshold is a family-wise budget)
+            0.504 Hz   block   4   support  12/49   local ratio 6.0
+```
+
+Nothing there is tuned. The support threshold is computed from a binomial null
+at a budget of half a bin over the band, and the block floor of 4 is the window
+geometry: windows are laid at half their width, so a resolvable target falls in a
+2×2 block at minimum.
+
+**Read the block, not the support.** A noise line can be nominated by as many
+windows as a real mode — measured, 12 of 49 each — and loses only on shape. When
+nothing clears the gates the refusal says which one spoke, and that distinction
+is the useful part: *short of the support needed* means the tracker never carried
+the frequency, while *scattered over the scene* means it did and the energy is
+not on contiguous ground, which is what a processing artefact looks like.
+
+It gates nothing, and `FOLLOW-UPS.md` item 71 is the caveat: on a real,
+non-stationary record it correctly refuses rather than recovers, because the
+mode is not in the per-window spectra to be selected.
+
+
 ```
 strongest peak in window 112: 0.163 Hz, prominence 31.4, quality 0.444, ...
   backed by 32 windows, largest touching block 9

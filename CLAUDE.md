@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 75 items and their status.
+an index of all 76 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -155,6 +155,21 @@ That cost a wrong diagnosis here: `--max-pulses` was reported as unimplemented i
 test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
+
+**ITEMS 69-74 MEASURED A TRACKER THAT COULD NOT SEE** (item 76). Every run in
+that arc used the DEFAULT `correlation` estimator, whose precision scales with
+the sub-look RESOLUTION CELL — 8.26 m at 128 looks. Measured `sigma_px` was
+**46.7 m per look and the excursion 787x the 20 mm injected motion**: the tracked
+series was noise, so item 74's 1-correct-in-6 is chance, as predicted. On
+`--estimator phase` at 2 mm the same fixtures give **0.504 Hz for the sine and
+0.302 Hz for the BURST against a true 0.300** — a real accelerometer record
+recovered — at **block 30-31 against the static control's best of 12, no
+overlap**. Item 71's shape test was starved of evidence, not wrong. `1.512 Hz`
+appears in all three scenes including static: common-mode, item 11, catchable
+only because the control ran. **Item 71 is withdrawn as a statement about the
+method**; items 72-74 stand only as measurements of the correlation route. The
+phase result needs item 74's sweep before it is a recovery — check `sigma_px`
+against the injected amplitude BEFORE building anything on a tracked series.
 
 **FEDERATING THE SCREEN MULTIPLIES PAIRINGS, NOT AMPLITUDE** (item 75). Item
 59's screen queried `service.iris.edu` alone — 289 of its 315 hits were IRISDMC —

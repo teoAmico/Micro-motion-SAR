@@ -116,7 +116,7 @@ said, not better) and item 7's line numbers.
 | 72 | done | the short-time max-hold estimator is built and FAILS its controls: it breaks the sine whole-dwell recovers and answers confidently on a motionless scene |
 | 73 | bounded by 74 | on a real BURST the shape-ranked modal set returns a true mode and the static control refuses -- the first policy here to do both -- and `--stft` makes it WORSE |
 | 74 | done | THE SWEEP REFUTES IT: 1 of 6 answers correct over 12 points and two seeds, so item 73 was one lucky point. Both static controls still refuse |
-| 75 | **the current state** | the screen was federated: 410 hits against 315, a continent the first one could not see, and 115 raw exceedances to ZERO credible |
+| 75 | done | the screen was federated: 410 hits against 315, a continent the first one could not see, and 115 raw exceedances to ZERO credible |
 
 ---
 
@@ -6786,3 +6786,60 @@ it was cheap, it was wrong not to have done it, and it closes the question --
 but the answer it returns is the one item 62 predicted.
 
 Run: `runs/screens/sensor-join-federated/`.
+
+
+## 76. Items 69-74 measured a tracker that could not see. On phase, the burst recovers.
+
+Item 71 concluded the true mode was not in the per-window spectra, and items
+72-74 then built three ways to select better from it. All failed. The reason was
+upstream of all of them and was visible in the evidence file the whole time.
+
+**Every run in items 69-75 used the DEFAULT estimator, `correlation`.** Bamler &
+Eineder's bound for correlation shift estimation scales with the sub-look
+RESOLUTION CELL, which at 128 looks is 8.26 m here. The measured `sigma_px`:
+
+```
+  sigma_px  median 93.4 px = 46.7 m per look   (CRB at coherence 0.32 predicts 4.92 m)
+  excursion median 31.5 px = 15.7 m
+  injected  20 mm          =  0.040 px
+```
+
+**The tracked series was noise at 787x the signal.** No spectrum of it contains
+the injected mode except by chance -- which is exactly item 74's 1 correct answer
+in 6. Item 66 already recorded the two routes' per-look precisions, ~0.2 mm for
+phase against a resolution-cell fraction for correlation; nobody compared them to
+the injected amplitude.
+
+### The re-run, at 2 mm so the phase observable does not wrap
+
+| scene | true | `best_window` | modal set (leading) |
+|---|---|---|---|
+| sine | 0.500 | 0.504 correct | **0.504 Hz, block 30, support 35/49, ratio 25.0** |
+| **burst** | **0.300** | 2.268 wrong | **0.302 Hz, block 31, support 34/49, ratio 7.1** |
+| static | -- | 2.268 wrong | 1.512 Hz, block 12 |
+
+**A real structure's measured motion is recovered**: 0.302 Hz against a true
+0.300, from an Oroville accelerometer record of the Lake Almanor earthquake.
+
+**The block size separates signal from artefact with no overlap**: 30-31 for the
+true modes, at most 12 for anything the static control produces. Item 71's shape
+test was right and was starved of evidence, not wrong.
+
+`best_window` fails on the burst and on the static scene alike, at prominence
+23-32. Prominence remains what the tool reports and remains the wrong statistic.
+
+**1.512 Hz appears in all three scenes including static** -- a common-mode
+artefact, item 11 exactly, and identifiable ONLY because the static control ran
+beside them.
+
+### What this withdraws and what it leaves
+
+Withdrawn: item 71's "the true mode is not in the per-window spectra to be
+selected", as a statement about the method. It is true of the CORRELATION route
+at these settings and false of the phase route. Items 72-74's negative results
+stand as measurements of the correlation route and say nothing about the chain.
+
+Not withdrawn: item 74's sweep discipline. One burst recovering at one amplitude
+and one seed is what item 73 was, and that did not survive. **The phase re-run
+needs the same sweep before it is a recovery**, with the added question of where
+the block threshold sits between 12 and 30.

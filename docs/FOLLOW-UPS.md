@@ -135,6 +135,7 @@ said, not better) and item 7's line numbers.
 | 91 | answered, negative | a building's AMBIENT motion injected: 1 of 24 correct, and 9 of 21 answers are the static scene's |
 | 92 | external, adopt | their validation practice: an erratum that is our recurring rule, a derived threshold, and a pre-registration template |
 | 93 | answered, negative | the Butte ground-truth chain is geometry only; two "dead" links are 403/429 refusals |
+| 94 | open, better source | a second building record at 2.64 Hz, INSIDE the band, with mode-shape geometry; its loudest peak is not a mode |
 
 ---
 
@@ -8039,3 +8040,71 @@ The one motion-bearing source in the Butte area is the **MBMG seismic network
 no CPHD** -- below item 58's dwell bar and unprocessable by the phase-history
 route. Butte is therefore a good ground truth for the question the external work
 asked and not for this one.
+
+
+---
+
+## 94. A second building record, and this one's mode is INSIDE the band. Its loudest peak is not a mode.
+
+`zenodo.org/records/20667124` -- **former military hospital, Naples** (Chisari,
+Zizi, Pantò, Kheirollahi; June 2026). A multi-setup ambient vibration test:
+**4 tri-axial + 2 bi-axial accelerometers + temperature, 4 setups of 20 minutes
+each at 200 Hz**, two reference sensors fixed and four roving. 51.8 MB,
+**CC-BY-NC-4.0** -- note the NC, where item 89's Granada record is CC-BY.
+
+`setupM.csv` gives every sensor's **x, y, z coordinates**, so mode SHAPES are
+reconstructable. That is what items 70-71's spatial test wants and has never had
+from a real structure.
+
+### No pairing, again
+
+0 collects over the Naples historic centre in any of the three archives; nearest
+scene centres 14.1 km (Umbra, the Vesuvius scene), 187.8 km (Capella), 533.1 km
+(ICEYE). **Caveat: the dataset gives only LOCAL coordinates, so this is the city
+and not the building** -- but a 14.1 km nearest centre is not a near miss.
+
+### The loudest peak is setup-dependent, therefore not modal
+
+Averaged over 16 channels, the dominant ACCELERATION peaks are:
+
+```
+  setup 1   14.11 - 14.50 Hz
+  setup 2   12.40 - 13.04 Hz
+  setup 3   11.77 - 11.87 Hz
+  setup 4   15.48 - 20.00 Hz
+```
+
+**A building's modes do not move 60% between measurement setups.** What changes
+between setups is which sensors were remounted where, so this is mounting or
+instrument resonance. Reading the tallest acceleration peak as a mode would have
+been wrong four times out of four, and the multi-setup design is what exposes it
+-- a single-setup campaign gives no way to tell.
+
+This is the same lesson as item 89's 0.22 Hz microseism, which appeared on 5 of 6
+Granada sensors and was not a mode either. **The tallest line in an SHM record is
+routinely not the structure.**
+
+### In displacement it is 2.64 Hz, and that is INSIDE the band
+
+The corner test of item 91, reapplied and again necessary:
+
+```
+  corner 0.3 Hz -> 0.39 Hz   tracks the corner
+  corner 0.5 Hz -> 0.59 Hz   tracks the corner
+  corner 0.8 Hz -> 2.64 Hz   stable
+  corner 1.0 Hz -> 2.64 Hz   stable
+  corner 1.2 Hz -> 2.64 Hz   stable
+```
+
+| record | dominant displacement | in band at 128 looks? |
+|---|---|---|
+| Granada (item 89) | 3.78 Hz | **no** -- 0.100-2.13 Hz at 30 s, needs 256 looks |
+| **Naples** | **2.64 Hz** | **yes at a 20 s dwell** -- 0.150-3.20 Hz |
+
+**So Naples is the better injection source**: it needs no change to the operating
+point every measurement in this file is quoted at, and it carries mode-shape
+geometry that Granada's single-column record does not.
+
+Its real peak displacement is **0.80-1.23 um**, so like every instrument measured
+in items 83-91 it sits below item 53's 5.5 um floor and would not be detected
+even by a perfect collect over it.

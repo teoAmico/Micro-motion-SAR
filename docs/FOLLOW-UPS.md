@@ -112,7 +112,8 @@ said, not better) and item 7's line numbers.
 | 68 | done | the doc's new SHM datasets have no co-located collect, but they are real WAVEFORMS to inject in place of a sine |
 | 69 | done, amended by 70 | a real structure's motion is injected for the first time, and the REPORTED answer goes wrong where a sine is correct |
 | 70 | done, extended by 71 | reporting a modal SET is the right shape and does NOT fix it; cross-window support gives a noise bin the same 12/49 as the true mode |
-| 71 | **the current state** | ranking the set by SPATIAL CONTIGUITY makes the wrong answer a refusal -- and the true mode is not in the tracking to be found, so the limit is upstream of selection |
+| 71 | done | ranking the set by SPATIAL CONTIGUITY makes the wrong answer a refusal -- and the true mode is not in the tracking to be found, so the limit is upstream of selection |
+| 72 | **the current state** | the short-time max-hold estimator is built and FAILS its controls: it breaks the sine whole-dwell recovers and answers confidently on a motionless scene |
 
 ---
 
@@ -6517,3 +6518,66 @@ So the honest statement is that single-periodogram micro-motion has a
 stationarity precondition nothing in this project has ever stated, every
 synthetic recovery here satisfied it by construction, and a real structure under
 transient excitation does not.
+
+
+## 72. The short-time estimator: built, and it fails its controls
+
+Item 71 named the blocking problem -- a whole-dwell periodogram assumes the
+motion lasts the dwell -- so `rs_spectrum_maxhold()` cuts the tracked series into
+overlapping segments, transforms each, and takes the per-bin MAXIMUM. Exposed as
+`mmotion --stft L`.
+
+The design follows the literature rather than invention. A short-time transform
+preserves transients that a multitaper estimator smears, and pays in frequency
+resolution and variance; multitaper is the better estimator when the signal is
+stationary and weak, and the wrong one when it is strong but brief. The maximum
+rather than Welch's mean is the standard analyser mode for transient vibration
+for the reason that matters here -- linear averaging suppresses intermittent
+events, which is the dilution being escaped. **Peak-hold is not a linear
+operation**: it is valid for auto-power spectra, which this is, and NOT for FRF
+or coherence, so nothing derived from `--coherence` should be read from a
+max-hold run.
+
+### The result, with the controls that decide it
+
+| | whole dwell | `--stft 64` |
+|---|---|---|
+| sine, true 0.500 | **0.504 correct** | **3.175 WRONG** |
+| record, true 0.550 | 1.966 wrong | 0.504 |
+| **static, nothing moving** | -- | **2.974, prominence 4.9** |
+
+The record's 0.504 Hz looks like a recovery and **is a coincidence**. The static
+control returns an equally confident in-band answer from a motionless scene, and
+the estimator BREAKS the sine that the whole-dwell periodogram recovers. One
+frequency matched once is what this project's own bar exists to reject.
+
+`L` is not a free parameter either, and it fails the same way
+`RS_MODAL_PER_WINDOW` did at 12. At `L = 32` the record reports 3.175 Hz and the
+modal set -- which refuses at 64 -- confidently returns THREE modes, 0.907, 1.915
+and 3.175 Hz, none of them true, at blocks 4-5. Shorter segments manufacture
+exactly the contiguous support item 71's shape test was built to demand.
+
+### Why it fails, and what that costs
+
+Two effects, both predicted in the header and both underestimated.
+
+Resolution halves at `L = 64`, from 0.0504 to 0.1008 Hz. And a maximum over
+segments sits above their mean, so the floor rises everywhere -- prominence at
+the sine's own peak falls from 8.3 to 4.4. The signal is diluted by segmentation
+faster than the transient is recovered by max-hold, because **this fixture's
+motion is not actually transient enough to pay for it**: the injected record is
+20 s of continuous shaking, not a burst with a low duty cycle. The estimator is
+built for a case the fixture does not contain.
+
+So item 71's diagnosis stands and this is not its remedy. It also does not
+refute the diagnosis: what was measured here is that segmenting a 128-look
+series costs more than non-stationarity does at THIS duty cycle. A record with a
+genuinely short burst -- an impulse response, a vehicle crossing -- is the case
+`--stft` was written for and has not been tried.
+
+The function is kept because it is correct, documented, opt-in, prints its own
+resolution cost, and is the only time-frequency estimator here. It is NOT a
+result, and no run should quote it without the static control beside it.
+
+**The honest state after items 69-72: nothing in this project recovers a real
+structure's motion, and the reason is now located rather than guessed.**

@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 71 items and their status.
+an index of all 72 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -126,6 +126,21 @@ That cost a wrong diagnosis here: `--max-pulses` was reported as unimplemented i
 test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
+
+**THE SHORT-TIME ESTIMATOR IS BUILT AND FAILS ITS CONTROLS** (item 72).
+`rs_spectrum_maxhold()` / `mmotion --stft L` segments the tracked series and
+takes the per-bin MAXIMUM — the standard analyser mode for transients, since
+averaging suppresses the intermittent events being chased. At `--stft 64` the
+record reports 0.504 Hz against a true 0.550 and it is a COINCIDENCE: the same
+setting reports **3.175 Hz for the sine that whole-dwell gets right**, and
+**2.974 Hz at prominence 4.9 on a motionless scene**. At `L = 32` the modal set
+confidently returns three wrong modes. Segmenting a 128-look series costs more
+than non-stationarity does at this duty cycle — the injected record is 20 s of
+continuous shaking, not a burst, so the estimator is built for a case the fixture
+does not contain. **Peak-hold is not a linear operation**: valid for auto-power
+spectra, invalid for FRF or coherence, so read nothing from `--coherence` on a
+max-hold run. Kept because it is correct, opt-in and prints its own resolution
+cost; it is not a result.
 
 **THE REPORTING STAGE IS NOT WHAT LOSES A REAL STRUCTURE'S MOTION — THE
 PER-WINDOW SPECTRUM IS** (item 71). Ranking the modal set by SPATIAL CONTIGUITY —

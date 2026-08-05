@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 83 items and their status.
+an index of all 84 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -155,6 +155,25 @@ That cost a wrong diagnosis here: `--max-pulses` was reported as unimplemented i
 test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
+
+**ITEM 63'S UMBRA DWELL VERDICT DOES NOT SURVIVE THE FULL ARCHIVE** (item 84).
+Item 63 sampled **250** products to measure a **sub-2% tail** — it had no power
+to see what it was quoted for. Over **12,404** collects harvested from Umbra's
+STAC sidecars: median **5.80 s** (not 3.50), max **496 s** (not 23.5), >= 15 s
+**8.6% / 1071** (not 0.4%), and **>= 30 s: 228 collects where item 63 said
+NONE** — **more than Capella's 156**. "Disqualified on dwell" is **withdrawn as
+a statement about the archive**; what stands is the MEDIAN, 5.80 s giving
+`df` 0.17 Hz, so 98% of Umbra is still unusable for this band. **Umbra covers
+instrumented BRIDGES and Capella never has**: 81 structures inside footprints
+(77 buildings, 4 bridges), 19 inside a dwell-adequate one including the **San
+Francisco Bay Bridge/West at 24.8 s** and **Fremont Channel B Bridge at 27.4 s**.
+**The catch: none of the 19 carries a CPHD** — the bridge products are SICD only,
+so they force the `--subap paper`/`uniform` image-domain route with item 13's
+response ceiling, not the `pulse` route every real-data recovery here was
+measured on. Earthquake coincidences remain **0 on both archives**. What opens is
+the AMBIENT route: the Bay Bridge is under continuous traffic load and needs no
+earthquake, and whether that clears the 5.5 um floor is the next measurement.
+**Quote a tail figure with the sample size that measured it, or not at all.**
 
 **INSTRUMENTED STRUCTURES ARE ABOVE THE FLOOR AND ARE NEVER OBSERVED MOVING**
 (item 83). CESMD filtered to `sttype` B/Br/D gives **288 structures — 239

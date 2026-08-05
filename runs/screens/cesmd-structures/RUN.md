@@ -57,3 +57,24 @@ it fixes the amplitude half completely.
 
 Third independent confirmation that the data problem is not a search problem
 (items 62, 75, 83). What remains is a TASKED collect, not an archive query.
+
+---
+
+## Umbra (added)
+
+`harvest_umbra.py` reads Umbra's open-data STAC sidecars -- one small JSON per
+collect holding the footprint polygon, start/end and mode -- and `join_any.py`
+puts both archives through identical code.
+
+**A bug worth recording.** The first launch was handed a `umbra_keys.txt` left
+behind by item 63's dwell survey, which held `.cphd` keys rather than STAC
+sidecars, and began fetching 47 GB products on twelve threads. The script now
+VALIDATES the cache's contents rather than its existence, refuses any key that is
+not a `.stac.v2.json`, and caps each read at 4 MB. Checking that a cached file
+exists is not checking that it holds what the code assumes.
+
+Result in `docs/FOLLOW-UPS.md` item 84: item 63's dwell verdict is partly
+withdrawn (228 collects at >= 30 s, where a 250-product sample reported none),
+Umbra covers two instrumented bridges that Capella never has, none of the
+structure-covering dwell-adequate collects carries a CPHD, and earthquake
+coincidences remain zero on both archives.

@@ -125,6 +125,7 @@ said, not better) and item 7's line numbers.
 | 81 | implemented, changes nothing | joint transient-and-mode estimation; the limit is not the spectral estimator |
 | 82 | explains 81 | the threshold effect predicts it; matrix pencil and LSCF transient terms are untried |
 | 83 | answered, negative | instrumented structures are ABOVE the floor and never observed moving; 0 bridges and 0 dams ever in a footprint |
+| 84 | **partly withdraws 63** | Umbra has 228 collects >= 30 s, not none, and covers two instrumented bridges |
 
 ---
 
@@ -7356,3 +7357,70 @@ footprint count by four multiplies dwell-inadequate scenes. ICEYE publishes no
 bulk archive with footprints to join at all. **Neither was queried here**, and
 that is a limit of this entry rather than a finding: what is established is that
 the CAPELLA archive contains no such pairing.
+
+
+---
+
+## 84. Item 63's Umbra dwell verdict does not survive the full archive.
+
+Item 83 left the spatial question open for a second archive: if Umbra covers
+structures Capella does not, the blocker is dwell alone. Harvested Umbra's whole
+open catalogue from its STAC sidecars -- **12,539 sidecars, 12,469 read, failures
+counted by reason** (56 HTTP, 14 unparseable times) -- and joined it through the
+identical code and the identical control as item 83.
+
+### The dwell figures were taken from a sample with no power in the tail
+
+Item 63 sampled **250** products. The tail it was trying to measure is under 2%,
+so ~250 draws expect to see four or fewer of them; the sample could not have
+resolved what it was quoted for. Over **12,404** collects (65 excluded for
+implausible timestamps -- one claims to end in 2046):
+
+| | item 63 (n=250) | actual (n=12,404) |
+|---|---|---|
+| median | 3.50 s | **5.80 s** |
+| max | 23.50 s | **496 s** |
+| >= 15 s | 0.4% (~16) | **8.6% (1071)** |
+| >= 30 s | **NONE** | **1.8% (228)** |
+
+**Umbra has MORE collects at >= 30 s than Capella does** -- 228 against 156.
+Item 63's "disqualified on dwell" is **withdrawn as a statement about the
+archive**. What stands is the statement about the MEDIAN: most of Umbra is short,
+5.80 s giving `df` = 0.17 Hz, so 98% of it is unusable for this band. The
+usable tail is real and was reported as empty.
+
+### Umbra covers instrumented BRIDGES; Capella never has
+
+- **81 structures** inside an Umbra footprint: 77 buildings, **4 bridges**.
+- **19** of them inside a DWELL-ADEQUATE (>= 15 s) collect: 17 buildings and
+  **2 bridges** -- **San Francisco Bay Bridge/West** (`CE.58632`, best dwell
+  **24.8 s**, three collects) and **Fremont Channel B Bridge** (`CE.57595`,
+  **27.4 s**).
+
+Against item 83's Capella result -- 12 structures, all buildings, no bridge and
+no dam ever. So the spatial half is not a fact about the sky; it is a fact about
+where one operator points.
+
+### The catch, and it is a real one
+
+**Not one of the 19 carries a CPHD.** 332 of the 1071 dwell-adequate Umbra
+collects do, but zero of the structure-covering ones; the bridge products are
+SICD, CSI and SIDD only. That does not disqualify them -- a SICD is the focused
+full aperture, which is exactly what `--subap paper` and `--subap uniform` split
+spectrally -- but it forces the image-domain route, with item 13's sub-aperture
+response ceiling and item 15's one-dominant-per-sub-look-cell precondition, and
+rules out the `pulse` route this project's real-data recoveries were measured on.
+
+### Earthquakes: still zero, on both archives
+
+0 records whose shaking overlapped an aperture, Umbra as well as Capella. Item
+83's duty-cycle wall stands and this doubles the archive it stands over.
+
+### What actually opens
+
+**The Bay Bridge is under continuous traffic load**, which is item 68's target
+class and needs no earthquake to coincide with anything. The pairing that does
+not exist for the earthquake route may exist for the AMBIENT route, and this is
+the first named, public, dwell-adequate collect over an instrumented structure
+this project has found. Whether a bridge's traffic response clears item 53's
+5.5 um floor is untested and is the next measurement, not a conclusion.

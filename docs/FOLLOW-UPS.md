@@ -115,7 +115,8 @@ said, not better) and item 7's line numbers.
 | 71 | done | ranking the set by SPATIAL CONTIGUITY makes the wrong answer a refusal -- and the true mode is not in the tracking to be found, so the limit is upstream of selection |
 | 72 | done | the short-time max-hold estimator is built and FAILS its controls: it breaks the sine whole-dwell recovers and answers confidently on a motionless scene |
 | 73 | bounded by 74 | on a real BURST the shape-ranked modal set returns a true mode and the static control refuses -- the first policy here to do both -- and `--stft` makes it WORSE |
-| 74 | **the current state** | THE SWEEP REFUTES IT: 1 of 6 answers correct over 12 points and two seeds, so item 73 was one lucky point. Both static controls still refuse |
+| 74 | done | THE SWEEP REFUTES IT: 1 of 6 answers correct over 12 points and two seeds, so item 73 was one lucky point. Both static controls still refuse |
+| 75 | **the current state** | the screen was federated: 410 hits against 315, a continent the first one could not see, and 115 raw exceedances to ZERO credible |
 
 ---
 
@@ -6697,3 +6698,91 @@ realistic motion, and none of the four things tried here fixes it.**
 The one measurement worth keeping from the whole arc is item 71's: the true mode
 is not in the per-window spectra to be selected. Everything since has been an
 attempt to select better from evidence that is not there.
+
+
+## 75. Federating the screen: 2.7x the search, none of the motion
+
+Item 59's screen queried `service.iris.edu` alone, and the result showed it:
+289 of its 315 hits came from IRISDMC, five from INGV, none from Japan or most
+of EIDA. **"315 synchronised measurements" meant 315 reachable from one
+archive.** `tools/footprint_sensor_join.py` now queries the FDSN federator,
+which resolves across every data centre and reports which one holds each
+channel.
+
+### The join
+
+```
+410 hits over 648 footprints      against 315 over 939 before
+ 76 distinct stations             against 27
+ new networks: CE ES CH BW HL CA CI CO TX Z2 1I
+```
+
+Footprints were filtered to dwell >= 15 s (item 58) BEFORE the expensive stage,
+which is why 648 and not 939.
+
+**Read the shape, not the total. 324 of 410 are HV** -- Kilauea, which item 66
+already characterised as 95% below the floor -- and **1 of 410 has a structural
+site name.** Europe contributed about twenty hits. Federation found more
+sensors; they are still ground vaults rather than instruments on loaded
+structures. The three-legged requirement of item 68 is unchanged: a continuous
+public record, on a structure, under a >=15 s dwell.
+
+### The audit, and its funnel
+
+1716 channels over 72 of 76 stations, with failures itemised: 136 non-motion
+channels, 58 below Nyquist, 10 genuine no-data.
+
+```
+1. above 5.5 um, motion channels, Nyquist > 3 Hz : 115   (11 stations)
+2. after chronic-station check                    :  70   (dropped 6 AM Raspberry Shakes)
+3. after neighbour test                           :   8   (4 distinct stations)
+4. after the neighbour test ACTUALLY RAN          :   0 credible
+```
+
+Step 4 exists because steps 1-3 lied. Two survivors, both on La Palma, were
+marked UNTESTED -- no second station sat within 30 km IN THE SAME SCENE, so the
+check that eliminated 62 of 70 never fired on them. **They survived by not being
+tested.** Asking the archive directly for every station within 50 km during the
+same aperture settles it:
+
+| station | date | target | neighbour median | ratio |
+|---|---|---|---|---|
+| CDLV | 2021-09-18 | 0.26 um | 0.31 um | 0.8 |
+| EXILP | 2021-09-23 | 0.68 | 0.74 | 0.9 |
+| CENR | 2021-09-24 | 5.87 | 0.79 | 7.4 |
+| CENR | 2021-09-26 | 5.14 | 0.92 | 5.6 |
+| CENR | 2021-09-29 | 2.01 | 0.79 | 2.5 |
+| CENR | 2024-08-02 | 5.01 | 0.36 | **13.9** |
+| **CJED** | **2024-08-03** | **55.62** | **0.42** | **131.2** |
+
+**ES.CJED reads 131x the stations on the same island at the same instant.** That
+is HV.UWB's signature, rejected at 400x in item 61, and it fails the 10x cut by
+an order of magnitude. The 55.62 um headline was the instrument.
+
+### The one thing that looked like ground
+
+CENR during the September 2021 eruption, at 2.5-7.4x. The circumstantial case is
+coherent: Cumbre Vieja erupted on 19 September, CDLV reads 0.8x the day BEFORE,
+CENR is nearest the vent, and its readings DECAY 5.87 -> 5.14 -> 2.01 across 24,
+26 and 29 September in step with the tremor. An instrument fault does not taper
+with an eruption sequence.
+
+But 5.87 um is **1.07x** the 5.5 um floor, and it is volcanic GROUND motion, not
+a structure under load. It is the closest this project has come to an
+above-floor reading that is not hardware, and it is not close enough to be one.
+
+### What it establishes
+
+**115 raw exceedances to zero credible**, the same outcome as item 61's 52 to
+zero, on a screen 2.7x larger reaching an entire continent the first could not
+see. That is item 62's arithmetic tested rather than assumed: widening the net
+multiplies pairings, not amplitude, because ambient ground motion is below the
+floor everywhere and not merely in the United States.
+
+**The data problem is not a search problem, and this is the second independent
+confirmation.** What would change the answer is a sensor on a loaded structure,
+and 1 of 410 hits even has a structural site name. Federation was worth doing --
+it was cheap, it was wrong not to have done it, and it closes the question --
+but the answer it returns is the one item 62 predicted.
+
+Run: `runs/screens/sensor-join-federated/`.

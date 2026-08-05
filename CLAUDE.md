@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 74 items and their status.
+an index of all 75 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -155,6 +155,19 @@ That cost a wrong diagnosis here: `--max-pulses` was reported as unimplemented i
 test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
+
+**FEDERATING THE SCREEN MULTIPLIES PAIRINGS, NOT AMPLITUDE** (item 75). Item
+59's screen queried `service.iris.edu` alone — 289 of its 315 hits were IRISDMC —
+so `footprint_sensor_join.py` now uses the FDSN federator: **410 hits over 648
+dwell-adequate footprints, 76 stations against 27**, with `CE ES CH BW HL CA CI`
+newly reachable. **Read the shape, not the total: 324 of 410 are Kilauea and 1 of
+410 has a structural site name.** The audit ran 115 raw exceedances to **zero
+credible** — the La Palma headline, `ES.CJED` at 55.62 um, reads **131x its
+neighbours on the same island at the same instant**, which is `HV.UWB`'s
+signature. What came closest to real is `ES.CENR` during the September 2021
+Cumbre Vieja eruption, decaying 5.87→5.14→2.01 um in step with the tremor — but
+that is 1.07x the floor and it is GROUND, not a structure. **Second independent
+confirmation of item 62**: the data problem is not a search problem.
 
 **THE SWEEP REFUTES ITEM 73** (item 74). Twelve points -- six burst frequencies
 from 0.300 to 0.850 Hz, two clutter seeds -- give the modal set six answers, of

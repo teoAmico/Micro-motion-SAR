@@ -137,6 +137,7 @@ said, not better) and item 7's line numbers.
 | 93 | answered, negative | the Butte ground-truth chain is geometry only; two "dead" links are 403/429 refusals |
 | 94 | open, better source | a second building record at 2.64 Hz, INSIDE the band, with mode-shape geometry; its loudest peak is not a mode |
 | 95 | **bounds 76** | item 91 replicates on a second building; the 1.512 Hz artefact is SEED-BOUND, not common-mode |
+| 96 | **bounds 95** | 12 of 12 motionless scenes report a confident frequency, 9 distinct; there is no clean seed |
 
 ---
 
@@ -8170,3 +8171,77 @@ prominence-based selection must do.
 Pre-registered and unchanged: **no localisation claim** (target at the grid
 origin, item 40) and **no detectability claim** (the controls are motionless
 scenes, not item 38's zero-amplitude twins). Recoverability only.
+
+
+---
+
+## 96. It is not seed 7. TWELVE of twelve motionless scenes report a confident frequency, and every one is different.
+
+Item 95 found that all seven `1.512 Hz` answers came from seed 7 and concluded
+the artefact was **seed-bound**. That is true and it was reported in a way that
+implied seed 11 was clean. **It is not.** Seed 11's static control returns
+`1.210 Hz`, which is simply a different number.
+
+Twelve motionless scenes, identical processing, `--estimator phase`, 128 looks:
+
+```
+  seed   3   0.756 Hz   block  9   p 0.001
+  seed   5   2.319 Hz   block 10   p 0.001
+  seed   7   1.512 Hz   block 12   p 0.001
+  seed  11   1.210 Hz   block  7   p 0.012
+  seed  13   1.714 Hz   block  8   p 0.001
+  seed  17   1.210 Hz   block  8   p 0.001
+  seed  19   2.218 Hz   block  8   p 0.001
+  seed  23   1.714 Hz   block 11   p 0.001
+  seed  29   2.369 Hz   block 16   p 0.001
+  seed  31   0.151 Hz   block 14   p 0.001
+  seed  37   1.613 Hz   block 10   p 0.001
+  seed  41   2.218 Hz   block  9   p 0.001
+```
+
+**Nothing moved in any of these scenes.**
+
+- **12 of 12 answered. NONE refused.** The false-positive rate of the reported
+  modal set on motionless clutter is **100%** at this operating point.
+- **9 distinct frequencies**, spread across 0.151-2.369 Hz. There is no clean
+  seed and no single artefact to notch out.
+- **Every one clears the chance model**, p <= 0.012, at blocks 7-16 against the 6
+  that chance reaches at 128 looks (item 80). The Monte Carlo prices agreement
+  and these scenes are not agreeing by chance -- each contains a real,
+  scene-specific feature.
+- **The modal set and `rs_spectrum_best_window()` agree on 0 of 12 scenes.** Two
+  policies reading the same spectrum name different frequencies every single
+  time, which is on its own a statement about how little either is tracking.
+
+### So "can the fixture be fixed?" -- no, and the question dissolves
+
+There is nothing wrong with seed 7. Each clutter realisation has its own
+dominant scatterer geometry, so each carries its own residual carrier (item 63:
+the carrier is `(4*pi/lambda)*dX*dx/R` with `dx` the offset from the pixel
+centre, which is a property of where the scatterers landed). **A different seed
+does not remove the artefact, it renames it.**
+
+### What this does to items 91 and 95
+
+It does not withdraw them, but it bounds them hard. Those sweeps scored an
+injected frequency against answers drawn from a chain that returns a confident
+wrong frequency on **every motionless scene**. So:
+
+- item 95's "7 of 24 correct" is the injected line **winning against a
+  scene-specific artefact of comparable strength**, not a chain that is quiet
+  until given a signal.
+- The 1.512 Hz that recurs through items 76-95 is seed 7's number. Every sweep
+  in this file used seeds 7 and 11, so it also inherited seed 11's 1.210 --
+  which is exactly the second-most-common wrong answer in item 91.
+
+### And it is item 11 at full strength, measured
+
+This is the oldest finding in this file, now with a number on it: **a per-scene
+null control is not one option among several, it is the only thing standing
+between this chain and a 100% false-positive rate.** `--null-static` on the SAME
+scene is what item 91 and 95 had; `p_chance` is not a substitute and item 80
+already said so.
+
+**Bounds of this measurement:** one fixture family (`rs_sim_scene` clutter at 400
+scatterers), one estimator, one operating point. It says nothing about real
+collects, where item 17's Giza run DID return a null.

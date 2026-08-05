@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 95 items and their status.
+an index of all 96 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,24 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**IT IS NOT SEED 7: TWELVE OF TWELVE MOTIONLESS SCENES REPORT A CONFIDENT
+FREQUENCY** (item 96). Item 95 said the 1.512 Hz artefact was seed-bound, which
+implied seed 11 was clean. **It is not** — seed 11 answers 1.210 Hz. Twelve
+static scenes, identical processing: **12 answered, 0 refused, 9 DISTINCT
+frequencies** spread over 0.151-2.369 Hz, **every one clearing the chance model**
+at p <= 0.012 and blocks 7-16 against the 6 chance reaches (item 80). Nothing
+moved in any of them. **The false-positive rate of the reported modal set on
+motionless clutter is 100% at this operating point**, and the modal set and
+`rs_spectrum_best_window()` **agree on 0 of 12 scenes**. So the fixture cannot be
+"fixed": each realisation has its own dominant-scatterer geometry and so its own
+residual carrier (item 63), and **a different seed renames the artefact rather
+than removing it**. This bounds items 91 and 95 hard — their scores are an
+injected line winning against a scene-specific artefact of comparable strength,
+not a quiet chain given a signal — and it is **item 11 with a number on it: a
+per-scene null control is the only thing between this chain and a 100%
+false-positive rate.** Bounds: one fixture family, one estimator, one operating
+point; real collects are not covered, and item 17's Giza run did return a null.
 
 **ITEM 91 REPLICATES, AND THE 1.512 Hz ARTEFACT IS SEED-BOUND** (item 95). The
 first run here with hypotheses **pre-registered before it ran** (commit

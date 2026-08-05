@@ -1668,6 +1668,7 @@ typedef struct {
     size_t bin;           /* its spectral bin */
     double freq_hz;
     size_t n_support;     /* windows that listed it among their own peaks */
+    size_t n_contiguous;  /* largest 4-connected block of those windows */
     double median_ratio;  /* median local ratio across those windows */
 } rs_mode_t;
 
@@ -1676,10 +1677,16 @@ typedef struct {
  * and becomes a spectrum with extra steps. */
 #define RS_MODAL_MAX_MODES 12u
 
-/* How many peaks each window nominates. NOT a false-positive knob: the support
- * threshold below is computed FROM this number, so raising it widens what can
- * be found without loosening what is believed. It trades only sensitivity to
- * weak modes against the cost of a larger null family. */
+/* How many peaks each window nominates.
+ *
+ * SIX IS MEASURED, NOT CHOSEN, and this was believed to be free until it was
+ * swept (item 71). The support threshold is computed FROM this number, so the
+ * binomial null stays calibrated at any value -- but the SHAPE test does not.
+ * At twelve nominations a scattered artefact accumulates enough nominating
+ * windows to form a contiguous block: the sine fixture gains a spurious second
+ * mode and the multi-modal one gains a confident wrong answer at block 14 where
+ * six nominations correctly refuse. Raising it does widen what can be found and
+ * it also loosens what is believed. */
 #define RS_MODAL_PER_WINDOW 6u
 
 /* A modal SET and the evidence for it. */
@@ -1692,6 +1699,16 @@ typedef struct {
     size_t n_per_window;  /* peaks each window nominated */
     size_t support_min;   /* the derived threshold, in windows */
     double expected_false;/* bins expected to clear it by chance alone */
+
+    /* THE CLOSEST THING TO A MODE THAT WAS REFUSED, and why a refusal here is
+     * diagnosable where a bare "nothing recurs" is not. A candidate can fail
+     * either gate -- too little support, or enough support scattered over the
+     * scene -- and those are different failures. The first says the tracker did
+     * not carry the frequency; the second says it did and the energy is not on
+     * contiguous ground, which is what a processing artefact looks like.
+     * 'n_contiguous' zero means nothing was nominated at all. */
+    rs_mode_t near_miss;
+    int near_miss_had_support; /* it cleared support_min and failed on shape */
 } rs_modal_set_t;
 
 /* WHAT THE WINDOWS COLLECTIVELY SAY IS MOVING, AS A SET RATHER THAN A WINNER.
@@ -1740,7 +1757,32 @@ typedef struct {
  * windows are not independent, so P(S >= s) understates the true tail; the
  * threshold is a principled ordering statistic, not a significance test.
  *
- * Modes come back strongest-support first, ties broken by median local ratio.
+ * RANKED BY SHAPE, NOT BY SUPPORT, AND THAT IS THE WHOLE DIFFERENCE. Support
+ * alone was measured and it does not work: on item 69's record the true bin and
+ * a noise bin both reached 12 of 49 windows, and ranking on support or on local
+ * ratio picked the noise bin. Item 11 predicted it -- agreement is blind to
+ * whatever the processing puts in every window identically, and a set inherits
+ * that blindness whole.
+ *
+ * What separates a real mode in the operational-modal-analysis literature is not
+ * that it recurs but that it recurs WITH CONSISTENT PROPERTIES: a stabilization
+ * diagram accepts a pole when its damping and its MODE SHAPE persist across
+ * model orders, not merely its frequency. The spatial analogue is available
+ * here and was unused. A vibrating structure occupies contiguous ground, so the
+ * windows nominating a real mode form a BLOCK; a noise line's nominating windows
+ * are scattered over the scene because nothing ties them together.
+ *
+ * 'n_contiguous' is therefore the ranking key: the largest 4-connected block of
+ * nominating windows on the window grid, with support and then local ratio as
+ * tie-breaks. It is the same quantity rs_spectrum_consensus() reports as
+ * 'out_n_contiguous' and the same geometric floor applies -- windows are laid at
+ * a stride of half their width, so a target resolvable at all falls inside a 2x2
+ * block, and a largest block below four cannot describe a spatially resolved
+ * mode whatever its support says. That floor comes from the window geometry, not
+ * from a tuned constant, and it is applied here rather than merely warned about
+ * because this function selects.
+ *
+ * Modes come back largest-block first, ties broken by support then local ratio.
  * Returns RS_ERR_RANGE when no bin clears the threshold, which is the honest
  * answer for a scene with nothing recurring in it, and RS_ERR_ARG on a NULL or
  * empty spectrum. 'out' is cleared on any non-OK return. */

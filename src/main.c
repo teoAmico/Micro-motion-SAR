@@ -2560,7 +2560,9 @@ static int rs_cmd_mmotion(int argc, char **argv)
         const resonarsat_status_t mst = rs_spectrum_modal_set(&spec, &ms);
         if (mst == RS_OK) {
             printf("  modal set: %zu mode%s recurring in >= %zu of %zu voting "
-                   "windows\n"
+                   "windows,\n"
+                   "           ranked by the size of their largest contiguous "
+                   "block of windows\n"
                    "           (%zu nominations each over %zu admissible bins; "
                    "%.2f bins expected\n"
                    "            to clear that by chance, so the threshold is a "
@@ -2568,9 +2570,10 @@ static int rs_cmd_mmotion(int argc, char **argv)
                    ms.n_mode, ms.n_mode == 1 ? "" : "s", ms.support_min,
                    ms.n_voting, ms.n_per_window, ms.n_bin, ms.expected_false);
             for (size_t i = 0; i < ms.n_mode; i++)
-                printf("           %6.3f Hz   support %3zu/%zu   local ratio "
-                       "%.1f\n",
-                       ms.mode[i].freq_hz, ms.mode[i].n_support, ms.n_voting,
+                printf("           %6.3f Hz   block %3zu   support %3zu/%zu   "
+                       "local ratio %.1f\n",
+                       ms.mode[i].freq_hz, ms.mode[i].n_contiguous,
+                       ms.mode[i].n_support, ms.n_voting,
                        ms.mode[i].median_ratio);
             printf("           Support is cross-window AGREEMENT and adjudicates "
                    "nothing: item 11's\n"
@@ -2579,6 +2582,24 @@ static int rs_cmd_mmotion(int argc, char **argv)
                    "           one frequency. Run --null-static N.\n");
         } else if (mst == RS_ERR_RANGE) {
             printf("  modal set: nothing recurs across the windows\n");
+            if (ms.near_miss_had_support)
+                printf("           the closest was %.3f Hz, nominated by %zu of "
+                       "%zu windows but\n"
+                       "           scattered over the scene (largest block %zu < "
+                       "4). Enough windows\n"
+                       "           carry it and they are not on contiguous "
+                       "ground, which is the\n"
+                       "           shape of a processing artefact rather than a "
+                       "structure.\n",
+                       ms.near_miss.freq_hz, ms.near_miss.n_support,
+                       ms.n_voting, ms.near_miss.n_contiguous);
+            else if (ms.near_miss.n_support > 0)
+                printf("           the closest was %.3f Hz at %zu of %zu windows, "
+                       "short of the %zu\n"
+                       "           needed. No frequency was carried widely enough "
+                       "to test its shape.\n",
+                       ms.near_miss.freq_hz, ms.near_miss.n_support,
+                       ms.n_voting, ms.support_min);
         }
     }
 

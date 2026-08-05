@@ -111,7 +111,8 @@ said, not better) and item 7's line numbers.
 | 67 | done | public-only leaves ONE usable pairing, Kilauea, and the test it supports is CORRELATION over 51 collects, not detection |
 | 68 | done | the doc's new SHM datasets have no co-located collect, but they are real WAVEFORMS to inject in place of a sine |
 | 69 | done, amended by 70 | a real structure's motion is injected for the first time, and the REPORTED answer goes wrong where a sine is correct |
-| 70 | **the current state** | reporting a modal SET is the right shape and does NOT fix it; cross-window support gives a noise bin the same 12/49 as the true mode |
+| 70 | done, extended by 71 | reporting a modal SET is the right shape and does NOT fix it; cross-window support gives a noise bin the same 12/49 as the true mode |
+| 71 | **the current state** | ranking the set by SPATIAL CONTIGUITY makes the wrong answer a refusal -- and the true mode is not in the tracking to be found, so the limit is upstream of selection |
 
 ---
 
@@ -6430,3 +6431,89 @@ answer item 69 pointed at from the other side.
 The policy is committed because it gates nothing, it is correct where a correct
 answer exists, and it makes the modal structure visible in the output. It is not
 committed as a fix.
+
+
+## 71. Rank the set by shape, and the failure moves upstream of selection
+
+Item 70 left the discriminator named but unbuilt: what separates a real mode in
+the stabilization-diagram literature is not that it recurs but that it recurs
+with a consistent MODE SHAPE. The spatial analogue is that a vibrating structure
+occupies contiguous ground, so the windows nominating a real mode form a BLOCK
+while a noise line's are scattered.
+
+`rs_mode_t` now carries `n_contiguous`, the largest 4-connected block of
+nominating windows, and it is the ranking key -- support and local ratio are only
+tie-breaks. The geometric floor of `rs_spectrum_consensus()` applies and is
+ENFORCED rather than warned about, because this function selects: windows are
+laid at half their width, so a resolvable target falls in a 2x2 block at minimum
+and a largest block below four cannot be a spatially resolved mode.
+
+### It fixes the safety half
+
+| policy | sine, true 0.500 | record, true 0.550 |
+|---|---|---|
+| support-ranked (item 70) | 0.504, correct | **2.671**, wrong |
+| **contiguity-ranked** | **0.504, block 4, correct** | **refuses** |
+
+The noise bin at 2.671 Hz had the same support as the true bin and lost on shape.
+That is the first policy here to turn a confident wrong answer into a refusal on
+the multi-modal case -- the failure mode items 25, 55 and 56 all recorded and
+none fixed.
+
+`RS_MODAL_PER_WINDOW` is the recall knob and it is NOT free, which contradicts
+what item 70's header claimed for it. At 12 nominations the sine gains a second
+spurious mode (1.159 Hz, block 5) and the record gains a CONFIDENT WRONG ANSWER,
+1.008 Hz at block 14. The threshold adapts to the nomination count as designed,
+and a scattered artefact still becomes contiguous once enough bins are nominated
+per window. **Six is the measured safe setting**; the header claim that raising
+it "widens what can be found without loosening what is believed" is now known to
+be false and has been corrected.
+
+### And it shows the recall half is not a selection problem at all
+
+`--probe-hz` (item 39) at each scene's own true dominant, prominence per window:
+
+```
+  record, probe 0.550 Hz            sine, probe 0.504 Hz
+   1.7 0.8 0.4 0.9 0.9 0.4 2.0       3.3 0.5 1.7 1.7 3.3 2.5 1.2
+   0.7 0.9 1.1 0.4 0.0 1.5 0.1       1.8 0.3 0.1 1.6 0.0 2.5 0.6
+   4.0 1.5 0.1 2.2 0.1 0.2 1.1       0.5 0.4 1.5 0.4 0.4 0.5 4.8
+   1.1 0.1 0.0 0.8 1.0 0.4 0.4       1.4 0.5 0.9 2.0 1.3 2.5 1.4
+   0.5 0.4 4.7 0.2 4.7 2.7 1.2       4.4 0.0 3.4 2.0 0.5 1.0 0.3
+   1.3 0.8 2.0 0.2 1.7 0.2 0.0       2.6 2.1 2.0 1.4 0.0 1.4 0.5
+   6.0 1.4 2.6 0.2 0.3 1.8 0.7       0.9 6.2 3.0 0.9 2.9 7.4 9.5
+  median 0.84   max 6.0             median 1.44   max 9.5
+```
+
+**Neither is a patch.** The record is about 1.7x weaker than the sine at its own
+dominant, and both are scattered. So the true mode is not sitting in the tracking
+waiting to be selected: a whole-scene `--clutter-vib` fixture, where every
+scatterer moves together, does not produce a contiguous field of windows carrying
+the driving frequency even for a SINE. The sine's reported answer is right
+because a handful of windows carry it strongly enough to win, not because the
+scene agrees.
+
+That relocates item 69 and reverses part of its conclusion. Item 69 said the
+tracker was not blind to the record because consensus landed near a true mode --
+but that was bin 12, the SECOND feature, and at the dominant there is nothing
+spatially coherent to find. **The reporting stage is not what loses a real
+structure's motion. The per-window spectrum is.**
+
+### Where that points
+
+Splitting energy across modes costs ~1.7x in per-window evidence at the dominant,
+and the record is also NON-STATIONARY across the dwell -- an earthquake's envelope
+rises and decays inside the 20 s. A periodogram over the whole dwell is the wrong
+estimator for that, and it spreads the energy exactly as observed. This is item
+56 arriving from the other direction: there the non-stationarity was in the
+SCATTERER, faded by the aspect lobe; here it is in the SIGNAL. Item 56 concluded
+"a test for non-stationarity is what this needs and none exists here", and that
+is still true and is now the blocking item for realistic motion, not a refinement
+of it.
+
+A 20 s dwell at 128 looks leaves little room to subdivide -- halving the record
+halves `df` to 0.10 Hz, which is coarser than the mode spacing this record has.
+So the honest statement is that single-periodogram micro-motion has a
+stationarity precondition nothing in this project has ever stated, every
+synthetic recovery here satisfied it by construction, and a real structure under
+transient excitation does not.

@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 70 items and their status.
+an index of all 71 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -127,13 +127,33 @@ test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
 
+**THE REPORTING STAGE IS NOT WHAT LOSES A REAL STRUCTURE'S MOTION — THE
+PER-WINDOW SPECTRUM IS** (item 71). Ranking the modal set by SPATIAL CONTIGUITY —
+`n_contiguous`, the largest 4-connected block of nominating windows, with the 2x2
+geometric floor ENFORCED because this function selects — turns item 70's
+confident wrong answer into a REFUSAL while keeping the sine correct (0.504,
+block 4). That is the first policy here to refuse the multi-modal case rather
+than answer it wrongly. But `--probe-hz` at each scene's own true dominant shows
+**neither is a patch**: the record reads median 0.84 / max 6.0 across the window
+grid, the sine 1.44 / 9.5, both scattered. A whole-scene `--clutter-vib` fixture
+does not produce contiguous windows carrying the driving frequency even for a
+SINE — the sine's answer is right because a handful of windows win, not because
+the scene agrees. **`RS_MODAL_PER_WINDOW` 6 is measured, not chosen**: at 12 a
+scattered artefact accumulates into a block and the record gets a confident wrong
+answer at block 14, so raising it DOES loosen what is believed. The blocking
+problem is that a periodogram over the whole dwell is the wrong estimator for a
+non-stationary record — item 56 from the other direction, signal rather than
+scatterer. **Single-periodogram micro-motion has a stationarity precondition this
+project never stated, every synthetic recovery satisfied it by construction, and
+a structure under transient excitation does not.**
+
 **A MODAL SET IS THE RIGHT SHAPE AND DOES NOT FIX IT** (item 70).
 `rs_spectrum_modal_set()` has each window nominate its strongest peaks against
 their own local background and reports the bins whose cross-window SUPPORT clears
 a threshold derived from a binomial null at a family-wise budget of half a bin —
 nothing tuned. On the sine it finds exactly one mode and is right; on item 69's
-record it reports 2.671 Hz, because **the true bin and a noise bin both reached
-support 12 of 49**. Item 11 predicted this: agreement is blind to whatever the
+record it reported 2.671 Hz, because **the true bin and a noise bin both reached
+support 12 of 49** — fixed by item 71's shape test. Item 11 predicted this: agreement is blind to whatever the
 processing puts in every window, and a set inherits that whole. The unused
 discriminator is the SPATIAL one — a real mode's amplitude across the window grid
 is a mode shape, contiguous and smooth, which is `rs_spectrum_centroid()`'s

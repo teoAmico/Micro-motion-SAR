@@ -1092,6 +1092,8 @@ static double rs_binom_tail(size_t n, double p, size_t s)
 static int rs_cmp_mode(const void *a, const void *b)
 {
     const rs_mode_t *x = a, *y = b;
+    if (x->n_contiguous != y->n_contiguous)
+        return x->n_contiguous > y->n_contiguous ? -1 : 1;
     if (x->n_support != y->n_support)
         return x->n_support > y->n_support ? -1 : 1;
     if (x->median_ratio != y->median_ratio)
@@ -1131,8 +1133,15 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
     double *acc     = malloc(spec->n_win * sizeof *acc);
     size_t *pick    = malloc(RS_MODAL_PER_WINDOW * sizeof *pick);
     double **nom    = calloc(n_freq, sizeof *nom);
-    if (!ref || !ratio || !support || !acc || !pick || !nom) {
+    /* [n_freq][n_win] which windows nominated each bin, so a candidate's
+     * SHAPE on the window grid can be measured and not just its count. */
+    unsigned char *voted = calloc(n_freq * spec->n_win, sizeof *voted);
+    unsigned char *seen  = malloc(spec->n_win * sizeof *seen);
+    size_t *stack   = malloc(spec->n_win * sizeof *stack);
+    if (!ref || !ratio || !support || !acc || !pick || !nom || !voted ||
+        !seen || !stack) {
         free(ref); free(ratio); free(support); free(acc); free(pick); free(nom);
+        free(voted); free(seen); free(stack);
         rs_set_error("modal set: out of memory");
         return RS_ERR_ALLOC;
     }
@@ -1141,6 +1150,7 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
         if (!nom[k]) {
             for (size_t j = 0; j < k; j++) free(nom[j]);
             free(ref); free(ratio); free(support); free(acc); free(pick); free(nom);
+            free(voted); free(seen); free(stack);
             rs_set_error("modal set: out of memory");
             return RS_ERR_ALLOC;
         }
@@ -1175,6 +1185,7 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
             if (best == n_freq) break;
             nom[best][support[best]] = best_r;
             support[best]++;
+            voted[best * spec->n_win + w] = 1;
             pick[n_pick++] = best;
         }
         if (n_pick > 0) n_voting++;
@@ -1199,13 +1210,70 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
     out->support_min  = support_min;
     out->expected_false = expected;
 
-    for (size_t k = k_lo; k < n_freq && out->n_mode < RS_MODAL_MAX_MODES; k++) {
-        if (support[k] < support_min) continue;
+    for (size_t k = k_lo; k < n_freq; k++) {
+        if (out->n_mode >= RS_MODAL_MAX_MODES) break;
+        /* Track the best refusal even when the support gate is what refused it,
+         * so the caller can say WHICH gate spoke. */
+        if (support[k] < support_min) {
+            if (!out->near_miss_had_support &&
+                support[k] > out->near_miss.n_support) {
+                out->near_miss.bin = k;
+                out->near_miss.freq_hz = spec->freq[k];
+                out->near_miss.n_support = support[k];
+                out->near_miss.n_contiguous = 0;
+            }
+            continue;
+        }
+
+        /* The largest 4-connected block of nominating windows, by flood fill
+         * over the window grid. This is the mode SHAPE test: a structure
+         * occupies contiguous ground, a noise line does not. */
+        const unsigned char *v = voted + k * spec->n_win;
+        memset(seen, 0, spec->n_win * sizeof *seen);
+        size_t largest = 0;
+        const size_t naz = spec->n_win_az, nrg = spec->n_win_rg;
+        for (size_t start = 0; start < spec->n_win; start++) {
+            if (!v[start] || seen[start]) continue;
+            size_t top = 0, size = 0;
+            stack[top++] = start; seen[start] = 1;
+            while (top > 0) {
+                const size_t cur = stack[--top];
+                size++;
+                const size_t ia = (naz > 0) ? cur % naz : cur;
+                const size_t ir = (naz > 0) ? cur / naz : 0;
+                const long da[4] = { -1, 1, 0, 0 }, dr[4] = { 0, 0, -1, 1 };
+                for (int d = 0; d < 4; d++) {
+                    const long a2 = (long)ia + da[d], r2 = (long)ir + dr[d];
+                    if (a2 < 0 || r2 < 0 || (size_t)a2 >= naz || (size_t)r2 >= nrg)
+                        continue;
+                    const size_t nb = (size_t)r2 * naz + (size_t)a2;
+                    if (nb >= spec->n_win || seen[nb] || !v[nb]) continue;
+                    seen[nb] = 1; stack[top++] = nb;
+                }
+            }
+            if (size > largest) largest = size;
+        }
+        /* The geometric floor of rs_spectrum_consensus(): overlapping windows
+         * put any resolvable target in a 2x2 block at minimum. Applied rather
+         * than warned about, because this function selects. */
+        if (largest < 4) {
+            if (largest > out->near_miss.n_contiguous ||
+                !out->near_miss_had_support) {
+                out->near_miss.bin = k;
+                out->near_miss.freq_hz = spec->freq[k];
+                out->near_miss.n_support = support[k];
+                out->near_miss.n_contiguous = largest;
+                out->near_miss_had_support = 1;
+            }
+            continue;
+        }
+
         for (size_t i = 0; i < support[k]; i++) acc[i] = nom[k][i];
         rs_mode_t *m = &out->mode[out->n_mode++];
         m->bin = k;
         m->freq_hz = spec->freq[k];
         m->n_support = support[k];
+        m->n_contiguous = largest;
         m->median_ratio = rs_median_inplace(acc, support[k]);
     }
     qsort(out->mode, out->n_mode, sizeof out->mode[0], rs_cmp_mode);
@@ -1213,10 +1281,12 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
     const size_t n_mode = out->n_mode;
     for (size_t k = 0; k < n_freq; k++) free(nom[k]);
     free(ref); free(ratio); free(support); free(acc); free(pick); free(nom);
+    free(voted); free(seen); free(stack);
 
     if (n_mode == 0) {
-        rs_set_error("modal set: no bin was nominated by %zu of %zu windows, "
-                     "so nothing recurs", support_min, n_voting);
+        rs_set_error("modal set: no bin was nominated by %zu of %zu windows in a "
+                     "block of 4 or more, so nothing recurs with a shape",
+                     support_min, n_voting);
         return RS_ERR_RANGE;
     }
     return RS_OK;

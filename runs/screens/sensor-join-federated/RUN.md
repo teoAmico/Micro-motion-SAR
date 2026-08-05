@@ -47,12 +47,43 @@ Vieja, so volcanic tremor is the obvious reading: GROUND motion, not a structure
 ran on them. That is the caveat that matters, and it is why this is a candidate
 and not a finding.
 
+## Neighbour check: CJED IS THE INSTRUMENT
+
+Run against every station within 50 km during the same aperture, clients built
+from the federator's service URLs (hardcoding ODC returned 204 for everything
+and looked exactly like "no neighbours exist").
+
+| station | date | target | neighbour median | ratio |
+|---|---|---|---|---|
+| CDLV | 2021-09-18 | 0.26 um | 0.31 um | 0.8 |
+| EXILP | 2021-09-23 | 0.68 | 0.74 | 0.9 |
+| CENR | 2021-09-24 | 5.87 | 0.79 | 7.4 |
+| CENR | 2021-09-26 | 5.14 | 0.92 | 5.6 |
+| CENR | 2021-09-29 | 2.01 | 0.79 | 2.5 |
+| CENR | 2024-08-02 | 5.01 | 0.36 | **13.9** |
+| **CJED** | **2024-08-03** | **55.62** | **0.42** | **131.2** |
+
+**ES.CJED reads 131x the stations on the same island at the same instant.** That
+is HV.UWB's signature -- item 61 rejected UWB at 400x -- and it fails the 10x
+cut by an order of magnitude. The headline 55.62 um candidate is the instrument.
+CENR's 2024 reading fails the same cut at 13.9x.
+
+What survives is CENR during the September 2021 eruption at 2.5-7.4x, and that
+is the one part of this that looks like GROUND: Cumbre Vieja erupted on 19
+September, CDLV reads 0.8x the day BEFORE, CENR is nearest the vent, and its
+readings DECAY 5.87 -> 5.14 -> 2.01 across 24, 26 and 29 September in step with
+the tremor. An instrument fault does not taper with an eruption sequence.
+
+But 5.87 um is **1.07x** the 5.5 um floor. Marginal, and volcanic ground motion
+rather than a structure under load.
+
+**115 raw exceedances -> 0 credible.** Identical to item 61's 52 -> 0, on a
+screen 2.7x larger reaching an entire continent the first one could not see.
+
 ## Next, and it is narrow
 
-Pull the surrounding ES stations for those apertures and run the neighbour
-comparison; check whether the collect dates coincide with the 2021 eruption. If
-CJED reads 55 um while its neighbours read 5, it is the instrument. If the flank
-moves together, it is real.
+Done, above: CJED reads 55 um while its neighbours read 0.42. It is the
+instrument. Nothing in the federated screen is a candidate.
 
 ## Four swallowed failures, all caught only by a known-good control
 

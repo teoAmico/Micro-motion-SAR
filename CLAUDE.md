@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 82 items and their status.
+an index of all 83 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -155,6 +155,25 @@ That cost a wrong diagnosis here: `--max-pulses` was reported as unimplemented i
 test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
+
+**INSTRUMENTED STRUCTURES ARE ABOVE THE FLOOR AND ARE NEVER OBSERVED MOVING**
+(item 83). CESMD filtered to `sttype` B/Br/D gives **288 structures — 239
+buildings, 35 bridges, 14 dams — and 1063 records**, each carrying `pgd`.
+**437 records (43%) are above item 53's 5.5 um floor, the largest at 10.9 cm =
+19,800x it.** So the AMPLITUDE problem is solved by targeting structures instead
+of ground — item 62's "another factor of 4" was a statement about quiet ground
+and for structures the factor needed is under one. **The TIME problem then kills
+it: 12 structures have ever been inside a Capella footprint, all BUILDINGS in
+the LA basin, NO BRIDGE AND NO DAM EVER; 0 records had shaking overlapping an
+aperture; nearest miss 122 DAYS; expected coincidences 0.0040, needing 252x this
+archive.** That splits a failure this project treated as one — item 62 is
+amplitude, item 83 is time — and it is the third confirmation that the data
+problem is not a search problem (62, 75, 83). What is left is a TASKED collect,
+not a query. **The first run of this join reported 0 spatial hits and that was a
+BUG**: the harvested ring holds `[lat, lon]` and the test read `[lon, lat]`,
+caught only because a scene's own centre failed to fall inside its own ring
+(0 of 940, then 940 of 940). `join.py` runs that control first and refuses to
+print counts without it.
 
 **THE THRESHOLD EFFECT PREDICTS ITEM 81, AND NAMES TWO THINGS IT IS NOT**
 (item 82). Frequency estimation has a documented **threshold SNR**: below it the

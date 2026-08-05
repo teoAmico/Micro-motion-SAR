@@ -124,6 +124,7 @@ said, not better) and item 7's line numbers.
 | 80 | implemented, does not detect | the chance model is built: it prices the block correctly and refuses nothing that matters |
 | 81 | implemented, changes nothing | joint transient-and-mode estimation; the limit is not the spectral estimator |
 | 82 | explains 81 | the threshold effect predicts it; matrix pencil and LSCF transient terms are untried |
+| 83 | answered, negative | instrumented structures are ABOVE the floor and never observed moving; 0 bridges and 0 dams ever in a footprint |
 
 ---
 
@@ -7286,3 +7287,72 @@ threshold.
 **Fifth time a search has found the field already had what was being built or
 puzzled over here** -- after `RS_MICROM_EST_ARGMAX`, item 13's overlap figure,
 `phaselink.c` in items 64-65, and item 79's posterior. Search first.
+
+
+---
+
+## 83. Instrumented STRUCTURES are above the floor and are never observed moving.
+
+Every sensor screen before this one joined GROUND stations. CESMD classifies by
+what the instrument is mounted on, so the screen was re-run over `sttype` **B**
+(building), **Br** (bridge) and **D** (dam) -- the structures that RESPOND where
+ground does not. Each CESMD record carries `pgd`, so a candidate's displacement
+is known before anything is downloaded.
+
+### The harvest
+
+288 structures -- **239 buildings, 35 bridges, 14 dams** -- and 1063 records over
+the Capella archive's own span, with **0 failed queries**. The type filter was
+verified rather than assumed: `sttype=Br` returns 7 stations all typed Bridge,
+`sttype=D` returns 6 all typed Dam, against 873 unfiltered.
+
+### The amplitude question is ANSWERED, and favourably
+
+1015 records carry `pgd`. **437 of them -- 43% -- are above item 53's 5.5 um
+end-to-end floor**, and the largest is **10.9 cm, which is 19,800x the floor.**
+
+That is the first time in this project that a real, instrumented, public
+measurement of a real structure has been shown to sit far above the sensitivity
+this chain has. Item 62's "another factor of ~4 in sensitivity would turn all 315
+synchronised hits into candidates" was a statement about quiet GROUND. For
+structures the factor needed is **less than one**.
+
+### And the time question kills it anyway
+
+- **12 distinct structures have ever been inside a Capella footprint.** All
+  twelve are BUILDINGS, all in the Los Angeles basin. **No bridge and no dam has
+  ever been inside one.**
+- 50 records exist at those twelve.
+- **0 of them had shaking overlapping an aperture.** The nearest miss is
+  **122 days**.
+- Total aperture over covered structures is **1325 s** against an archive span of
+  **2031 days**. Expected coincidences: **0.0040**. An expectation of one needs
+  **252x this archive**.
+
+### What it changes
+
+**It splits a failure this project had been treating as one.** Item 62's is an
+AMPLITUDE failure -- quiet ground is 50x below the floor and no search fixes
+that. Item 83's is a TIME failure -- structures are 100x to 20,000x ABOVE the
+floor and are simply never watched while they move. Targeting structures was the
+right correction and it disposes of the amplitude half entirely.
+
+It also disposes of a hope item 68 left open. The reason `GROUND_TRUTH_DATASETS`
+sites are in no footprint is not bad luck about which structures were
+instrumented: **not one of the 35 instrumented bridges or 14 dams in the entire
+CESMD catalogue has ever been inside a Capella spotlight footprint.**
+
+### What is left
+
+Not an archive query. **A TASKED collect over a known instrumented structure** --
+which is the third independent confirmation that the data problem is not a search
+problem (items 62, 75, 83). An earthquake cannot be scheduled, so either the
+collect is tasked to a structure whose ambient response clears the floor, or the
+pairing waits on a vendor.
+
+Umbra and ICEYE cannot rescue the spatial half. Umbra holds 4048 CPHD but item 63
+disqualified it on dwell -- median 3.50 s, none at >= 30 s -- so multiplying the
+footprint count by four multiplies dwell-inadequate scenes. ICEYE publishes no
+bulk archive with footprints to join at all. **Neither was queried here**, and
+that is a limit of this entry rather than a finding: what is established is that
+the CAPELLA archive contains no such pairing.

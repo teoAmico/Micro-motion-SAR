@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 91 items and their status.
+an index of all 92 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,30 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**FOUR THINGS TRANSFER FROM THAT REPOSITORY'S VALIDATION PRACTICE** (item 92).
+**(1)** Their `ERRATUM_KOMATI.md` is this project's recurring rule from outside: a
+table row computed at `n_sub = 128` where every other used 11, UNDISCLOSED, put a
+result "precisely on the > 5x decision rule"; re-run at the standard setting it
+is 2.8x/1.3x. This project has written the same rule three times — item 77 (look
+count), item 84 (sample size), item 86 (time filter). **Four instances, two
+codebases, one failure: a number carries its configuration or it means nothing.**
+**(2)** Sweeping `n_sub` 11→128 gave a **17.8x** contrast spread on the native
+axis, collapsing to **1.9x** on a FIXED window — the axis changing extent, not
+the signal. That is item 47's "prominence is not comparable across `--fmin`" in
+another domain; score on a fixed support. **(3)** Their 5.0x threshold is
+calibrated on **400 synthetic null runs** (p95 4.35, p99 5.03, ~2% FPR) — derived
+from the null's own distribution, exactly item 80's `p_chance` reasoning, reached
+independently. **(4)** A sensitivity axis never swept here and now
+deprioritisable: **96 configurations x 200 runs** over window (Blackman/Hann/
+Hamming/rectangular) x precision (float32/64) x coregistrator moved **no
+verdict**, float32 and float64 agreeing to three significant figures. That does
+NOT license `-ffast-math` (reassociation and denormals, not word size) but it
+says the window and the coregistrator are not where answers live. **Worth
+adopting: `VALIDATION_PROTOCOL.md`, a pre-registration template** — falsifiable
+H1-H4, frozen pipeline and null model, BLINDING, written kill criteria, "report
+all slices including misses". This project pre-registers exactly one thing,
+`runs/kilauea/.../analyse.py`.
 
 **A REAL BUILDING'S AMBIENT MOTION GOES IN AND THE ANSWER IS THE STATIC SCENE'S**
 (item 91). Item 89's Granada record injected and swept at settings identical to

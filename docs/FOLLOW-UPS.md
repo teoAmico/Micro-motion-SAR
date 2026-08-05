@@ -133,6 +133,7 @@ said, not better) and item 7's line numbers.
 | 89 | open, untried | a continuous 6-sensor building record exists; its modes are 3.8 Hz, above the band at 128 looks |
 | 90 | external, converges | an independent refutation of the DEEP Giza claim endorses the front end and reproduces items 11, 38, 58 |
 | 91 | answered, negative | a building's AMBIENT motion injected: 1 of 24 correct, and 9 of 21 answers are the static scene's |
+| 92 | external, adopt | their validation practice: an erratum that is our recurring rule, a derived threshold, and a pre-registration template |
 
 ---
 
@@ -7897,3 +7898,89 @@ The injected amplitude was 2 mm, far above the building's real 0.68-1.97 um.
 This is a failure of the SELECTION and the estimator at generous amplitude, not a
 sensitivity result -- the real building is 3-8x below the floor before any of
 this applies.
+
+
+---
+
+## 92. Reading that repository's 16 documents: four things transfer, one of them a rule this project has now written three times.
+
+Item 90 recorded the preprint. The `docs/` tree behind it is the more useful
+half, because it is a validation practice rather than a result.
+
+### Their erratum is this project's recurring rule, from outside
+
+`ERRATUM_KOMATI.md`: a results-table row was computed at `n_sub = 128` while
+every other row used the default `n_sub = 11`, **undisclosed**, and the published
+50x / 10x sat *"precisely on the manuscript's > 5x decision rule"* -- the most
+vulnerable number in the paper. Re-run at the standard setting it is **2.8x /
+1.3x**. Found only because an external criticism prompted a full re-run, and two
+sites reproduced while one did not.
+
+This project has independently written the same rule three times:
+- item 77 -- *quote item 76's block with its LOOK COUNT attached or not at all*
+- item 84 -- *quote a tail figure with the SAMPLE SIZE that measured it*
+- item 86 -- *quote a footprint-join count with its TIME FILTER attached*
+
+Four instances now, two codebases, one failure: **a number carries its
+configuration or it means nothing.** That it took an outside prompt to find theirs
+is the part worth remembering.
+
+### The axis-extent confound, which this project has in its own units
+
+Sweeping `n_sub` from 11 to 128 on a null site produced a **17.8x spread** in
+contrast on the NATIVE depth axis, collapsing to **1.9x** when scored on a fixed
+0-11.6 m window. The spread was the axis changing extent, not the signal changing
+strength.
+
+That is item 47's finding in another domain: **prominence is not comparable
+across `--fmin` settings**, because it is measured against the admissible band and
+changing the floor changes the denominator. Same defect, same cure -- score on a
+fixed support.
+
+### Their threshold is derived the way item 80's is
+
+`5.0x` contrast against null, **calibrated on 400 synthetic null runs**:
+p95 = 4.35, p99 = 5.03, so 5x is about a 2% false-positive rate. Not chosen --
+measured from a null distribution. That is exactly the reasoning behind item 80's
+`p_chance` (1000 reshuffles, family-wise by construction), arrived at
+independently. **Two projects, same conclusion: a threshold on a contrast
+statistic has to come from the null's own distribution.**
+
+### A sensitivity axis this project has never swept, and can now deprioritise
+
+`SENSITIVITY_RESPONSE_BIONDI.md`: a full cross-product of **window (Blackman,
+Hann, Hamming, rectangular) x precision (float32/64) x coregistrator (phase
+correlation + parabolic, upsampled DFT, normalised cross-correlation)** over four
+sites -- **96 configurations, 200 runs each**, positive control passing in all 96.
+
+**No verdict moved.** float32 and float64 agreed to three significant figures with
+a maximum paired divergence of 0.012.
+
+This project has never swept the window or the coregistrator and forbids
+`-ffast-math` on precision grounds. Their result does not license adding
+`-ffast-math` -- that changes reassociation and denormals, not word size -- but it
+does say **the window function and the coregistrator are not where the answers
+live**, so effort spent there is unlikely to pay. Useful negative.
+
+### The practice worth adopting
+
+`VALIDATION_PROTOCOL.md` is a **pre-registration template filled in before any
+real scene is processed**: falsifiable H1-H4 (detection above null at alpha,
+localisation within one resolution cell, false-positive rate in known-solid
+regions, cross-sensor agreement), a frozen pipeline and null model, a confound
+checklist, **blinding** (tomogram generated before truth is overlaid, no tuning
+after unblinding), **written kill criteria**, and *"report all slices, including
+misses"*.
+
+This project pre-registers exactly one thing -- `runs/kilauea/.../analyse.py`.
+Everything else was scored after the fact. The template is directly reusable and
+costs nothing.
+
+### Their strongest negative, for the record
+
+Butte, MT: ~15 levels at 100 ft (30.5 m) spacing, three shafts, a mine pool at
+**155-160 m**, the best registration quality of their four sites (0.82), positive
+control passing -- and **REAL 3.3x against a null of 1.4x, leakage 0.28: null.**
+A densely-mapped shallow void network, undetected, at the site most likely to
+succeed. Their `docs/BUTTE_GROUND_TRUTH.md` cites NMMR, MBMG's depth-coded 3-D
+model and USGS I-2050-C, which is where the user's citation [8] came from.

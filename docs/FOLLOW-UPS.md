@@ -129,6 +129,7 @@ said, not better) and item 7's line numbers.
 | 85 | done | all three public archives joined; ICEYE covers no structure; one bridge pairing exists in total |
 | 86 | answered, negative | RESIF joined; one European pairing and it is proven-static; still no dam anywhere |
 | 87 | answered, negative | INGV joined; Etna summit during a paroxysm is still 9x below the floor; ESM unqueried |
+| 88 | **withdraws part of 83, 86, 87** | ESM queried: Grande Dixence IS in a footprint; the structural instruments are EVENT-TRIGGERED |
 
 ---
 
@@ -7624,3 +7625,83 @@ that is not a sampling accident.
 would be the natural place to find structural arrays with event-triggered
 records, the way CESMD was. That is an unqueried source, not a negative result.
 ITACA (`itaca.mi.ingv.it`) was likewise not queried.
+
+
+---
+
+## 88. ESM queried. It WITHDRAWS "no dam has ever been in a footprint", and the wall moves to the instrument.
+
+Item 87 recorded ESM as refused with HTTP 413 and therefore unqueried. Retried
+properly, it is the richest source in this whole search -- and it corrects a
+claim items 83, 86 and 87 all made.
+
+### How to query it
+
+Two things blocked it. `net=` is **ambiguous** on this server ("could match
+--network, --network-code") and must be spelled `network=`; and any wide
+geographic query returns **413**. A ~8 degree tile succeeds, so the harvest tiles
+the world and **subdivides recursively on 413**, which is what stops a dense
+region from vanishing silently. **3890 stations**, 69 empty tiles counted by
+reason. Largest networks: `IT` 931, `TK` 497, `IV` 391, `CH` 236.
+
+### It withdraws the "no dam" claim, and the cause is my own heuristic
+
+Items 83, 86 and 87 each concluded that **no instrumented dam has ever been
+inside any footprint**. That is **WRONG**, and it was wrong because every one of
+those screens found structures by SITE NAME:
+
+**`CH.DIX` and `CH.SDIF` sit at GRANDE DIXENCE** -- the tallest gravity dam in
+the world, 285 m -- **inside a 34.7 s Capella footprint**
+(`CAPELLA_C14_SP_CPHD_HH_20250117040427`, 2025-01-17). The keyword search missed
+it because the site names are "Grande Dixence VS" and "GRANDE DIXENCE-SDIF",
+containing no "diga", "dam" or "barrage". `SDIF` sits at 2222 m and `DIX` at
+2370 m against a crest at about 2365 m.
+
+**A name heuristic finds the word, not the structure -- in both directions.** It
+invented bridges out of French and Italian communes containing "Pont", and it
+lost the largest dam in Europe. Any structural count in items 83-87 is a lower
+bound on coverage and an upper bound on precision.
+
+### ESM also gives far more pairings than any other network
+
+| archive | space | operating | dwell >= 15 s |
+|---|---|---|---|
+| Capella | 28 | 26 | **24** |
+| Umbra | 47 | 45 | **9** |
+| ICEYE | 6 | 6 | **4** |
+
+against RESIF's 1 and INGV's 5. Among them: **`A.FAT` Fatih-Tomb, Istanbul, at
+60.0 s dwell** -- the longest pairing found anywhere in this project -- Grande
+Dixence at 34.7 s, **Roma Palazzo Valentini / Palazzo Spada / DPC Ulpiano** at
+33.2 s, Wien-Palais Festetics, Zermatt Kirche.
+
+### And the wall simply moves to the instrument
+
+Measured during the apertures:
+
+```
+  CH.DIX    Grande Dixence, continuous broadband   0.113 um   48.7x below floor
+            control -6 h                           0.050 um
+  CH.SDIF   Grande Dixence strong-motion           NO DATA
+  IT.RMPV   Roma Palazzo Valentini                 NO DATA
+  IT.RMPS   Roma Palazzo Spada                     NO DATA
+  IT.RMUL   DPC Ulpiano                            NO DATA
+```
+
+**The structural stations are EVENT-TRIGGERED, not continuous.** They hold a
+record only when something shook them, which is why ESM is an "Engineering Strong
+Motion" database rather than a continuous archive. So a footprint over an
+instrumented building yields a waveform only if an earthquake happened during the
+aperture -- **item 83's duty-cycle wall, reappearing from the instrument side
+rather than the catalogue side.** The one continuous instrument at these sites is
+a bedrock vault station reading 0.113 um.
+
+### Where this leaves items 83-88
+
+The correction is real and narrow. **Instrumented structures ARE inside
+long-dwell footprints -- more of them than any previous screen found** -- and the
+obstacle was never purely spatial. It is that the instruments which would witness
+above-floor motion only record when the motion happens, and no such moment has
+coincided with an aperture in 13,735 collects. Every continuously-recording
+instrument checked, on four networks, reads 7x to 50x below the floor:
+Oroville 0.5-0.8, FR.CURIE 0.510, Etna 0.589-0.803, Grande Dixence 0.113 um.

@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 87 items and their status.
+an index of all 88 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,29 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**ESM WITHDRAWS "NO DAM HAS EVER BEEN IN A FOOTPRINT", AND THE WALL MOVES TO THE
+INSTRUMENT** (item 88). Item 87 recorded ESM as refused with 413; retried it is
+the richest source in the search. Query it with `network=` (`net=` is AMBIGUOUS
+on that server) and tile geographically, SUBDIVIDING RECURSIVELY ON 413 — 3890
+stations, 69 empty tiles counted. **Items 83, 86 and 87 each concluded no
+instrumented dam had ever been inside a footprint. That is WRONG.** `CH.DIX` and
+`CH.SDIF` sit at **GRANDE DIXENCE, the tallest gravity dam in the world, inside
+a 34.7 s Capella footprint** — missed because every one of those screens found
+structures by SITE NAME and these contain no "diga"/"dam"/"barrage". **A name
+heuristic finds the word, not the structure, in both directions**: it invented
+bridges from communes containing "Pont" and lost the largest dam in Europe, so
+every structural count in items 83-87 is a lower bound on coverage and an upper
+bound on precision. ESM also yields far more pairings — Capella **24**
+dwell-adequate against RESIF's 1 and INGV's 5, including **`A.FAT` Fatih-Tomb
+Istanbul at 60.0 s**, the longest anywhere, and Roma Palazzo Valentini/Spada at
+33.2 s. **But the structural stations are EVENT-TRIGGERED**: `CH.SDIF`,
+`IT.RMPV`, `IT.RMPS`, `IT.RMUL` all return NO DATA, holding a record only when
+something shook them. So item 83's duty-cycle wall reappears from the INSTRUMENT
+side. The one continuous instrument there, a bedrock vault station, reads
+**0.113 um, 48.7x below the floor**. Every continuously-recording instrument on
+four networks reads 7-50x below: Oroville 0.5-0.8, FR.CURIE 0.510, Etna
+0.589-0.803, Grande Dixence 0.113 um.
 
 **INGV JOINED: A THIRD NETWORK, THE SAME FLOOR** (item 87). 1719 stations / 66
 networks. Italy instruments its structures and INGV publishes them — `IV.ME05`

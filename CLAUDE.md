@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 73 items and their status.
+an index of all 74 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -126,6 +126,20 @@ That cost a wrong diagnosis here: `--max-pulses` was reported as unimplemented i
 test harness did not. Write the arguments out in full, or use `${=a}` to force
 splitting. The general form of the lesson is the one this codebase repeats: a
 negative result from an unverified harness is not a negative result.
+
+**THE SWEEP REFUTES ITEM 73** (item 74). Twelve points -- six burst frequencies
+from 0.300 to 0.850 Hz, two clutter seeds -- give the modal set six answers, of
+which **one** is near the truth; the other five are wrong by 0.7-1.7 Hz and all
+sit ABOVE the injection, the signature of an artefact being selected. Slope is
+nowhere near 1. **Item 73's 0.353 Hz was the one point that worked**, and nothing
+distinguished it from the wrong five at the time. What survives: **both static
+controls refuse**, where prominence reports a confident frequency at 8.6 on the
+same motionless scenes. That is not precision-versus-recall though -- the policy
+answers WRONGLY on five of six MOVING scenes, so it is a statement about what
+motion does to the noise, not about recovery. **Items 69-74 are one arc and it
+ends here**: a real structure's motion goes in, no policy reports it correctly
+across a sweep, and the only measurement worth keeping is item 71's -- the true
+mode is not in the per-window spectra to be selected.
 
 **ON A REAL BURST THE SHAPE-RANKED MODAL SET ANSWERS AND THE CONTROL REFUSES**
 (item 73). A burst was cut from the same Oroville record -- the earthquake's

@@ -114,7 +114,8 @@ said, not better) and item 7's line numbers.
 | 70 | done, extended by 71 | reporting a modal SET is the right shape and does NOT fix it; cross-window support gives a noise bin the same 12/49 as the true mode |
 | 71 | done | ranking the set by SPATIAL CONTIGUITY makes the wrong answer a refusal -- and the true mode is not in the tracking to be found, so the limit is upstream of selection |
 | 72 | done | the short-time max-hold estimator is built and FAILS its controls: it breaks the sine whole-dwell recovers and answers confidently on a motionless scene |
-| 73 | **the current state** | on a real BURST the shape-ranked modal set returns a true mode and the static control refuses -- the first policy here to do both -- and `--stft` makes it WORSE |
+| 73 | bounded by 74 | on a real BURST the shape-ranked modal set returns a true mode and the static control refuses -- the first policy here to do both -- and `--stft` makes it WORSE |
+| 74 | **the current state** | THE SWEEP REFUTES IT: 1 of 6 answers correct over 12 points and two seeds, so item 73 was one lucky point. Both static controls still refuse |
 
 ---
 
@@ -6638,3 +6639,61 @@ The sweep is the next thing, and it is now a well-defined experiment rather than
 a direction: inject the burst at a range of time-scalings so its modes land at
 known different frequencies, and score the modal set's leading mode by slope and
 rms with a static control at every point.
+
+
+## 74. The sweep: item 73 was one lucky point
+
+Item 73 reported the shape-ranked modal set returning 0.353 Hz against a true
+0.350 on a real burst while the static control refused, and said plainly that it
+was not a recovery until it survived a sweep. It has not.
+
+Twelve injection points -- six playback rates placing the burst's dominant from
+0.300 to 0.850 Hz, two independent clutter seeds -- plus a zero-amplitude static
+control per seed, all through identical processing.
+
+| true | seed 7 | seed 11 |
+|---|---|---|
+| 0.300 | **0.353** | refused |
+| 0.400 | refused | refused |
+| 0.450 | 1.260 | refused |
+| 0.550 | 1.159 | refused |
+| 0.750 | refused | **1.865** |
+| 0.850 | refused | **2.571** |
+| **static** | **refused** | **refused** |
+
+**Six answers over twelve points, and one of the six is near the truth.** The
+other five are wrong by 0.7 to 1.7 Hz, and they are not scattered randomly --
+they sit ABOVE the injection at every point, which is the signature of a
+processing artefact being selected rather than the target. Slope is nowhere near
+1 and rms is two orders above half a bin. `rs_track_fit()`'s bar is not met and
+is not close.
+
+Item 73's 0.353 Hz was the one point that worked. Nothing distinguished it from
+the other five answers at the time -- same block size, same support, same local
+ratio range -- which is exactly why a single matched frequency is not a result
+here, and why item 2 records several of them.
+
+### What survives
+
+**Both static controls refuse.** That is not nothing: prominence reports a
+confident in-band frequency on those same motionless scenes at prominence 8.6.
+The shape test does keep a motionless scene silent, across two seeds.
+
+But it is not the precision half of a precision/recall trade either, because the
+policy ANSWERS WRONGLY on five of six moving scenes. The honest description is
+that a moving scene sometimes manufactures a contiguous spurious mode and a
+motionless one does not -- which is a statement about what motion does to the
+noise, not about the policy recovering anything.
+
+### What this closes
+
+Items 69-74 are one arc, and it ends here. A real structure's motion goes in; no
+policy in this project reports it correctly across a sweep; the short-time
+estimator makes it worse (item 72) including on the burst it was written for
+(item 73); and ranking by spatial shape buys silence on static scenes and not
+accuracy on moving ones. **The reporting stage remains the blocking failure for
+realistic motion, and none of the four things tried here fixes it.**
+
+The one measurement worth keeping from the whole arc is item 71's: the true mode
+is not in the per-window spectra to be selected. Everything since has been an
+attempt to select better from evidence that is not there.

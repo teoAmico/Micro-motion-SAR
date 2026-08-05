@@ -113,27 +113,71 @@ def stations_in(ring, start, end):
     return found, n_box
 
 
-def has_waveform(net, sta, start, end):
-    """Whether any channel actually has samples across the aperture.
+def waveform_services(net, sta, start, end):
+    """Which archive holds this station, and the URL to ask it for samples.
 
-    STILL ASKS IRIS ONLY, WHICH IS NOW THE WEAK LINK. stations_in() federates
-    and therefore returns stations whose waveforms live at EIDA, NIED or a
-    national archive; this availability call does not, so such a station reads
-    as having no data when it has plenty. That is the same failure that once
-    reported "0 of 553 with data" from a dead endpoint, and it is why the
-    federator returns each station's datacentre -- routing this query to it is
-    the next change, not an optional refinement. A station
-    being OPEN is not the same as it having recorded -- strong-motion
-    instruments in buildings are usually triggered, so they are open for
-    decades and hold data for minutes of it."""
-    text = get(FDSN_AVAIL, {
+    The federator's REQUEST format -- its default, not format=text -- emits one
+    block per data centre carrying DATACENTER, DATASELECTSERVICE, STATIONSERVICE
+    and AVAILABILITYSERVICE. That is the routing table, and it is why the
+    federated query is worth making: a station at EIDA or a national archive is
+    unanswerable at service.iris.edu, and asking there returns "no data" rather
+    than an error.
+
+    Note what this does NOT establish. The federator routes on METADATA, so it
+    lists channels for a station that has never recorded a sample -- NP.2030
+    comes back with nine channels and holds nothing across the aperture. Sample
+    presence still has to be asked of the archive itself, which is the whole
+    point of has_waveform() below."""
+    text = get(FDSN_FEDCATALOG, {
         "net": net, "sta": sta, "starttime": start, "endtime": end,
-        "format": "text", "merge": "samplerate",
     })
     if not text:
-        return 0
-    return sum(1 for line in text.splitlines()
-               if line and not line.startswith("#"))
+        return []
+    services, centre, avail = [], None, None
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("DATACENTER="):
+            if centre and avail:
+                services.append((centre, avail))
+            centre = line.split("=", 1)[1].split(",")[0]
+            avail = None
+        elif line.startswith("DATASELECTSERVICE="):
+            # DATASELECT, NOT AVAILABILITY. The availability service is RETIRED:
+            # https://service.earthscope.org/fdsnws/availability/1/ answers 410
+            # with an HTML page, and get() turns that into None, which reads as
+            # "this station has no data". This project has already published one
+            # wrong screen that way -- "0 of 553 with data" -- and this is the
+            # same endpoint. Dataselect costs the samples and cannot lie about
+            # whether they exist.
+            avail = line.split("=", 1)[1]
+    if centre and avail:
+        services.append((centre, avail))
+    return services
+
+
+def has_waveform(net, sta, start, end):
+    """Whether any channel actually has samples across the aperture, asked of
+    the archive that HOLDS the station rather than of IRIS.
+
+    A station being OPEN is not the same as it having recorded -- strong-motion
+    instruments in buildings are usually triggered, so they are open for decades
+    and hold data for minutes of it. NP.2030, an instrumented building 200 m
+    from a confirmed hit, is open since 2012 and returns nothing at all.
+
+    Asking one archive about a station held at another returned the same empty
+    answer as a station with no data, which is how a screen reports a confident
+    zero it has not earned."""
+    total = 0
+    for centre, service in waveform_services(net, sta, start, end):
+        url = service.rstrip("/") + "/query?" + urllib.parse.urlencode({
+            "net": net, "sta": sta, "starttime": start, "endtime": end,
+        })
+        try:
+            with urllib.request.urlopen(url, timeout=90) as response:
+                total += len(response.read())
+        except Exception:
+            continue
+    return total
 
 
 def main():

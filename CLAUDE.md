@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 102 items and their status.
+an index of all 103 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,27 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**THE FLOOR IS PER-TARGET: THREE FLOORS, 34x APART** (item 103). The injection
+framework run on real Kilauea clutter, pre-registered at `201d897`. **H1 FAILED
+as stated**: recovery occurs BELOW item 102's predicted floor — at 0.5x on one
+collect and 0.25x on the other — so the prediction is not the boundary. **Cause:
+item 102 predicted from the scene's CLUTTER and `--inject-wave` defaults to
+`rel = 20`, a BRIGHT POINT TARGET.** Measured with `--shifts` on the injected
+run, **the target's window is 34x quieter than the scene median — circular sd
+0.050 rad against 1.693 — so its floor is 0.0154 mm, not 0.522 mm.** That is
+item 101's own conflation recurring in my prediction one item later. **THREE
+FLOORS**: **target** ~0.015 mm (item 53's 0.0055 mm is this quantity),
+**clutter** 0.52 mm (item 102), and **COMPETITION 0.13-0.26 mm — what an
+injection must reach to beat the scene's own artefact, which is the OPERATIVE
+one** and is neither of the others. **Item 102's Kilauea conclusion still
+stands**, because a seismometer measures the ground, which is clutter, at
+0.137-1.728 um against a 0.52 mm clutter floor. **Item 102's protocol was right
+in form and wrong in the scatterer: predict the floor AT THE WINDOW THE TARGET
+OCCUPIES, and always say which of the three floors a number is.** H3 passed
+(neither control reported the injected frequency); H4 was weak — the twin LLR
+rose but plateaued and **never reached p < 0.05**, exactly item 98's ceiling that
+a single-look pair needs a power ratio above 19.
 
 **THE FLOOR IS PREDICTABLE FROM AN UNINJECTED RUN, AND IT KILLS THE KILAUEA TEST**
 (item 102). Item 101's arithmetic — circular phase sd, times `lambda/(4*pi)`,

@@ -144,6 +144,7 @@ said, not better) and item 7's line numbers.
 | 100 | **bounds 99** | the artefact does not scale with the analysis grid, so it is not the offset-driven carrier |
 | 101 | **explains 96-100** | the artefact is phase noise at 2.3 mm rms; this fixture's real floor is 0.29 mm, 53x the quoted one |
 | 102 | **kills the Kilauea test** | the floor is predictable from an uninjected run; real Kilauea is 0.53 mm, 306x above the best truth |
+| 103 | **corrects 102** | the floor is PER-TARGET: three floors 34x apart, and the operative one is competition with the scene's artefact |
 
 ---
 
@@ -8753,3 +8754,79 @@ steps:
 **Predicting the floor before spending the run is the change.** Every measurement
 in this file so far chose an amplitude and discovered afterwards whether it was
 above the noise.
+
+
+---
+
+## 103. The floor is PER-TARGET, not per-scene. Three distinct floors, and conflating them caused items 67 and 102.
+
+Pre-registered at commit `201d897`, run afterwards on real Kilauea clutter. A
+real building's ambient record (Naples segment 02) injected into real Capella
+phase history at 0.25x to 4x item 102's predicted 0.53 mm floor, two collects,
+each differenced against its own uninjected run.
+
+### H1 FAILED, in the direction the pre-registration named
+
+Injected at 1.00 Hz; half a bin is 0.083 Hz.
+
+| amplitude | vs predicted floor | C10 2024-06-09 | C14 2024-06-10 |
+|---|---|---|---|
+| 0.00 (control) | -- | 0.665 Hz | 0.499 Hz |
+| 0.13 mm | 0.25x | 0.665 -- missed | **0.997 -- recovered** |
+| 0.26 mm | 0.5x | **0.998 -- recovered** | **0.997** |
+| 0.53 mm | 1x | **0.998** | **0.997** |
+| 1.06 mm | 2x | **0.998** | **0.997** |
+| 2.12 mm | 4x | **0.998** | **0.997** |
+
+H1 required recovery at and above 1x and **failure below it**. Recovery occurs at
+**0.5x on one collect and 0.25x on the other**, so the prediction is not the
+boundary. The pre-registered branch fires: *"if recovery occurs BELOW the
+predicted floor, item 101's arithmetic is too pessimistic."*
+
+**H3 PASSES**: neither control reports 1.00 Hz -- they report 0.665 and 0.499,
+their own artefacts.
+
+**H4 is weak**: the twin LLR is non-decreasing with amplitude (1.09, 1.09, 1.09,
+1.54, 1.55) but plateaus and **never reaches p < 0.05**, which is item 98's
+ceiling doing exactly what it said -- a single-look pair needs a power ratio
+above 19.
+
+### Why: the prediction and the injection describe different scatterers
+
+`--inject-wave` defaults to **`rel = 20.0`** -- the injected target is 20x the
+scene's mean brightness. Measured on the injected run with `--shifts`:
+
+```
+  scene MEDIAN circular sd  1.693 rad  ->  floor 0.522 mm
+  TARGET window       sd    0.050 rad  ->  floor 0.0154 mm
+  the target window is 34x quieter than the scene median
+```
+
+**Item 102 predicted the floor from the scene's clutter and then measured a
+bright point target.** That is precisely the conflation item 101 identified in
+item 53's 0.0055 mm, recurring in my own prediction one item later.
+
+### There are THREE floors, and they differ by 34x
+
+| floor | value here | what it describes |
+|---|---|---|
+| **target** | 0.015 mm | phase noise at a bright coherent scatterer. Item 53's 0.0055 mm is the same quantity, same order. |
+| **clutter** | 0.52 mm | phase noise of the scene's own distributed return (item 102). |
+| **competition** | 0.13-0.26 mm | what an injection must reach to BEAT THE SCENE'S OWN ARTEFACT, which on these collects peaks at prominence 9-10. |
+
+**The competition floor is the operative one** and it is neither of the other
+two. A target 8-17x above its own noise floor still loses to the scene's
+strongest artefact until it clears it.
+
+### What this fixes
+
+- **Item 67's Kilauea scoping** used 0.0055 mm, a TARGET floor, for a
+  CLUTTER question. Item 102 corrected it to 0.52 mm and killed the test --
+  **that conclusion still stands**, because the seismometer measures the ground,
+  which is clutter, at 0.137-1.728 um against a 0.52 mm clutter floor.
+- **Item 102's protocol was right in form and wrong in the scatterer.** Predict
+  the floor **at the window the target occupies**, not from the scene median --
+  and state which of the three floors a number is.
+
+**Quote a floor with the scatterer it was measured on attached** (item 101) is
+now sharpened: quote it with the WINDOW, because the same scene carries both.

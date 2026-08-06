@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 101 items and their status.
+an index of all 102 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,30 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**THE FLOOR IS PREDICTABLE FROM AN UNINJECTED RUN, AND IT KILLS THE KILAUEA TEST**
+(item 102). Item 101's arithmetic — circular phase sd, times `lambda/(4*pi)`,
+times `sqrt(2/N)` — is a PREDICTION obtainable before any injection, which this
+project had never made. On three complete real Kilauea collects: **circular sd
+1.686-1.716 rad, coherence 0.381-0.387, 4.2 mm per look, predicted floor
+0.520-0.529 mm** — strikingly consistent, a property of the scene type.
+**REAL DATA IS 1.8x WORSE THAN THE SYNTHETIC FIXTURE, not better.** I expected
+the reverse from item 12f's "a real collect's 0.85" — **that 0.85 is the
+CORRELATION PEAK, not the sub-look PHASE coherence, and they are different
+quantities.** The cause is in the same run: **amplitude dispersion median 0.567,
+0 of 225 windows meeting D_A <= 0.25** — Kilauea lava has no persistent
+scatterers, so item 15's precondition is unmet scene-wide, which is item 19's
+Giza finding on a second real scene. **CONSEQUENCE: the Kilauea truth is
+0.137-1.728 um against a 529 um floor — the BEST scene is 306x below it**, so
+item 67's correlation test cannot work: below threshold the estimator decouples
+from truth (item 82) and the correlation is zero by construction. Item 67 scoped
+it against the 0.0055 mm figure, which is **96x too optimistic for distributed
+lava** because it was measured on a bright coherent point target. **The
+injection framework needs no new code** — `--inject-wave`, `--inject-at`,
+`--shifts`, `--probe-hz`, `--twin` all exist. What was missing is the protocol:
+**predict the floor from an uninjected run, inject at amplitudes BRACKETING the
+prediction, and report recovery against it.** Every measurement in FOLLOW-UPS so
+far chose an amplitude and found out afterwards whether it was above the noise.
 
 **THE ARTEFACT IS JUST PHASE NOISE, AND THE QUOTED FLOOR DOES NOT APPLY TO THE
 FIXTURES** (item 101). `--shifts` dumps the tracked series and nobody had looked

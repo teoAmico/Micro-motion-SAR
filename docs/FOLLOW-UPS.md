@@ -143,6 +143,7 @@ said, not better) and item 7's line numbers.
 | 99 | **answers 1** | multiplicity does NOT explain the false positives; the artefact is a coherent line holding 23% of the band |
 | 100 | **bounds 99** | the artefact does not scale with the analysis grid, so it is not the offset-driven carrier |
 | 101 | **explains 96-100** | the artefact is phase noise at 2.3 mm rms; this fixture's real floor is 0.29 mm, 53x the quoted one |
+| 102 | **kills the Kilauea test** | the floor is predictable from an uninjected run; real Kilauea is 0.53 mm, 306x above the best truth |
 
 ---
 
@@ -8666,3 +8667,89 @@ that this fixture family cannot exceed 0.323 by construction, so the artefact is
 a property of `rs_sim_scene()` rather than of the chain -- which means **items 96
 and 99's false-positive rates are bounded to this fixture and should not be
 quoted as properties of the method.**
+
+
+---
+
+## 102. The floor can now be PREDICTED before a run, and it kills the Kilauea experiment.
+
+Item 101 showed the tracked series' phase noise sets the floor, and gave the
+arithmetic: circular phase sd -> `sd * lambda/(4*pi)` per look ->
+`* sqrt(2/N)` after N looks. That is a **prediction that can be made from an
+uninjected run**, which this project has never done. Applied to real data it
+answers a question that 450 GB of download was being spent on.
+
+### Real Kilauea collects, measured
+
+Three complete Capella spotlights, 6.0 s matched dwell, 128 looks, 225 windows:
+
+| collect | circular sd | implied coherence | mm per look | predicted floor |
+|---|---|---|---|---|
+| C10 2024-06-09 | 1.716 rad | 0.381 | 4.233 | **0.529 mm** |
+| C10 2024-06-11 | 1.709 rad | 0.382 | 4.215 | **0.527 mm** |
+| C14 2024-06-10 | 1.686 rad | 0.387 | 4.159 | **0.520 mm** |
+
+Remarkably consistent -- this is a property of the scene type and the processing,
+not of any one acquisition.
+
+### The real collect is WORSE than the synthetic fixture, which inverts the premise
+
+I expected real data to beat the fixtures, because item 12f records "a real
+collect's 0.85" against the fixture family's 0.323. **That 0.85 is the
+CORRELATION peak, not the sub-look PHASE coherence**, and they are different
+quantities. Measured:
+
+```
+  synthetic fixture (item 101)  coherence ~0.70  floor 0.290 mm
+  real Kilauea                  coherence  0.38  floor 0.529 mm   1.8x WORSE
+```
+
+The cause is visible in the same run: **amplitude dispersion best 0.478, median
+0.567, and 0 of 225 windows meet D_A <= 0.25.** Kilauea lava fields have no
+persistent scatterers, so item 15's precondition -- one dominant scatterer per
+sub-look cell -- is unmet across the whole scene, and low phase coherence
+follows. This is item 19's Giza finding on a second real scene.
+
+### That ends the Kilauea correlation test
+
+The sixteen selected collects have seismometer truth of **0.137 to 1.728 um**.
+The predicted floor is **529 um**.
+
+**The strongest scene in the set is 306x below the floor; the weakest is 3900x
+below.**
+
+Item 67 scoped this as a CORRELATION test rather than a detection test, on the
+reasoning that it needs no collect above the floor -- only that reported
+displacement should track the seismometer's RMS. **That reasoning fails at this
+ratio.** Item 82's threshold effect is explicit: below threshold the estimator
+decouples from the truth, so the reported amplitude is noise and the correlation
+is zero by construction. A null would measure nothing.
+
+### What this cost and what it saves
+
+Item 67 scoped the test against item 53's **0.0055 mm** floor, where 95% of
+Kilauea's readings sit below but the best sits 2.7x above. The floor that
+actually applies to that scene is **96x larger**, because 0.0055 mm was measured
+on an injected bright coherent point target and Kilauea is distributed lava.
+**Item 101's third floor -- the per-FIXTURE one -- is exactly what was missing,
+and no one had measured a real collect's phase noise until now.**
+
+**Recommendation: stop the download.** 5 of 16 collects are complete and
+byte-verified; the remaining 11 cost ~285 GB and ~9 hours and cannot change the
+answer. The 5 completed ones keep their value as REAL-CLUTTER SUBSTRATE for
+injection, which is the experiment worth running.
+
+### The framework this implies
+
+Everything needed already exists -- `--inject-wave`, `--inject-at`, `--shifts`,
+`--probe-hz`, `--twin`. What was missing is the PROTOCOL, and it is now three
+steps:
+
+1. run the collect **uninjected** with `--shifts`, take the circular phase sd,
+   and predict the floor;
+2. inject a real sensor waveform at amplitudes **bracketing that prediction**;
+3. report recovery against the prediction rather than against a constant.
+
+**Predicting the floor before spending the run is the change.** Every measurement
+in this file so far chose an amplitude and discovered afterwards whether it was
+above the noise.

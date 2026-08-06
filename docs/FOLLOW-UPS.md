@@ -142,6 +142,7 @@ said, not better) and item 7's line numbers.
 | 98 | external, actionable | --twin is CCD and the LLR beats it; the peak search is the look-elsewhere effect, which is item 1 |
 | 99 | **answers 1** | multiplicity does NOT explain the false positives; the artefact is a coherent line holding 23% of the band |
 | 100 | **bounds 99** | the artefact does not scale with the analysis grid, so it is not the offset-driven carrier |
+| 101 | **explains 96-100** | the artefact is phase noise at 2.3 mm rms; this fixture's real floor is 0.29 mm, 53x the quoted one |
 
 ---
 
@@ -8580,3 +8581,88 @@ analysis grid**, so refining cells or the polynomial fit will not remove it.
 The next thing to interrogate is the tracked series itself -- what a motionless
 scene's per-window phase series actually looks like before any spectrum is taken.
 That has never been plotted here.
+
+
+---
+
+## 101. The artefact is just PHASE NOISE, and this fixture's real floor is 0.29 mm, not 0.0055 mm.
+
+Items 98, 99 and 100 eliminated the frequency search, multiplicity and the
+offset-driven carrier. Item 100 said the remaining place to look was the tracked
+series itself, which had never been examined. `--shifts` already dumps it. This
+is what it contains on a motionless scene.
+
+### The series
+
+`--estimator phase`, 128 looks, seed 7, nothing moving:
+
+```
+  phase, measured CIRCULARLY (a wrapped series has no linear sd):
+      resultant length R = 0.643,  circular sd = 0.940 rad
+  apparent displacement = phase * lambda/(4*pi)  ->  2.32 mm rms
+  item 53's quoted end-to-end floor              ->  0.0055 mm
+  the noise is 421x the floor, on a scene where nothing moves
+```
+
+A circular sd of 0.940 rad corresponds to a sub-look coherence of about **0.70**
+via `sd ~ sqrt((1-g^2)/(2g^2))`, which is the right order for this fixture family
+-- item 12f measured its coherence topping out at 0.323.
+
+### That is the whole artefact
+
+The periodogram of a 128-sample noise series **has a peak by construction**, and
+each window's is at its own frequency: measured, peak frequencies scattered over
+**0.302 to 3.024 Hz**, median 1.663, with no preferred value. The peak's share of
+band power is **14.8% median against 4.8% for white noise** -- concentrated
+enough to give the prominence 12-37 that items 96 and 99 measured.
+
+**No selection statistic can fix a 421x noise-to-floor ratio.** Items 91-100 were
+all arguing about how to choose among peaks in a series that is 2.3 mm of noise.
+
+### I overstated the wrapping, and the correction matters
+
+Two steps earlier I read a 14.27 mm peak-to-peak against a `lambda/4` = 7.75 mm
+ambiguity and called the phase saturated. **It is not.** Measured circularly the
+resultant length is 0.643 and the sd is 0.940 rad, well inside the circle -- the
+full-range peak-to-peak is the extremes of 6272 samples, not saturation. A
+wrapped quantity must be summarised circularly and I summarised it linearly.
+
+### The floor this project quotes does not apply to this fixture
+
+Item 53's **0.0055 mm** was measured on an **injected bright coherent point
+target** -- CLAUDE.md already flags it as "cleaner than any real structure". The
+clutter these fixtures are made of gives 2.32 mm per look, and averaging 128
+looks buys `sqrt(N)` = 11.3x, not the 422x the two figures differ by. The
+amplitude detectable at SNR 1 after 128 looks is
+
+```
+  2.32 mm * sqrt(2/128) = 0.29 mm
+```
+
+**53x worse than the quoted floor.** So:
+
+| injection | vs this fixture's 0.29 mm floor |
+|---|---|
+| 2.0 mm (items 91, 95, 97) | 6.9x above |
+| 0.5 mm | 1.7x above |
+| 0.3 mm | at it |
+| 0.1 mm | below it |
+
+That is why the 2 mm injections were partially recoverable at all, and it
+retrospectively explains the recall in items 91 and 95 without any appeal to
+selection policy.
+
+**TWO FLOORS WERE ALREADY DISTINGUISHED IN ITEM 66 AND THIS IS A THIRD.** Item 66
+separated the per-look CRLB (~0.2 mm) from the end-to-end floor (0.0055 mm).
+The missing one is the **per-fixture** floor: what the clutter's own coherence
+allows, which here is 0.29 mm and is 53x the number this project quotes.
+**Quote a floor with the scatterer it was measured on attached.**
+
+### What follows
+
+The lever is **sub-look coherence**, not statistics. Raising it lowers the phase
+noise directly, and everything downstream follows. Item 12f already established
+that this fixture family cannot exceed 0.323 by construction, so the artefact is
+a property of `rs_sim_scene()` rather than of the chain -- which means **items 96
+and 99's false-positive rates are bounded to this fixture and should not be
+quoted as properties of the method.**

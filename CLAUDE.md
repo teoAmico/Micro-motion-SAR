@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 100 items and their status.
+an index of all 101 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,30 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**THE ARTEFACT IS JUST PHASE NOISE, AND THE QUOTED FLOOR DOES NOT APPLY TO THE
+FIXTURES** (item 101). `--shifts` dumps the tracked series and nobody had looked
+at it. On a MOTIONLESS scene, `--estimator phase` at 128 looks gives **circular
+sd 0.940 rad (R = 0.643) = 2.32 mm rms of apparent displacement — 421x item 53's
+0.0055 mm floor**, implying a sub-look coherence of ~0.70. The periodogram of a
+128-sample noise series HAS a peak by construction, at a different frequency per
+window (**0.302-3.024 Hz, median 1.663, no preferred value**), holding **14.8% of
+band power against white noise's 4.8%** — which IS the prominence 12-37 of items
+96 and 99. **No selection statistic can fix a 421x noise-to-floor ratio**, so
+items 91-100 were arguing about how to choose among peaks in 2.3 mm of noise.
+**THIS FIXTURE'S REAL FLOOR IS 0.29 mm** — 2.32 mm times sqrt(2/128) — **53x the
+0.0055 mm this project quotes**, because that figure was measured on an injected
+BRIGHT COHERENT POINT TARGET and not on clutter; averaging 128 looks buys 11.3x,
+not the 422x the two differ by. That makes a THIRD floor beyond item 66's two:
+per-look CRLB, end-to-end, and now **per-FIXTURE**. **Quote a floor with the
+scatterer it was measured on attached.** It also explains the recall in items 91
+and 95 with no appeal to policy: a 2 mm injection is 6.9x this floor, 0.5 mm is
+1.7x, 0.3 mm is at it. **The lever is SUB-LOOK COHERENCE, not statistics** — and
+item 12f showed this fixture family cannot exceed 0.323 by construction, so
+**items 96 and 99's false-positive rates are bounded to this fixture and are not
+properties of the method.** A correction recorded there: a 14.27 mm peak-to-peak
+against a 7.75 mm ambiguity looked like saturation and is not — a wrapped
+quantity must be summarised CIRCULARLY.
 
 **THE MOTIONLESS-SCENE ARTEFACT IS NOT THE OFFSET-DRIVEN CARRIER** (item 100).
 Item 99 pointed the work at the carrier removal; that pointer is WRONG. If the

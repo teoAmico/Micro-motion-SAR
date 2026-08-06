@@ -55,3 +55,34 @@ top, 0.137 um at the bottom). This is not a positive control and cannot become
 one. A strong positive correlation would be surprising and would mean the floor
 is pessimistic; a null teaches nothing, being what both the floor arithmetic and
 item 82's threshold effect predict.
+
+---
+
+## STOPPED, 2026-08-06 — the test cannot answer its question
+
+Abandoned before completion, deliberately, and recorded here rather than
+deleted.
+
+**Why.** `runs/kilauea/2026-08-06-floor-prediction/` measured the phase noise of
+three completed collects and predicted this scene type's floor at **0.520-0.529
+mm**. The sixteen collects were selected for seismometer truth spanning
+**0.137-1.728 um**, so the strongest is **306x below the floor** and the weakest
+3900x. Item 67 scoped this as a CORRELATION test on the grounds that it needs no
+collect above the floor; item 82's threshold effect says that reasoning fails
+here, because below threshold the estimator decouples from the truth and the
+correlation is zero by construction. A null would have measured nothing.
+
+**State at the stop.** 5 of 16 complete and byte-exact against source
+`Content-Length`, verified at four offsets each; 11 incomplete leaving 90.1 GB of
+partial data on disk and 225.1 GB never fetched. One `mmotion` run completed
+(`CAPELLA_C10_SP_CPHD_HH_20240609091921`), at the seconds-matched truncation.
+
+**What the five kept collects are still for.** Real clutter with real coherence,
+which is the substrate the injection framework of item 102 needs. Five
+independent real scenes is ample for that; sixteen was only ever needed for the
+correlation across truth values, and that is what died.
+
+**What this cost, and the lesson.** The download ran to 36.6% before anyone
+measured what the floor on this scene actually was. The measurement takes one
+uninjected run with `--shifts`. **Predict the floor before spending the
+collect** — item 102's protocol exists because of this.

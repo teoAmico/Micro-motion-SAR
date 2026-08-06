@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 99 items and their status.
+an index of all 100 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,25 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**THE MOTIONLESS-SCENE ARTEFACT IS NOT THE OFFSET-DRIVEN CARRIER** (item 100).
+Item 99 pointed the work at the carrier removal; that pointer is WRONG. If the
+artefact were item 63's `(4*pi/lambda)*dX*dx/R`, shrinking the analysis cell must
+move it, since `dx` is bounded by half a cell — and item 63 measured exactly that
+on real Giza data, **70.7 / 36.3 / 159.0 at 1.0 / 0.25 / 0.125 m**, a 4.4x
+non-monotone swing. With the SCENE HELD FIXED and only the grid varied, item 99's
+metric gives **25.6% / 18.0% / 19.9% / 19.2%** at 1.0 / 0.5 / 0.25 / 0.125 m —
+**flat**, moving under 10% from 0.5 m down while the window count changes 20x.
+So the artefact is **independent of the imaging grid**, which puts it UPSTREAM OF
+THE WINDOWING — in the sub-aperture formation or the tracked series itself — and
+**refining cells or the polynomial fit will not remove it**. All three candidate
+explanations for item 96's 100% false-positive rate are now eliminated: the
+frequency search (~20% SNR, item 98), multiplicity (item 99), and the residual
+carrier (this item). **Bound**: item 63 measured real Giza with an injected
+target and this is synthetic motionless clutter, so item 63's mechanism is not
+disproven where item 63 measured it. **The untouched next thing is the TRACKED
+SERIES ITSELF** — what a motionless scene's per-window phase series looks like
+before any spectrum is taken, which has never been plotted here.
 
 **ITEM 1 IS ANSWERED AND THE ANSWER IS NO** (item 99). Multiplicity does not
 explain item 96's 100% false-positive rate. The modelled family-wise threshold

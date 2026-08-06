@@ -141,6 +141,7 @@ said, not better) and item 7's line numbers.
 | 97 | **locates the defect** | the paired twin finds the injected frequency in 76% of runs whose report is wrong: the SELECTION loses it |
 | 98 | external, actionable | --twin is CCD and the LLR beats it; the peak search is the look-elsewhere effect, which is item 1 |
 | 99 | **answers 1** | multiplicity does NOT explain the false positives; the artefact is a coherent line holding 23% of the band |
+| 100 | **bounds 99** | the artefact does not scale with the analysis grid, so it is not the offset-driven carrier |
 
 ---
 
@@ -8519,3 +8520,63 @@ Item 38 is unchanged, and recoverability and detectability stay apart.
 **Bounds:** one fixture family, `--estimator phase`, 128 looks, 12 realisations.
 The 95th percentile of a 12-sample maximum is itself uncertain; 12 controls give
 `p_min = 1/13`, which is item 49's arithmetic.
+
+
+---
+
+## 100. The motionless-scene artefact is NOT the offset-driven carrier: it does not scale with the analysis grid at all.
+
+Item 99 closed item 1 and pointed the work at the carrier removal, on the
+reasoning that a coherent line holding 23% of the band must be item 63's residual
+carrier `(4*pi/lambda)*dX*dx/R`, whose `dx` is the scatterer's offset from its
+pixel centre. **That pointer is wrong, and this is the test that says so.**
+
+If the artefact were that carrier, shrinking the analysis cell must move it,
+because `dx` is bounded by half a cell. Item 63 measured exactly that on real
+Giza data -- artefact **70.7 at 1.0 m, 36.3 at 0.25 m, 159.0 at 0.125 m**, a 4.4x
+non-monotone swing.
+
+Item 99's metric, on motionless clutter with the **scene held fixed** and only
+the analysis grid varied (two seeds):
+
+| cell | windows | share of band power in the peak bin |
+|---|---|---|
+| 1.0 m | 9 | 25.6% |
+| 0.5 m | 49 | 18.0% |
+| 0.25 m | 225 | 19.9% |
+| 0.125 m | 961 | 19.2% |
+
+**Flat.** A 1.42x total spread, and from 0.5 m down it moves by under 10% while
+the window count changes by 20x. Where item 63's artefact is **4.4x worse** at
+0.125 m than at 0.25 m, this is unchanged.
+
+### The first attempt was confounded and is recorded as such
+
+The first run varied `sim_cphd`'s cell as well as `mmotion`'s, which re-places
+every scatterer and destroys the comparison -- the thing being tested is `dx` at
+fixed scatterer positions. Only the corrected sweep above is scored.
+
+### What this eliminates and what it narrows to
+
+The artefact on this fixture is **independent of the imaging grid**, so it is not
+produced by where scatterers fall within pixels. That puts it **upstream of the
+windowing** -- in the sub-aperture formation or in the tracked series itself --
+and it means the three candidate explanations for item 96's 100% false-positive
+rate are now all eliminated:
+
+1. the frequency search -- ~20% SNR, too small (item 98)
+2. multiplicity -- cannot bridge prominence 11 to 37 (item 99)
+3. **the offset-driven residual carrier -- does not scale with the grid (this item)**
+
+### The bound that matters
+
+Item 63 was measured on the **real Giza collect with an injected target**; this is
+**synthetic clutter with nothing moving**. Different fixture and different metric,
+so this does NOT disprove item 63's mechanism where item 63 measured it. What it
+establishes is narrower and is the thing needed: **on the fixture where items 96
+and 99 measured the false-positive rate, the artefact does not come from the
+analysis grid**, so refining cells or the polynomial fit will not remove it.
+
+The next thing to interrogate is the tracked series itself -- what a motionless
+scene's per-window phase series actually looks like before any spectrum is taken.
+That has never been plotted here.

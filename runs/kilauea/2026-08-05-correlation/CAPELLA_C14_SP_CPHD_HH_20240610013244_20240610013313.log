@@ -1,0 +1,78 @@
+note: Capella product -- its signal does not follow its declared SGN=+1, so the
+      FX-to-delay transform is inverted to match Capella's own reference reader.
+      Without this the image is mirrored in range.
+cphd: skipped 27 vector(s) flagged invalid and 0 with non-finite geometry, of 289754
+warning: grid cell 0.500 m is coarser than the 0.268 m azimuth
+         resolution this collect supports. The image will alias:
+         each scatterer gains ghost peaks that resemble real
+         targets. Use --cell 0.268 or finer, or treat the result
+         as deliberately multi-looked.
+sub-apertures: 128 looks, dt 0.0470 s
+  observable band  f_max 10.64 Hz   AT sub-look resolution 34.38 m
+sub-pixel refinement: 1/200 px (default 1/10 azimuth, 1/20 range)
+tracked 225 windows (15 x 15); 225 pass the 0.00 coherence mask
+band floor: ignoring the first 3 bins (below 0.499 Hz) -- they carry the Hann skirt of any residual trend, not a vibration
+spectrum taken of line-of-sight DISPLACEMENT, which is what the phase estimator measures directly
+spectra: 65 bins, 0.1662 Hz resolution
+  amplitude dispersion: best 0.480, median 0.555; 0 of 225 windows meet D_A <= 0.25
+  persistent scatterers: none -- 225 windows passed the shared gates, 0 met D_A <= 0.25
+  local peak: 1.163 Hz in window 124 stands 40.4x its own neighbourhood
+           (median 1.534e-07 over 12 bins, guard 2, from 13950 window-bin pairs).
+           Comparable across frequency where 'prominence' is not; compare it
+           against another scene's maximum, not against a threshold.
+  scene-derived null: window 83 at 0.499 Hz stands 6.04 robust deviations above
+           its own scene (median 4.3, scale 0.8, 32 matched reference windows,
+           guard 1; runner-up 5.93 over 225 searched)
+           This is a robust deviation, NOT a normal deviate: do not read a
+           p-value off it. On this collect an uninjected scene reached 2.53
+           and injected targets 5.9-9.8. See rs_spectrum_scene_null().
+  located at window (4.50, 7.50) of (14, 14) -- pixel (87.5, 135.5) --
+           from 4 windows agreeing on 0.499 Hz, seeded from the reported peak
+  WARNING: NO window holds a dominant scatterer by the persistent-scatterer
+           criterion, so the phase estimator's precondition is unmet across
+           this whole scene. A null below is what that guarantees, and is
+           NOT evidence about whether the ground moved.
+           The 0.25 criterion is calibrated over independent passes, not
+           sub-looks; read it as a scale. See rs_microm_t.d_a.
+strongest peak in window 67: 0.499 Hz, prominence 8.8, quality 0.739, peak-to-peak velocity 553.5 mm/s (UNCALIBRATED)
+           The frequency is the measurement. The velocity is the raw tracked
+           excursion including trend and noise -- a motionless Giza scene gives
+           124.8 mm/s through this same line. Do not quote it as an amplitude.
+  backed by 10 windows, largest touching block 4
+  NOT ADJUDICATED -- nothing here distinguishes this from an artefact of the
+  processing. Cross-window agreement cannot: it is blind to anything common to
+  every window (item 11), and it is diluted by background to 19-24% even for a
+  known true positive (item 31). Run --null-static N, or --inject-vib to check
+  the chain can see a known signal here at all.
+  225 of 225 windows were eligible for selection (coherence gate; the floor does not apply to this estimator)
+  modal set: 5 modes recurring in >= 34 of 225 voting windows,
+           ranked by the size of their largest contiguous block of windows
+           (6 nominations each over 62 admissible bins; 0.39 bins expected
+            to clear that by chance, so the threshold is a family-wise budget)
+           chance alone reaches block 7 here (1000 trials, worst 14), so the
+           block a mode must beat is derived from this configuration, not fixed
+            0.997 Hz (sub-bin 1.009 +- 0.061)   block  16 (p 0.001)   support  44/225   ratio 5.9
+            9.142 Hz (sub-bin 9.101 +- 0.032)   block   9 (p 0.003)   support  37/225   ratio 3.8
+            2.493 Hz (sub-bin 2.475 +- 0.039)   block   8 (p 0.010)   support  36/225   ratio 3.7
+            8.809 Hz (sub-bin 8.798 +- 0.053)   block   7 (p 0.027)   support  36/225   ratio 4.6
+            5.153 Hz (sub-bin 5.141 +- 0.041)   block   7 (p 0.027)   support  34/225   ratio 5.4
+           The leading figure is the BIN CENTRE, which is what every earlier
+           measurement here is quoted at. The sub-bin +- is the SPREAD of the
+           per-window estimate, not a posterior: this fits no modal model and
+           estimates no damping (item 79). p is the chance model for the block
+           and it is not a detection -- item 11's blindness to common-mode
+           artefacts is unaffected by any of it. Run --null-static N.
+  consensus: 4.155 Hz, agreed by 13 of 225 voting windows (6%), 49 distinct answers, largest contiguous block 3
+  WARNING: the agreeing windows are SCATTERED (largest block 3 < 4).
+           Windows overlap at the tracking stride, so a resolvable mode
+           occupies a 2x2 block at minimum. This is the shape of coincidence.
+  cull: 0.499 Hz from 8 of 225 windows surviving (SNR 0, sigma 0, neighbours 149 removed), surface gates N/A
+  NOTE: the cull and the consensus disagree (0.499 vs 4.155 Hz).
+        They read different evidence, so this is not a tie to
+        break by preference: at most one of them is measuring.
+  sub-aperture response 0.9991 (-0.0 dB) at an observation ratio of 0.02
+  (amplitude is QUALITATIVE -- relative amplitudes do not validate
+   against ground truth even where frequencies do)
+wrote runs/kilauea/2026-08-05-correlation/CAPELLA_C14_SP_CPHD_HH_20240610013244_20240610013313_freq.png, runs/kilauea/2026-08-05-correlation/CAPELLA_C14_SP_CPHD_HH_20240610013244_20240610013313_quality.png, runs/kilauea/2026-08-05-correlation/CAPELLA_C14_SP_CPHD_HH_20240610013244_20240610013313_scene.png,
+      runs/kilauea/2026-08-05-correlation/CAPELLA_C14_SP_CPHD_HH_20240610013244_20240610013313_spectrum.png (power), runs/kilauea/2026-08-05-correlation/CAPELLA_C14_SP_CPHD_HH_20240610013244_20240610013313_spectrum_mm.png (displacement),
+      runs/kilauea/2026-08-05-correlation/CAPELLA_C14_SP_CPHD_HH_20240610013244_20240610013313_spectrum_mms.png (velocity) and runs/kilauea/2026-08-05-correlation/CAPELLA_C14_SP_CPHD_HH_20240610013244_20240610013313_windows.csv

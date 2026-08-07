@@ -145,6 +145,7 @@ said, not better) and item 7's line numbers.
 | 101 | **explains 96-100** | the artefact is phase noise at 2.3 mm rms; this fixture's real floor is 0.29 mm, 53x the quoted one |
 | 102 | **kills the Kilauea test** | the floor is predictable from an uninjected run; real Kilauea is 0.53 mm, 306x above the best truth |
 | 103 | **corrects 102** | the floor is PER-TARGET: three floors 34x apart, and the operative one is competition with the scene's artefact |
+| 104 | **answers the reach question** | recovery needs 20-26 dB SCR; the field's own validations put a corner reflector on the structure |
 
 ---
 
@@ -8844,3 +8845,78 @@ collect **no window is quiet**: floors run **0.4237 to 0.6491 mm, a ratio of
 scene contains **no naturally bright scatterer anywhere**, and item 102's verdict
 is stronger than it was stated -- not that the scene's median is bad, but that
 it has no good window at all.
+
+
+---
+
+## 104. Recovery needs 20-26 dB of signal-to-clutter, and the field's own validated results put a CORNER REFLECTOR on the structure.
+
+Pre-registered at `c0de7f5`. Only the target's brightness varies: amplitude fixed
+at 0.26 mm, frequency at 1.00 Hz, waveform, geometry and collect all held.
+
+### H1 and H2 both pass, and the transition is sharp
+
+| REL | SCR | C10 2024-06-09 | its target floor | C14 2024-06-10 | its target floor |
+|---|---|---|---|---|---|
+| 20 | 26 dB | **0.998 recovered** | 0.0022 mm | **0.997 recovered** | 0.0023 mm |
+| 10 | 20 dB | 0.665 -- the artefact | 0.486 mm | **0.997 recovered** | 0.0025 mm |
+| 5 | 14 dB | 0.665 | 0.486 mm | 0.499 -- the artefact | 0.499 mm |
+| 2 | 6 dB | 0.665 | 0.486 mm | 0.499 | 0.499 mm |
+| 1 | 0 dB | 0.665 | 0.486 mm | 0.499 | 0.499 mm |
+
+**The transition is between 14 and 26 dB** and it is not gradual. The target
+window's floor is **bimodal**: 0.002 mm when the target dominates its pixel, and
+0.486-0.499 mm -- the clutter floor -- the moment it does not. There is nothing
+in between. Below the transition the reported frequency is exactly the
+uninjected scene's own artefact, 0.665 and 0.499 Hz.
+
+**My prediction was wrong.** I recorded "transition between REL 2 and 5"; it is
+between 5 and 20. The method needs a far brighter target than I expected.
+
+### This does NOT contradict item 51, and the difference is the whole point
+
+Item 51 swept REL on Giza and concluded *"a brighter target does not make smaller
+motion detectable"*, because there the competition was the target's OWN quadratic
+phase residual, which scales as REL^2 exactly as the signal does. **Here the
+competition is the SCENE's clutter artefact, which does not scale with the target
+at all**, so the ratio improves with brightness until the target dominates its
+pixel. Both are true; each must be quoted with the competition named.
+
+### The literature says the same thing and has already acted on it
+
+Vattulainen et al., *Assessment of spaceborne SAR micro-motion measurement for
+vibration-based SHM* (IEEE, 2026; Strathclyde / Trento / Houston / DLR), assesses
+this exact technique against synchronous accelerometer ground truth on Umbra-04
+and ICEYE data. Three things in it matter here:
+
+- **The targets are CORNER REFLECTORS on linear actuators.** *"The vibrating
+  'shaker' targets were set up by mounting a corner reflector (CR) target on a
+  linear actuator. CRs are commonly used in radar measurements to provide a
+  point-like high intensity reflection."* That is the field buying the 20-26 dB
+  this item measures as necessary, by hardware.
+- **Their demonstrated floor is 0.10 mm RMS radial displacement** (0.81 mm/s RMS
+  velocity), over a range of 10.43 down to 0.10 mm. Item 103's competition floor
+  on real clutter was **0.13-0.26 mm** -- the same order, arrived at
+  independently.
+- **They have not measured a structure.** *"These results pave the way for future
+  measurements of infrastructure."* And theirs are, to their knowledge, the first
+  synchronous SAR-and-accelerometer measurements of vibration at all.
+
+They also report needing to **raise the observation ratio** to reach the low
+amplitudes, which is item 13's quantity, and conclude the method is *"better
+suited to frequency-domain SHM approaches"* than to time-domain modal analysis --
+which is what this project reports.
+
+### What it means for items 83-89
+
+Items 83-89 searched three SAR archives and four sensor networks for a structure
+under an aperture and found essentially nothing. **That is not a shortfall
+against the field: the field has not done it either.** The published validations
+are corner reflectors on actuators, and infrastructure is stated as future work.
+The gap this project could not close is one nobody has closed.
+
+**And item 104 says what would close it**: a target presenting 20-26 dB of
+signal-to-clutter. On a real structure that means a corner reflector, or a
+structure that happens to contain one -- which is what item 15's
+one-dominant-scatterer-per-cell precondition has been saying in other words since
+the beginning.

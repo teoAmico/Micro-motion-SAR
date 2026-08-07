@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 103 items and their status.
+an index of all 104 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,31 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**RECOVERY NEEDS 20-26 dB OF SIGNAL-TO-CLUTTER, AND THE FIELD PUTS A CORNER
+REFLECTOR ON THE STRUCTURE** (item 104). Pre-registered at `c0de7f5`; only the
+target's brightness varies, amplitude fixed at 0.26 mm. **The transition is
+between 14 and 26 dB and it is SHARP**: at REL 20 both collects recover with a
+target-window floor of 0.0022 mm; at REL 5 and below neither does and the floor
+jumps to the clutter's ~0.49 mm. **The floor is BIMODAL** — the target either
+dominates its pixel or it does not exist as a scatterer, nothing between — and
+below the transition the reported frequency is exactly the uninjected scene's own
+artefact. **My prediction of a REL 2-5 transition was WRONG**; it needs far more
+brightness. **This does NOT contradict item 51**, which swept REL against the
+target's OWN quadratic residual — that scales as REL^2 like the signal, so it is
+brightness-neutral; here the competition is the SCENE's clutter artefact, which
+does not scale with the target. **Quote each with its competition named.**
+**THE LITERATURE AGREES AND HAS ALREADY ACTED ON IT**: Vattulainen et al. (IEEE
+2026, Strathclyde/Trento/Houston/DLR), assessing this exact technique against
+synchronous accelerometer ground truth on Umbra and ICEYE, mount **CORNER
+REFLECTORS ON LINEAR ACTUATORS** — buying the 20-26 dB by hardware. Their
+demonstrated floor is **0.10 mm RMS radial displacement**, against item 103's
+independently-measured 0.13-0.26 mm competition floor. **They have not measured a
+structure**: "these results pave the way for future measurements of
+infrastructure", and theirs are the first synchronous SAR-and-accelerometer
+vibration measurements at all. **So items 83-89's failure to find a
+structure-under-aperture pairing is not a shortfall against the field — the field
+has not done it either.**
 
 **THE PREDICTED FLOOR IS NOW PER WINDOW** (item 103, implemented).
 `rs_microm_floor()` takes a window's own phase series, summarises it CIRCULARLY

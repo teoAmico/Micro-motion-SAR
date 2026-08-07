@@ -1398,6 +1398,46 @@ static size_t rs_load_twin_probe(const char *path, double **out, double **out_ps
     return n;
 }
 
+/* One rung of the stabilization ladder: a run of the same scene at its own look
+ * count. 'modal' is that run's modal-set leading frequency, which is the
+ * quantity the verdict is on. */
+typedef struct {
+    size_t looks;
+    double modal;      /* modal-set leading frequency, 0 if the run refused */
+    double dt;         /* sub-look interval, for that run's Nyquist */
+    double df;
+    const char *path;  /* NULL for this run */
+} rs_rung_t;
+
+/* Order rungs by look count, so "consecutive" means what it says. */
+static int rs_cmp_rung(const void *a, const void *b)
+{
+    const rs_rung_t *x = a, *y = b;
+    return (x->looks < y->looks) ? -1 : (x->looks > y->looks);
+}
+
+/* P(some chain of 'run' consecutive agreeing rungs arises by chance), for a
+ * ladder of 'n_rung' rungs over 'n_bin' admissible bins.
+ *
+ * DERIVED, NOT CHOSEN. Under the null a rung's reported frequency falls anywhere
+ * in the admissible band, so two rungs agree within half a bin with probability
+ * about 1/n_bin, and a chain of 'run' rungs needs run-1 such agreements. There
+ * are n_rung-run+1 places a chain of that length could start, which is the
+ * look-elsewhere cost along the ladder and is inside this number.
+ *
+ * THIS IS WHY A LONGER LADDER DEMANDS MORE PERSISTENCE, and it is the part a
+ * two-point test could not express: at 62 bins a single agreeing PAIR is
+ * p = 0.016 and passes, but over six rungs the same pair is p = 0.081 and does
+ * not, because there were five chances for it. Item 107's 1-of-12 residual
+ * false positive is exactly a lucky pair. */
+static double rs_stable_p(size_t n_rung, size_t run, size_t n_bin)
+{
+    if (run < 2 || n_rung < run || n_bin == 0) return 1.0;
+    double p = (double)(n_rung - run + 1);
+    for (size_t i = 1; i < run; i++) p /= (double)n_bin;
+    return p > 1.0 ? 1.0 : p;
+}
+
 /* The per-window 'dominant_hz' column of another run of the SAME SCENE at a
  * DIFFERENT LOOK COUNT, for the stabilization test below.
  *
@@ -1415,6 +1455,19 @@ static size_t rs_load_twin_probe(const char *path, double **out, double **out_ps
  * real collect cannot supply: a simulated motionless realisation, a run
  * differing in nothing but the motion, or the injection machinery. **This needs
  * only the collect, processed twice.**
+ *
+ * A LADDER, NOT A PAIR (item 115). `--stable` takes a COMMA-SEPARATED list and
+ * this is called once per rung. Item 107 implemented the stabilization diagram
+ * as a two-point test because that was the cheapest form of it; the OMA
+ * literature sweeps model order over a RANGE and accepts a pole only when it
+ * persists across SEVERAL CONSECUTIVE orders -- five is the figure usually
+ * quoted, with automated methods (Reynders 2012) clustering poles across the
+ * whole diagram rather than comparing two of them. Two reasons that matters
+ * here: a pair agreeing by chance has probability about 1/n_bin, which at 62
+ * admissible bins is 0.016 and only just under a 5% bar, and item 114 made
+ * single rungs REFUSE often enough that a two-point test loses its partner and
+ * abstains. A ladder is stronger evidence and degrades gracefully when one rung
+ * says nothing.
  *
  * Returns the number of windows read and writes a malloc'd array of their
  * dominant frequencies to 'out'; 0 on failure with 'why' set. The other run's
@@ -1494,7 +1547,7 @@ static int rs_cmd_mmotion(int argc, char **argv)
                "                          [--inject-vib FREQ_HZ[,AMP_MM[,REL]]]\n"
                "                          [--inject-at DX,DY] [--stft LOOKS]\n"
                "                          [--tfit MODES] [--twin WINDOWS_CSV]\n"
-               "                          [--stable WINDOWS_CSV]\n"
+               "                          [--stable CSV[,CSV...]]\n"
                "                          [--inject-wave FILE[,RATE_HZ[,AMP_MM[,REL]]]]\n"
                "                          [--stream N]\n"
                "                          [--estimator correlation|phase|splitband|argmax]\n"
@@ -2285,8 +2338,10 @@ static int rs_cmd_mmotion(int argc, char **argv)
     /* --stable PATH keeps only frequencies that survive a change of look count;
      * see rs_load_stable() and the report below. */
     const char *stable_path = rs_opt(argc, argv, "--stable");
-    double *stable_f = NULL; size_t stable_n = 0, stable_looks = 0;
-    double stable_df = 0.0, stable_dt = 0.0, stable_fmax = 0.0, stable_modal = 0.0;
+    /* The first rung's per-window column, kept only for the window-level
+     * agreement line; the verdict is on the modal answers along the ladder. */
+    double *stable_f = NULL; size_t stable_looks = 0;
+    double stable_dt = 0.0, stable_fmax = 0.0;
 
     /* --twin PATH differences this run against a previous one at the probed
      * frequency; see rs_load_twin_probe() and the report below. */
@@ -2970,49 +3025,84 @@ static int rs_cmd_mmotion(int argc, char **argv)
 
     /* --stable: load the other run and refuse the comparisons that mean nothing.
      * See rs_load_stable() for the principle. */
+    rs_rung_t *rung = NULL; size_t n_rung = 0;
     if (stable_path) {
-        const char *why = "";
-        stable_n = rs_load_stable(stable_path, &stable_f, &stable_looks,
-                                  &stable_df, &stable_dt, &stable_modal, &why);
-        if (stable_n == 0) {
-            fprintf(stderr, "mmotion: --stable '%s' %s\n", stable_path, why);
-            rs_spectrum_free(&spec); rs_microm_free(&m);
+        /* Count the comma-separated rungs, plus this run. */
+        size_t n_path = 1;
+        for (const char *q = stable_path; *q; q++) if (*q == ',') n_path++;
+        rung = calloc(n_path + 1, sizeof *rung);
+        char *paths = strdup(stable_path);
+        if (!rung || !paths) {
+            fprintf(stderr, "mmotion: out of memory for --stable\n");
+            free(rung); free(paths); rs_spectrum_free(&spec); rs_microm_free(&m);
             rs_subap_stack_free(&stack); rs_cphd_free(&c);
             return 1;
         }
-        if (stable_n != spec.n_win) {
-            fprintf(stderr, "mmotion: --stable has %zu windows, this run has "
-                            "%zu -- the grids differ, so no window corresponds\n",
-                    stable_n, spec.n_win);
-            free(stable_f);
-            rs_spectrum_free(&spec); rs_microm_free(&m);
-            rs_subap_stack_free(&stack); rs_cphd_free(&c);
-            return 1;
+        /* This run is a rung too, and is filled in after the modal set runs. */
+        rung[n_rung].looks = stack.n_looks;
+        rung[n_rung].dt = stack.dt;
+        rung[n_rung].df = spec.df;
+        rung[n_rung].path = NULL;
+        n_rung++;
+
+        char *save = NULL;
+        for (char *tok = strtok_r(paths, ",", &save); tok;
+             tok = strtok_r(NULL, ",", &save)) {
+            const char *why = "";
+            double *f = NULL; size_t nw = 0, lk = 0;
+            double d_df = 0.0, d_dt = 0.0, d_modal = 0.0;
+            nw = rs_load_stable(tok, &f, &lk, &d_df, &d_dt, &d_modal, &why);
+            if (nw == 0) {
+                fprintf(stderr, "mmotion: --stable '%s' %s\n", tok, why);
+                free(f); free(rung); free(paths);
+                rs_spectrum_free(&spec); rs_microm_free(&m);
+                rs_subap_stack_free(&stack); rs_cphd_free(&c);
+                return 1;
+            }
+            if (nw != spec.n_win) {
+                fprintf(stderr, "mmotion: --stable '%s' has %zu windows, this "
+                                "run has %zu -- a different window grid is not "
+                                "a change of look count\n", tok, nw, spec.n_win);
+                free(f); free(rung); free(paths);
+                rs_spectrum_free(&spec); rs_microm_free(&m);
+                rs_subap_stack_free(&stack); rs_cphd_free(&c);
+                return 1;
+            }
+            int dup = 0;
+            for (size_t i = 0; i < n_rung; i++) if (rung[i].looks == lk) dup = 1;
+            if (dup) {
+                fprintf(stderr, "mmotion: --stable '%s' was run at %zu looks, "
+                                "which another rung already occupies -- two runs "
+                                "at the same look count are the same rung and "
+                                "test nothing (FOLLOW-UPS.md item 107).\n",
+                        tok, lk);
+                free(f); free(rung); free(paths);
+                rs_spectrum_free(&spec); rs_microm_free(&m);
+                rs_subap_stack_free(&stack); rs_cphd_free(&c);
+                return 1;
+            }
+            if (d_df > 0.0 && spec.df > 0.0 &&
+                fabs(d_df - spec.df) > 1e-9 * spec.df)
+                printf("  WARNING: --stable rung '%s' was run at df %.6f Hz and "
+                       "this at %.6f --\n"
+                       "           a comparison across DWELLS, which item 107 "
+                       "records as untested.\n", tok, d_df, spec.df);
+            /* The first rung's per-window column is kept for the window-level
+             * agreement line; the verdict uses the modal answers only. */
+            if (!stable_f) {
+                stable_f = f; stable_looks = lk; stable_dt = d_dt;
+            } else free(f);
+            rung[n_rung].looks = lk;
+            rung[n_rung].modal = d_modal;
+            rung[n_rung].dt = d_dt;
+            rung[n_rung].df = d_df;
+            rung[n_rung].path = tok;
+            n_rung++;
         }
-        if (stable_looks == stack.n_looks) {
-            fprintf(stderr, "mmotion: --stable was run at %zu looks and so is "
-                            "this -- the test is VACUOUS. The point is that an "
-                            "artefact of the SLICING moves when the slicing "
-                            "changes; two identical slicings cannot show it "
-                            "(FOLLOW-UPS.md item 107).\n", stable_looks);
-            free(stable_f);
-            rs_spectrum_free(&spec); rs_microm_free(&m);
-            rs_subap_stack_free(&stack); rs_cphd_free(&c);
-            return 1;
-        }
-        /* The comparison lives in the band BOTH runs can express. A frequency
-         * above the lower Nyquist has no counterpart to be stable against. */
+        /* The window-level line still needs a common band with the first rung. */
         const double nyq_here  = (stack.dt  > 0.0) ? 0.5 / stack.dt  : 0.0;
         const double nyq_other = (stable_dt > 0.0) ? 0.5 / stable_dt : 0.0;
         stable_fmax = (nyq_here < nyq_other) ? nyq_here : nyq_other;
-        if (stable_df > 0.0 && spec.df > 0.0 &&
-            fabs(stable_df - spec.df) > 1e-9 * spec.df)
-            printf("  WARNING: --stable was run at df %.6f Hz and this at %.6f -- "
-                   "a comparison\n"
-                   "           across DWELLS, which item 107 records as untested. "
-                   "Only the look\n"
-                   "           count was meant to change.\n",
-                   stable_df, spec.df);
     }
 
     /* The STABILIZATION TEST (item 107): keep only what survives a change of
@@ -3028,35 +3118,76 @@ static int rs_cmd_mmotion(int argc, char **argv)
             n_cmp++;
             if (fabs(a - b) <= half) n_stable++;
         }
+
         /* THE VERDICT IS ON THE MODAL SET'S LEADING FREQUENCY, which is the
          * quantity item 107 measured 12-of-12 to 1-of-12 on. It is NOT the
          * strongest-prominence window's dominant_hz: verified, an injected scene
          * whose modal answer is 0.504 Hz at both look counts can have that
          * window report 0.504 at one and 2.571 at the other, so comparing
          * windows would reject a true recovery. */
-        const double fa = modal_lead_hz, fb = stable_modal;
-        const int have_both = (fa > 0.0 && fb > 0.0);
-        const int in_band = have_both && fa <= stable_fmax && fb <= stable_fmax;
-        const int sel_stable = in_band && fabs(fa - fb) <= half;
-        printf("  stabilization against %zu looks (this run %zu), common band "
-               "0 - %.3f Hz:\n"
-               "            modal set: %.3f Hz here, %.3f Hz there -> %s\n"
-               "            %zu of %zu comparable windows agree within half a "
-               "bin (%.4f Hz)\n"
-               "            A real vibration sits at the same Hz however the "
+        rung[0].modal = modal_lead_hz;
+        qsort(rung, n_rung, sizeof *rung, rs_cmp_rung);
+
+        /* The LONGEST CHAIN of consecutive rungs that agree. A pair counts as
+         * agreeing only when both answered and both answers lie in the band the
+         * PAIR shares -- a frequency above the lower rung's Nyquist has no
+         * counterpart there to be stable against. A rung that refused breaks
+         * the chain rather than ending the test, which is what a ladder buys
+         * over a pair (item 115). */
+        size_t best_run = 0, cur = 0;
+        for (size_t i = 0; i + 1 < n_rung; i++) {
+            const double fa = rung[i].modal, fb = rung[i + 1].modal;
+            const double nya = (rung[i].dt     > 0.0) ? 0.5 / rung[i].dt     : 0.0;
+            const double nyb = (rung[i + 1].dt > 0.0) ? 0.5 / rung[i + 1].dt : 0.0;
+            const double fmax = (nya < nyb) ? nya : nyb;
+            const int ok = (fa > 0.0 && fb > 0.0 && fa <= fmax && fb <= fmax &&
+                            fabs(fa - fb) <= half);
+            if (ok) { if (cur == 0) cur = 2; else cur++; }
+            else cur = 0;
+            if (cur > best_run) best_run = cur;
+        }
+        const size_t n_bin = (spec.n_freq > RS_SPECTRUM_LEAKAGE_BINS)
+                           ? spec.n_freq - RS_SPECTRUM_LEAKAGE_BINS : 1;
+        const double p_stab = rs_stable_p(n_rung, best_run, n_bin);
+        const int report = (best_run >= 2) && (p_stab <= RS_MODAL_P_MAX);
+
+        printf("  stabilization ladder, %zu rungs over %zu admissible bins:\n",
+               n_rung, n_bin);
+        for (size_t i = 0; i < n_rung; i++) {
+            if (rung[i].modal > 0.0)
+                printf("            %5zu looks: %6.3f Hz%s\n", rung[i].looks,
+                       rung[i].modal, rung[i].path ? "" : "   <- this run");
+            else
+                printf("            %5zu looks: REFUSED%s\n", rung[i].looks,
+                       rung[i].path ? "" : "   <- this run");
+        }
+        printf("            longest chain of CONSECUTIVE agreeing rungs: %zu "
+               "(p %.4f) -> %s\n",
+               best_run, p_stab,
+               (best_run < 2) ? "no two rungs agree -- reject"
+                              : (report ? "STABLE -> report"
+                                        : "not persistent enough -- reject"));
+        printf("            %zu of %zu comparable windows agree within half a "
+               "bin (%.4f Hz) at\n"
+               "            %zu looks; the verdict above is on the MODAL SET, "
+               "not on windows.\n",
+               n_stable, n_cmp, half, stable_looks);
+        printf("            A real vibration sits at the same Hz however the "
                "aperture is sliced;\n"
-               "            an artefact of the slicing need not. This took a "
-               "motionless fixture\n"
-               "            from 12 of 12 false positives to 1 of 12 (item 107). "
-               "It gates nothing,\n"
-               "            and it is the only control here needing no twin and "
-               "no ground truth.\n",
-               stable_looks, stack.n_looks, stable_fmax, fa, fb,
-               !have_both ? "one run's modal set REFUSED -- no comparison"
-               : !in_band ? "OUTSIDE THE COMMON BAND -- not comparable"
-                          : (sel_stable ? "STABLE -> report" : "MOVED -> reject"),
-               n_stable, n_cmp, half);
-    }
+               "            an artefact of the slicing need not. The OMA "
+               "stabilization diagram\n"
+               "            accepts a pole only when it persists across SEVERAL "
+               "consecutive model\n"
+               "            orders, and the look count is the model order here "
+               "(items 107, 115).\n"
+               "            The threshold is derived: a pair agreeing by chance "
+               "is about 1/%zu,\n"
+               "            and a longer ladder gives more places for a lucky "
+               "pair to appear.\n"
+               "            It gates nothing, and needs no twin and no ground "
+               "truth.\n", n_bin);
+        free(rung);
+    } else free(rung);
 
     /* The PREDICTED FLOOR, per window, from each window's own phase noise.
      * Item 103: a scene carries both bright scatterers and diffuse clutter and

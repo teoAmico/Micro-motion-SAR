@@ -9830,10 +9830,10 @@ That artefact's p across four items: **0.001 -> 0.010 -> 0.342.** C10's
 motionless control is refused at both look counts, its best candidate at p 0.999.
 
 **H3 2 of 2, both by the CHAIN rather than by `--stable`. H1 5 of 6 against a
-bar of 4. H3b 0 of 12 with injected recall 6 of 6**, and **8 of 12 motionless
+bar of 4. H3b 0 of 12 with injected recall 6 of 6**, and **9 of 12 motionless
 synthetic scenes now refuse outright** against item 113's 4 and item 96's 0.
 **Item 96 measured 12 of 12 motionless scenes returning a confident frequency;
-two thirds are now silent, with no null control.**
+three quarters are now silent, with no null control.**
 
 | p bracket | verdict |
 |---|---|
@@ -9843,6 +9843,22 @@ two thirds are now silent, with no null control.**
 | C10 injected 0.26 mm **0.001-0.043** | admitted, and the width is the honest statement |
 | C10 injected 0.53 mm 0.001-0.012 | admitted |
 | C14 injected 0.13-0.53 mm 0.001-0.006 | admitted |
+
+### The first pass was discarded, and the reason is the finding
+
+The arms were run once against the pre-registered pipeline and thrown away. The
+printed bracket read **54.0 to 42.9** on the synthetic fixture -- the
+"conservative" dilated draw BELOW the optimistic one, where on the real collect
+it sits above (23.3 -> 37.7). **The dilated draw is not monotone in correlation**:
+it forces total within-tile sharing, which raises blocks, AND swaps each window's
+ratio for its own typical one, which can lower the mass. Gating on it
+unconditionally would have been ANTI-conservative exactly where it lands lower --
+the failure this item exists to remove, reintroduced by its own fix.
+
+The gate now takes **the larger of the two criticals per scene**, valid whichever
+draw is tighter. The real arm is unchanged (the dilated draw was already
+conservative there); the synthetic arm gained a refusal, 8 of 12 to 9 of 12.
+**Read a bracket's ORDER, not just its width** -- that is what caught it.
 
 ### Costs, and one of them was not predicted
 

@@ -16,16 +16,21 @@ the bracket cost specificity or recall on the synthetic fixture?
 | | 107 | 110 | 111 | 112 | 113 | 114 |
 |---|---|---|---|---|---|---|
 | motionless: report | 1/12 | 1/12 | 1/12 | 0/12 | 0/12 | **0/12** |
-| motionless: **refused outright @128** | 0/12 | 0/12 | 0/12 | 0/12 | 4/12 | **8/12** |
+| motionless: **refused outright @128** | 0/12 | 0/12 | 0/12 | 0/12 | 4/12 | **9/12** |
 | injected: report | 6/6 | 6/6 | 6/6 | 6/6 | 6/6 | **6/6** |
 
-**Two thirds of motionless scenes now return no modal answer at all** — 18 of the
-24 motionless runs across both look counts refuse — while all six injected scenes
+**Three quarters of motionless scenes now return no modal answer at all** — 19 of
+the 24 motionless runs across both look counts refuse — while all six injected scenes
 still give **0.504 Hz at both look counts to three decimals**.
 
 Item 96 measured this same fixture returning a confident frequency on **12 of 12**
-motionless scenes and called a per-scene null the only defence. Two thirds of
-them are now silent without one.
+motionless scenes and called a per-scene null the only defence. Nine of twelve
+are now silent without one.
+
+**These are the re-run figures.** The first pass was discarded when the gate was
+found not to be conservative on every scene; see the kilauea run's RUN.md. It
+gave 8 of 12 refusals rather than 9, and the same 0 of 12 reporting and 6 of 6
+injected.
 
 ## Bounds
 

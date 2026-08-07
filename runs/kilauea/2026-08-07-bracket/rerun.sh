@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Item 114: items 110-113 re-run verbatim against the bracketed null.
-# Pre-registered at 6fb1cb4. Identical to ../2026-08-07-clustermass/
+# Pre-registered at 6fb1cb4; re-run at de65c45 after the per-scene gate fix. Identical to ../2026-08-07-clustermass/
 # rerun.sh in every flag; only the binary differs.
 D=/private/tmp/claude-501/-Users-matteoamico-Workspace-micromotion/cdb256dd-5a5b-4955-9cf1-adfbd7d0321e/scratchpad
 DEST="/Volumes/ZX20 II/micromotion/datasets/kilauea"

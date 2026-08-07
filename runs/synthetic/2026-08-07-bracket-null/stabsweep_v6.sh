@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Item 114 H3b: items 110-113 re-run verbatim against the bracketed null.
-# Pre-registered at 6fb1cb4. Twelve motionless scenes and six injected ones, each
+# Pre-registered at 6fb1cb4; re-run at de65c45 after the per-scene gate fix. Twelve motionless scenes and six injected ones, each
 # processed at 128 and 256 looks. Only --n differs between the paired runs.
 D=/private/tmp/claude-501/-Users-matteoamico-Workspace-micromotion/cdb256dd-5a5b-4955-9cf1-adfbd7d0321e/scratchpad
 cd /Users/matteoamico/Workspace/micromotion

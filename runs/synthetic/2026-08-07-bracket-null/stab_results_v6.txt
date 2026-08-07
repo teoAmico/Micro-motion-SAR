@@ -5,7 +5,7 @@ static 5 128 REFUSED 36.9
 static 5 256 REFUSED 40.7
 static 7 128 0.756 31.7
 static 7 256 REFUSED 31.7
-static 11 128 0.605 33.0
+static 11 128 REFUSED 33.0
 static 11 256 REFUSED 30.0
 static 13 128 REFUSED 20.1
 static 13 256 REFUSED 30.2

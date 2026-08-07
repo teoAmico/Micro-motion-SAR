@@ -4,7 +4,9 @@
 an over-correlated null, and gating on the conservative end, refuse item 108's
 false positive, and what does it cost?
 
-- git commit: `6fb1cb4` (pipeline and hypotheses committed before the first run)
+- git commit: `6fb1cb4` (pipeline and hypotheses committed before the first run);
+  **re-run at `de65c45`** after a gate defect was found — see "The first pass was
+  discarded" below
 - started:    2026-08-07T17:05Z
 - host:       Darwin arm64
 
@@ -61,6 +63,24 @@ control is refused at both look counts, with its best candidate at p 0.999.
 C10 at 0.26 mm is the only admitted mode whose bracket is wide (0.001–0.043) —
 it is admitted on the conservative end, but only just, and that width is the
 honest statement about it.
+
+## The first pass was discarded, and why
+
+The pre-registered arms were run once and thrown away before being reported. The
+printed bracket read **`54.0 to 42.9`** on the synthetic fixture — the
+"conservative" dilated draw BELOW the optimistic shift draw, where on the real
+collect it is above (23.3 → 37.7).
+
+The dilated draw perturbs two things at once: it forces total within-tile sharing,
+which raises blocks, and it replaces each window's ratio with that window's own
+typical one, which can lower the mass. **It is therefore not monotone in
+correlation**, and gating on it unconditionally would have been ANTI-conservative
+wherever it lands lower — the exact failure this item exists to remove.
+
+The gate now takes the larger of the two criticals **per scene**, which is valid
+whichever draw is tighter. On this collect the results are unchanged, because the
+dilated draw was already the conservative one here; the synthetic arm gained one
+more refusal (8 of 12 → 9 of 12).
 
 ## Costs, stated plainly
 

@@ -1,59 +1,75 @@
-# Handoff — 2026-08-07 (fifth pass)
+# Handoff — 2026-08-07 (sixth pass)
 
 State of play at commit `HEAD`, written so a new session can pick up without
-re-reading 113 follow-up items. **Read `CLAUDE.md` first; this is the delta.**
+re-reading 114 follow-up items. **Read `CLAUDE.md` first; this is the delta.**
 
 Tree is clean, 23/23 tests pass, ASAN clean, nothing running in the background.
 
 ---
 
-## 1. Start here
+## 1. Start here: the selection arc is finished, and item 108 is closed
 
-**Items 109 → 113 are one thread: the selection stage, taken apart.**
+**Items 109 → 114 took the selection stage apart, one defect at a time.**
 
-| | before 110 | 110 | 111 | 112 | 113 |
-|---|---|---|---|---|---|
-| H1, 128-look modal answer correct | 3/6 | 5/6 | 5/6 | 6/6 | **6/6** |
-| H3 real controls refused | 2/2 | 2/2 | 2/2 | 2/2 | **2/2** |
-| H3b motionless synthetic reporting | 1/12 | 1/12 | 1/12 | 0/12 | **0/12** |
-| motionless synthetic REFUSED outright | 0/12 | 0/12 | 0/12 | 0/12 | **4/12** |
-| modes admitted per injected run | — | 8-10 | 8-10 | 8-10 | **1** |
+| | before 110 | 110 | 111 | 112 | 113 | 114 |
+|---|---|---|---|---|---|---|
+| H1, 128-look answer correct (real) | 3/6 | 5/6 | 5/6 | 6/6 | 6/6 | **5/6** |
+| real motionless controls refused | 0/2 by chain | 0/2 | 0/2 | 0/2 | 1/2 | **2/2** |
+| motionless synthetic reporting | 1/12 | 1/12 | 1/12 | 0/12 | 0/12 | **0/12** |
+| motionless synthetic REFUSED @128 | 0/12 | 0/12 | 0/12 | 0/12 | 4/12 | **9/12** |
+| item 108's artefact, p | 0.001 | 0.001 | 0.001 | 0.001 | 0.010 | **0.342, refused** |
 
-Four defects, each visible only once the previous was fixed:
+Five defects, each visible only once the previous was fixed: the **admission**
+threshold (110), the **band-edge bias** (111), the **strength term** (112), the
+**null's independence assumption** (113), and the fact that **no permutation null
+on the nominations can be exact** (114).
 
-1. **Admission** (110) — the binomial `support_min` is a fraction of the whole
-   grid, so a localised mode could not reach it: 28 of a required 34.
-2. **Band-edge bias** (111) — 10 reference bins at the edges against 20
-   mid-band; 39% of the band took 72% of the maxima on empty scenes. Fixed by
-   NARROWING, not widening.
-3. **Strength term** (112) — `median_ratio` was a median over every nominator
-   and ~22 of 225 nominate any bin by chance, so a 5x change in signal moved it
-   7%. Now taken over the mode's own block.
-4. **The null** (113) — it assumed windows nominate independently where 50%
-   overlap makes neighbours correlated. **This was item 108's cause.**
+**Item 108 is closed.** The collect that led with 0.997 Hz against a sought
+1.00 Hz now returns *nothing recurs*, and both real motionless controls are
+refused by the chain rather than by `--stable`.
 
-**Item 113 is worth reading in full**: it is the seventh time a literature search
-found the field ahead of this project, and the match is exact — Eklund, Nichols &
-Knutsson (PNAS 2016) on cluster-extent inference invalidated by a mis-modelled
-spatial autocorrelation, with permutation nulls and cluster MASS as the remedies.
-Both were adopted and both worked.
+## 2. The two costs item 114 charged
 
-## The one thing still open
+- **H1 fell 6/6 → 5/6.** C10 at 0.13 mm is refused at p 0.942. Item 113 had it at
+  exactly p = 0.050 and already called it "the threshold, not a recovery".
+- **`--stable` reportable fell 5/6 → 3/6, and this was NOT predicted.** It rejects
+  nothing; the **256-look runs now refuse**, so there is no partner to compare
+  against. A more specific chain gives the stabilization test less to work with.
 
-**Item 108's false positive is improved tenfold and NOT solved.** C14's
-motionless collect still leads with 0.997 Hz against a sought 1.00 Hz, now at
-p 0.010 rather than 0.001 with 2 admitted modes rather than 8. The residual is
-most likely that correlation extends **beyond the 2×2 tile** the null
-decorrelates — a fully dilated null puts the same block at p ≈ 0.5, bracketing
-the truth. `--stable` remains the only thing that rejects it.
+## 3. What I would do next, in order
 
-The next step is measurable: estimate the correlation length from the data
-(the shared-nomination excess as a function of window separation) and shift
-tiles of that size, rather than assuming 2×2. TFCE (Smith & Nichols 2009) would
-additionally remove the arbitrary nomination threshold, `RS_MODAL_PER_WINDOW`.
+1. **`--stable` at 128 vs 192 looks.** Promoted to the top *by* item 114's second
+   cost. Closer counts share more band (fewer "not comparable" abstentions,
+   item 108's old weakness) **and** both runs are likelier to clear the gate.
+   Cheap, needs no new data, repairs what 114 damaged.
+2. **TFCE** (Smith & Nichols 2009) — the literature's third remedy, untaken. It
+   removes the arbitrary cluster-forming threshold, here `RS_MODAL_PER_WINDOW`,
+   which item 71 measured as consequential.
+3. **Item 98's remaining two**: the CCD double change map, and Bayer & Seljak's
+   self-calibrating look-elsewhere correction.
 
-**Bound to carry forward: C10 at 0.13 mm sits exactly on p = 0.050.** One Monte
-Carlo trial moves it across. It is the threshold, not a recovery.
+**But the strategic point: items 109–114 are all SELECTION.** Six items made the
+chain much better at NOT answering and none of them changed what the tracker can
+see. Nothing here has detected real motion; the target is still put where it is
+found. The archive search is finished and negative (item 85), and the field's own
+validations either bolt corner reflectors to the structure (item 104) or use a
+steel bridge that supplies its own 20-26 dB (item 106). The next real frontier is
+a collect over something that moves and is independently instrumented — **Naples
+(item 94) is the cheapest approximation**, and it needs spatially-varying
+injection that `--inject-wave` does not support.
+
+## 4. A method lesson worth keeping
+
+**Read a bracket's ORDER, not just its width.** Item 114's first pass was
+discarded because the printed interval read `54.0 to 42.9` — the "conservative"
+null below the optimistic one, because that draw was not monotone in the thing it
+was supposed to vary. It would have reintroduced the very anti-conservatism the
+item exists to remove.
+
+**And measure the explanation before building on it.** Four explanations in this
+arc were wrong (window boundary, local clutter, guard band, correlation length);
+the last was caught *before* anything was built on it, by measuring the
+correlation as a function of window separation first.
 
 ---
 
@@ -69,6 +85,7 @@ Carlo trial moves it across. It is the threshold, not a recovery.
 | `tests/test_modalset.c` | the first test over `rs_spectrum_modal_set()`; pins admission against ranking in both directions | 111 |
 | block-median `median_ratio` | strength summarised over the mode's footprint, not over every nominator | 112 |
 | permutation null on cluster mass | 2x2 tile-shift preserves the correlation overlap creates; the gate tests `ev` | 113 |
+| bracketed p, gated on the conservative end per scene | no permutation null here can be exact, so bound it both ways | 114 |
 | `rs_transient_fit()` / `--tfit` | damped-sinusoid fit with onsets; works, changes nothing at chain level | 81 |
 | `docs/PREREGISTRATION.md` | the form; `tools/new-run.sh` seeds `PREREG.md` per run | 92 |
 
@@ -147,8 +164,7 @@ the run are how three wrong explanations got caught.**
 
 ## 7. Open, in the order I would take them
 
-1. **Item 108's residual** — §1 above: estimate the correlation length instead
-   of assuming 2×2, and consider TFCE to remove the nomination threshold.
+1. **`--stable` at 128 vs 192 looks**, and **TFCE** — §3 above.
 2. **Item 98's remaining two**: the CCD *double change map* (two twins), and
    Bayer & Seljak's self-calibrating look-elsewhere correction, which needs no
    Monte Carlo and works per window where `p_chance` works on the block.

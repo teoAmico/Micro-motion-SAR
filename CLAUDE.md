@@ -194,7 +194,7 @@ family-wise rate is controlled at or below nominal by construction.
 **MEASURED: the collect that has led with 0.997 Hz against a sought 1.00 Hz since
 item 108 now returns "nothing recurs".** That artefact's p across four items:
 **0.001 -> 0.010 -> 0.342**. Both real motionless controls refused BY THE CHAIN,
-not by `--stable`. **H1 5 of 6, H3b 0 of 12 with recall 6 of 6, and 8 of 12
+not by `--stable`. **H1 5 of 6, H3b 0 of 12 with recall 6 of 6, and 9 of 12
 motionless synthetic scenes silent** against item 96's 12-of-12 answer rate.
 **Every pre-registered prediction was correct**, including which recall point
 would be lost.

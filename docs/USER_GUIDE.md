@@ -619,7 +619,10 @@ real acquisition.
 **The verdict is on the MODAL SET's leading frequency**, not on any one window's
 `dominant_hz`. Those differ: an injected scene whose modal answer is 0.504 Hz at
 both look counts can have its strongest window report 0.504 at one and 2.571 at
-the other, so comparing windows would reject a true recovery.
+the other, so comparing windows would reject a true recovery. That makes this
+test downstream of the modal set's ranking — when item 110 changed the ranking,
+these figures were re-measured on the same twelve scenes and came out identical,
+1 of 12 and 6 of 6, with a *different* scene surviving.
 
 **It refuses what it cannot test:** equal look counts (vacuous), a different
 window grid, or a missing file. It warns when `df` differs, since that is a

@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 109 items and their status.
+an index of all 110 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -169,27 +169,49 @@ or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
 
-**THE SELECTION LOSES A LOCALISED TARGET ITS OWN EVIDENCE CARRIES BEST** (item
-109). Item 108's target sat on a window boundary; repeated at **+24 m, an exact
-window centre**, C14 now recovers **down to 0.13 mm** and `--stable` reports all
-three (**H4 passes** — it discards no true positive that reaches it; **H3 passes**
-— both controls refused), but C10 still fails at 128 looks, so **H1 FAILS** at 3
-of 6. **BOTH of my explanations were wrong.** Item 108 blamed the window boundary
-(items 40-41) — wrong, it fails identically on a centre. I then blamed LOCAL
-CLUTTER on CFAR reasoning — wrong, and measured: at the target window the floor
-is **0.0044 mm against the clutter's 0.5210** and `d_a` **0.056 against 0.574**,
-so the target dominates completely. **The real mechanism**: at 128 looks the
-injected 1.00 Hz has **15 windows and a largest block of 13**, the artefact
-0.665 has 11 and 4, and the REPORTED 0.499 has **7 and 6** — the injected line
-wins on BOTH of the modal set's stated criteria and is still not reported. **The
-loss is in the NOMINATION, not the ranking**: `rs_spectrum_modal_set()` nominates
-on `rs_local_ratio()`, scoring each peak against its own SPECTRAL neighbourhood,
-and a strong isolated line raises the background it is measured against through
-its own Hann skirt if `RS_LOCAL_GUARD_BINS` does not exclude enough of it — **so
-the cleaner the target, the worse it scores.** Items 7-9 and 30 said the tracker
-recovers what the selection discards; **this is the first time the discarding
-step has been named**, and it is where the next work belongs. No stabilization
-test can recover a frequency the selection never nominates.
+**A LOCALISED TARGET IS REFUSED BY THE SUPPORT GATE AND THEN OUT-RANKED ON
+EXTENT** (item 110, implemented; **corrects item 109**). Pre-registered at
+`fce5869` with the kill criterion written first. **Item 109's guard-band
+explanation is wrong — the third wrong explanation of the same failure**, after
+the window boundary (item 108) and local clutter (item 109). Measured by
+replicating the whole nomination offline from a `--shifts` dump: the replica
+reproduces the binary exactly, and sweeping `RS_LOCAL_GUARD_BINS` **2 to 8 never
+recovers the line**. The Hann-skirt argument does not even apply here — at
+`--overlap 0` the floor is flat, 1.3x across the band.
+
+**The target was lost TWICE.** (1) `support_min` was **34 of 225** and the
+injected bin's support is **28**, so it was refused before block, ratio or
+ranking were consulted. That threshold is a correct family-wise budget and a
+*fraction of the whole window grid*, so a mode on a handful of windows cannot
+reach it however strong — **CLAUDE.md's own localised-target rule, in the one
+gate it had never been checked against.** (2) Block-first ranking then put it
+fourth, behind three artefacts beating it by **one window**, while it led every
+rival on strength: median local ratio **8.98 against 4.5-5.5**, its own window
+nominating it at **41.5** on a psd peak **107x** that window's median.
+
+**Fixed both ways.** Admission is `RS_MODAL_BLOCK_MIN` on support — the 2x2 block
+floor restated, refusing only what the block gate refuses anyway — with
+`rs_modal_null()` drawn under the SAME rule so the chance block rose 7 to 9 and
+the family-wise correction is not lost with the threshold. Ranking is by
+`evidence = n_contiguous * log(median_ratio)`, the exponential periodogram model
+`rs_twin_llr()` already states, summed over carrying windows. **Each key alone
+fails on the other's case and both were measured**: block alone loses the
+localised target; **ratio alone is worse**, handing item 107's injected fixture
+to seed 7's **1.512 Hz artefact (ratio 38.8, block 11)** over the true **0.504
+(ratio 25.0, block 30)**.
+
+**H1 5 of 6** against item 109's 3, **H3 2 of 2**, kill criterion **H3b 1 of 12 —
+item 107's rate exactly — with injected recall held at 6 of 6.** And the
+recovery is now a **threshold you can read off the report**: the injected line's
+`ev` against its scene's competition runs 16.6 / 24.0 / 28.5 on C10 against a
+competition of 23.8, and 40.5 / 51.6 / 55.1 on C14 against 15.5, so **C10
+crosses between 0.13 and 0.26 mm — item 103's competition floor, reached
+independently through a different statistic.** **NOT fixed: C14's motionless
+control still leads with 0.997 Hz at `ev` 28.3** against an injected 1.00 Hz, so
+item 108 stands and `--stable` is still the only thing rejecting it. A defect
+found and deliberately left: `rs_local_ratio()` scores band-edge bins against
+**10 reference bins against mid-band's 20**, and the obvious fix fails
+`test_tracking`'s red-floor case — see `docs/CODE-REVIEW.md`.
 
 **THE STABILIZATION TEST CAUGHT A FALSE POSITIVE SITTING ON THE SOUGHT
 FREQUENCY** (item 108). Pre-registered at `25f7351`; `--stable` put on a
@@ -1328,14 +1350,15 @@ catches that. Neither substitutes for the other.
 
 **`docs/HANDOFF.md` is the current state of play** — what the last session
 established, the one named defect to work on next, and the assets on disk. Read
-it before `FOLLOW-UPS.md`, which is 109 items and is the record rather than the
+it before `FOLLOW-UPS.md`, which is 110 items and is the record rather than the
 plan.
 
 The short version: the tracker recovers signals the SELECTION discards, and item
-109 finally names the discarding step — `rs_spectrum_modal_set()` nominates via
-`rs_local_ratio()`, whose local background a strong isolated line inflates
-through its own Hann skirt. The injected line wins on both stated ranking
-criteria and is still not reported.
+110 found where — a localised target is refused by the modal set's binomial
+SUPPORT gate (28 of a required 34) and, had it been admitted, out-ranked on
+EXTENT by artefacts covering one more window. Both are fixed and item 109's
+guard-band diagnosis is withdrawn. What is still open is item 108's false
+positive, which nothing but `--stable` rejects.
 
 ## State of the work
 

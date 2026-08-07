@@ -151,6 +151,7 @@ said, not better) and item 7's line numbers.
 | 107 | **first blind discriminator** | require the frequency to survive a change of look count: false positives 12/12 -> 1/12, recall 6/6 |
 | 108 | **bounds 107** | it caught a motionless scene answering 0.997 Hz; but recall on a weak OFF-CENTRE target is untested and it abstains 3 of 8 |
 | 109 | **names the defect** | the injected line wins on support AND block and is still not reported: the loss is in the local-ratio NOMINATION |
+| 110 | **corrects 109 and fixes it** | not the guard band: the localised target is refused by the SUPPORT gate at 28 of 34, then out-ranked on EXTENT. 5 of 6 recover, false positives unchanged at 1/12 |
 
 ---
 
@@ -9292,3 +9293,130 @@ this is the first time the discarding step has been named.
 - Its specificity holds again, including C14's motionless 0.997 Hz.
 - **The recall problem is upstream of it**, in the modal set's nomination, and no
   stabilization test can recover a frequency the selection never nominates.
+
+---
+
+## 110. Item 109's mechanism was wrong too. The localised target is refused by the SUPPORT gate and then out-ranked on EXTENT, and both are now fixed.
+
+Pre-registered at `fce5869`, with the pipeline frozen and the kill criterion
+written before the first of the sixteen runs. Item 109's exact configuration,
+re-run verbatim; only the binary differs.
+`runs/kilauea/2026-08-07-nomination-fix/`.
+
+### Item 109 named the guard band. It is not the guard band.
+
+The tracked series was dumped with `--shifts` and `rs_spectrum_compute_opts()`,
+`rs_local_ratio()` and `rs_spectrum_modal_set()` replicated offline. The replica
+reproduces the binary exactly -- 0.499 Hz, block 14, support 42 -- and sweeping
+`RS_LOCAL_GUARD_BINS` from 2 to 8 never recovers the injected line:
+
+| guard | 2 | 3 | 4 | 5 | 6 | 8 |
+|---|---|---|---|---|---|---|
+| reported | 0.499 | 0.499 | 0.499 | 0.499 | 0.499 | 1.497 |
+
+The injected bin holds block 13 and support 26-32 at every width. **The
+Hann-skirt argument does not apply on this collect at all**: at `--overlap 0`
+the floor is flat, median psd varying 1.3x across the band, so a strong isolated
+line is not what sets the background near it. **Third wrong explanation of the
+same failure** -- item 108 blamed the window boundary, item 109 blamed local
+clutter and then the guard band.
+
+### The target is lost twice over
+
+**First, at the SUPPORT gate.** `support_min` was 34 of 225 voting windows and
+the injected bin's support is **28**. It was refused before block, ratio or
+ranking were consulted. That threshold is a binomial family-wise budget and it is
+correct about chance -- it is a *fraction of the whole window grid*, so a mode
+occupying a handful of windows cannot reach it however strong it is. **This is
+CLAUDE.md's standing rule about localised targets, in the one gate it had never
+been checked against**, and it is the same shape as items 30-31: a scene-wide
+criterion calibrated on fixtures where the whole scene vibrates.
+
+**Second, on EXTENT.** Had it been admitted, block-first ranking put it fourth,
+behind three artefacts beating it by exactly **one window**, while it led every
+rival on strength: median local ratio **8.98 against 4.5-5.5**, max **73.7
+against 24**. The target's own window nominates it at ratio **41.5**, its top
+pick, on a psd peak **107x** that window's median. The evidence was in the struct
+and the sort threw it away.
+
+### What changed
+
+**Admission** is now `RS_MODAL_BLOCK_MIN` (4) on support -- the 2x2 block floor
+restated, so it refuses only what the block gate refuses anyway -- plus the
+unchanged block gate and `p_chance`. The family-wise correction is not lost with
+the threshold: `rs_modal_null()` is drawn under the SAME rule, so the chance
+block rose from 7 to 9 on this collect and compensates automatically. The
+binomial `support_min` is still computed and printed, as a description of how
+much ground carries a mode.
+
+**Ranking** is by `evidence = n_contiguous * log(median_ratio)`. A periodogram
+bin is exponentially distributed about its background, so the log-likelihood
+ratio for a line at r times the background is monotone in `log r` -- the model
+`rs_twin_llr()` already states -- and the windows carrying a mode contribute
+additively. It is an ORDERING statistic and not a calibrated evidence value:
+overlapping windows are not independent looks.
+
+**Both keys were measured alone and each fails on the other's case.** Block alone
+loses the localised target above. **Ratio alone is worse**: on item 107's 2 mm
+injected synthetic fixture it reports seed 7's **1.512 Hz artefact at ratio 38.8
+over block 11**, ahead of the true **0.504 Hz at ratio 25.0 over block 30** --
+six of item 107's recoveries traded for one. A sharp artefact on a little ground
+and a moderate line on a lot of ground are the two failure modes and each key has
+exactly one of them.
+
+### Measured
+
+**H1 passes at 5 of 6** against item 109's 3, **H3 at 2 of 2**, and the kill
+criterion **H3b at 1 of 12** -- item 107's false-positive rate exactly, with
+injected recall held at **6 of 6** (`runs/synthetic/2026-08-07-nomination-fix-null/`).
+
+| collect | amp | @128 | @256 | verdict | item 109 |
+|---|---|---|---|---|---|
+| C10 | 0.00 control | 10.148 | 15.971 | not comparable | not comparable |
+| C10 | 0.13 | 10.148 | 20.630 | not comparable | MOVED |
+| C10 | 0.26 | **0.998** | **0.998** | **STABLE** | MOVED |
+| C10 | 0.53 | **0.998** | **0.998** | **STABLE** | MOVED |
+| C14 | 0.00 control | 0.997 | 5.996 | MOVED | MOVED |
+| C14 | 0.13-0.53 | **0.997** | **0.999** | **STABLE** | STABLE |
+
+**The recovery is now a threshold that can be read off the report.** The
+injected line's `ev` against its own scene's competition at 128 looks:
+
+| amp | C10 injected | C10 competition | C14 injected | C14 competition |
+|---|---|---|---|---|
+| 0.00 | -- | **25.0** | -- | **28.3** |
+| 0.13 | 16.6 (5th) | 23.8 | **40.5** | 15.5 |
+| 0.26 | **24.0** | 23.8 | **51.6** | 15.5 |
+| 0.53 | **28.5** | 23.8 | **55.1** | 17.5 |
+
+C10 crosses between 0.13 and 0.26 mm and C14 is across at 0.13 -- **item 103's
+competition floor of 0.13-0.26 mm, reached independently through a different
+statistic.** The line is now admitted at every amplitude including 0.13 mm where
+it sits fifth; before this it was admitted at none.
+
+### Bounds, and what is emphatically NOT fixed
+
+- **C14's motionless control still leads with 0.997 Hz at `ev` 28.3** against an
+  injected 1.00 Hz. Item 108 stands untouched: a scene with nothing in it
+  answers 0.003 Hz from the frequency being sought, and `--stable` is still the
+  only thing that rejects it.
+- **My pre-registered prediction of 6 of 6 was wrong**; C10 at 0.13 mm misses.
+  It abstains rather than answering wrongly, which the `ev` table explains.
+- The surviving static is **seed 31 at 0.958 Hz** where item 107's was seed 17 at
+  1.210 -- item 96 again, a change to the selection renames the survivor.
+- One fixture family, one operating point, two real collects, and the target was
+  put where it was found. **This is a selection result and not a detection.**
+
+### A defect found on the way and deliberately NOT fixed
+
+`rs_local_ratio()` clips its neighbourhood at the band edges, so the first
+admissible bin is scored against **10 reference bins against a mid-band bin's
+20** -- and a median over half as many draws is about twice as variable, on a
+statistic that is then maximised over the band. Both frequencies item 109
+reported sit in that starved zone, and making the count constant drops bin 3's
+block from 14 to 9. **The obvious fix is wrong and `test_tracking` caught it**:
+growing the neighbourhood outward reaches past a red floor's first null into the
+deep tail and inflates the low bins it was meant to demote. What a real fix needs
+is in `docs/CODE-REVIEW.md`; it is a narrower neighbourhood or a fitted slope,
+which is what `rs_spectrum_local_window()`'s header already said and nobody had
+needed until now.

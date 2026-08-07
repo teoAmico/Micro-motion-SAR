@@ -1,60 +1,66 @@
-# Handoff — 2026-08-07
+# Handoff — 2026-08-07 (second pass)
 
-State of play at commit `febde44`, written so a new session can pick up without
-re-reading 109 follow-up items. **Read `CLAUDE.md` first; this is the delta.**
+State of play at commit `HEAD`, written so a new session can pick up without
+re-reading 110 follow-up items. **Read `CLAUDE.md` first; this is the delta.**
 
 Tree is clean, 22/22 tests pass, ASAN clean, nothing running in the background.
 
 ---
 
-## 1. Start here: the one named defect
+## 1. Start here: what just closed, and what is open
 
-**`FOLLOW-UPS.md` item 109.** For the first time the *selection* failure has a
-specific function and a specific constant attached, rather than being a general
-complaint.
+**Item 109's named defect was wrong and item 110 fixed the real one.** Item 109
+said `rs_local_ratio()`'s guard band lost the localised target. Measured — by
+replicating the whole nomination offline from a `--shifts` dump, a replica that
+reproduces the binary exactly — sweeping the guard 2 to 8 bins never recovers the
+line, and the Hann-skirt argument does not apply at `--overlap 0` where the floor
+is flat. **That was the third wrong explanation of one failure** (window
+boundary, local clutter, guard band).
 
-On a real Kilauea collect with a localised target injected at +24,+24 m (an exact
-window centre), at 128 looks:
+The target was lost **twice**, in `rs_spectrum_modal_set()`:
 
-```
-  injected 1.00 Hz    15 windows   largest 4-connected block 13
-  artefact 0.665 Hz   11 windows   largest block  4
-  REPORTED 0.499 Hz    7 windows   largest block  6
-```
+1. **The binomial `support_min` gate.** 34 of 225 required, 28 delivered. That
+   threshold is a fraction of the whole window grid, so a mode on a handful of
+   windows cannot reach it however strong. It is CLAUDE.md's own
+   localised-target rule in the one gate nobody had checked it against.
+2. **Block-first ranking.** Fourth place, behind three artefacts covering one
+   more window each, while leading every rival two-to-one on strength.
 
-The injected line **wins on both of the modal set's stated ranking criteria** —
-most support, much the largest contiguous block, centred on the target — **and is
-still not reported.**
+Both fixed: admission is `RS_MODAL_BLOCK_MIN` (the 2x2 block floor restated, so
+support refuses only what the block gate refuses anyway) with `rs_modal_null()`
+drawn under the same rule so the chance block rises to compensate; ranking is
+`evidence = n_contiguous * log(median_ratio)`.
 
-So the loss is not in the ranking. It is in the **nomination**:
-`rs_spectrum_modal_set()` (`src/core/spectrum.c`) nominates via
-`rs_local_ratio()`, which scores each candidate peak against its own *spectral
-neighbourhood*. A strong isolated line inflates the background it is measured
-against through its own Hann skirt, if `RS_LOCAL_GUARD_BINS` does not exclude
-enough of it. **The cleaner the target, the worse it scores.**
+**H1 5 of 6** (was 3), **H3 2 of 2**, kill criterion **H3b 1 of 12** unchanged
+from item 107, injected recall **6 of 6** unchanged.
 
-### The next experiment, concretely
+### The one thing that did NOT move, and is now the named defect
 
-1. Read `rs_local_ratio()` and the constants `RS_LOCAL_HALF_BINS` /
-   `RS_LOCAL_GUARD_BINS` in `src/core/spectrum.c`.
-2. A Hann main lobe is ±2 bins (`RS_SPECTRUM_LEAKAGE_BINS` is 3 for this
-   reason). Check whether the guard actually excludes it.
-3. **Pre-register before running** — `tools/new-run.sh` seeds the form; see §4.
-4. Re-run item 109's exact configuration and see whether C10 recovers at 128
-   looks. The script is `runs/kilauea/2026-08-07-stable-weak-centred/stablecentred.sh`;
-   the expected answer is 1.00 Hz and the current wrong answer is 0.499 Hz.
-5. Guard against the obvious trap: widening the guard makes *every* line score
-   higher, so re-run the **12 motionless scenes** of item 96 too and check the
-   false-positive rate does not climb back. `runs/synthetic/2026-08-07-look-stabilization/stabsweep.sh`
-   already does both arms.
+**Item 108's false positive.** C14's motionless control still leads with
+**0.997 Hz at `ev` 28.3** against an injected 1.00 Hz. Nothing in item 110
+touches it; `--stable` is still the only thing that rejects it, on the strength
+of a 256-look answer of 5.996 Hz. A scene with nothing in it answering 0.003 Hz
+from the frequency being sought is the sharpest open problem here.
 
-**Do not assume this is the whole story.** Two explanations were offered for the
-same failure in items 108 and 109 and both were wrong (window placement, then
-local clutter). Measure before believing.
+### And recovery is now a number you can read off the report
+
+`ev` for the injected line against its own scene's competition, 128 looks:
+
+| amp mm | C10 injected | C10 competition | C14 injected | C14 competition |
+|---|---|---|---|---|
+| 0.00 | — | **25.0** | — | **28.3** |
+| 0.13 | 16.6 (5th) | 23.8 | **40.5** | 15.5 |
+| 0.26 | **24.0** | 23.8 | **51.6** | 15.5 |
+| 0.53 | **28.5** | 23.8 | **55.1** | 17.5 |
+
+C10 crosses between 0.13 and 0.26 mm — **item 103's competition floor, reached
+independently through a different statistic.** That is the first time this
+project has had a *reportable* quantity that predicts recovery rather than
+explaining it afterwards.
 
 ---
 
-## 2. What was built this session, and what each is for
+## 2. What was built across these two sessions, and what each is for
 
 | flag / function | what it does | item |
 |---|---|---|
@@ -62,6 +68,7 @@ local clutter). Measure before believing.
 | `rs_twin_llr()` | two-sample GLRT for exponential periodogram bins, `2 log((1+r)/2) − log r`, `p = 1/(1+r)` | 98 |
 | `rs_microm_floor()` | per-window detectable-amplitude floor from that window's circular phase sd; `floor_mm` in the CSV | 103 |
 | `mmotion --stable CSV` | keeps only frequencies surviving a change of **look count** | 107, 109 |
+| `rs_mode_t.evidence` | `n_contiguous * log(median_ratio)`, the modal set's ranking key; `ev` in the report | 110 |
 | `rs_transient_fit()` / `--tfit` | damped-sinusoid fit with onsets; works, changes nothing at chain level | 81 |
 | `docs/PREREGISTRATION.md` | the form; `tools/new-run.sh` seeds `PREREG.md` per run | 92 |
 
@@ -140,14 +147,23 @@ the run are how three wrong explanations got caught.**
 
 ## 7. Open, in the order I would take them
 
-1. **`rs_local_ratio()`'s guard band** — item 109 above. Specific, cheap,
-   testable.
-2. **Item 98's remaining two**: the CCD *double change map* (two twins), and
+1. **Item 108's false positive**, now the sharpest thing here: a motionless real
+   collect leads with 0.997 Hz at `ev` 28.3 against an injected 1.00 Hz, and only
+   `--stable` refuses it. Item 110 raised the ranking's resolution without
+   touching this.
+2. **A test over `rs_spectrum_modal_set()`**, which has none — item 110 changed
+   its admission rule and its sort key and `ctest` could not have noticed. See
+   `docs/CODE-REVIEW.md` for what it needs to pin.
+3. **`rs_local_ratio()`'s band-edge starvation** — 10 reference bins at the band
+   floor against 20 mid-band, measured to matter (bin 3's block 14 → 9) and
+   NOT fixed, because the obvious fix fails `test_tracking`'s red-floor case.
+   Needs a narrower neighbourhood or a fitted slope. `docs/CODE-REVIEW.md`.
+4. **Item 98's remaining two**: the CCD *double change map* (two twins), and
    Bayer & Seljak's self-calibrating look-elsewhere correction, which needs no
    Monte Carlo and works per window where `p_chance` works on the block.
-3. **`--stable` with closer look counts** (128 vs 192): it abstained on 3 of 8
-   real comparisons because the 256-look answer landed above the 128-look
-   Nyquist (item 108). Closer counts share more band.
-4. **Naples mode shapes** (item 94) — sensor *x,y,z* exist, so a real mode shape
+5. **`--stable` with closer look counts** (128 vs 192): it abstained on 2 of 8
+   real comparisons in item 110 because the 256-look answer landed above the
+   128-look Nyquist. Closer counts share more band.
+6. **Naples mode shapes** (item 94) — sensor *x,y,z* exist, so a real mode shape
    could be injected. Needs spatially-varying injection, which
    `--inject-wave` does not support.

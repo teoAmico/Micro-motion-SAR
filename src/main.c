@@ -1441,6 +1441,13 @@ static int rs_cmp_rung(const void *a, const void *b)
  * returns the same answers -- there is no randomisation that destroys a real
  * mode while preserving the artefact, which is item 114's wall on a second axis.
  *
+ * WHAT IS COUNTED CHANGED IN ITEM 118 AND THE NUMBER SURVIVED. Item 115 counted
+ * the longest run of CONSECUTIVE agreeing rungs; item 117 measured that
+ * requirement rejecting a real injection whose every answering rung was correct,
+ * and the field does not impose it -- automated OMA clusters poles across the
+ * diagram and thresholds on cluster SIZE, with poles routinely absent at some
+ * orders. The statistic is now how many rungs CARRY the candidate, gaps and all.
+ *
  * SO THE NUMBER IS MEASURED FROM THE NULL'S OWN DISTRIBUTION, which is what item
  * 80 says to do when a model cannot be trusted. Over item 107's twelve motionless
  * scenes on a six-rung ladder, the longest chain reached was:
@@ -1453,7 +1460,8 @@ static int rs_cmp_rung(const void *a, const void *b)
  * the figure the OMA literature most often quotes -- corroboration, not
  * derivation. **It is an operating characteristic measured on ONE fixture family
  * at ONE operating point, not a probability**, and it should be re-measured
- * before being quoted anywhere else. */
+ * before being quoted anywhere else -- including after item 118 changed what is
+ * counted, which is what runs/synthetic/2026-08-07-cluster-count does. */
 #define RS_STABLE_MIN_CHAIN 5u
 
 /* The per-window 'dominant_hz' column of another run of the SAME SCENE at a
@@ -3146,30 +3154,54 @@ static int rs_cmd_mmotion(int argc, char **argv)
         rung[0].modal = modal_lead_hz;
         qsort(rung, n_rung, sizeof *rung, rs_cmp_rung);
 
-        /* The LONGEST CHAIN of consecutive rungs that agree. A pair counts as
-         * agreeing only when both answered and both answers lie in the band the
-         * PAIR shares -- a frequency above the lower rung's Nyquist has no
-         * counterpart there to be stable against. A rung that refused breaks
-         * the chain rather than ending the test, which is what a ladder buys
-         * over a pair (item 115). */
-        size_t best_run = 0, cur = 0;
-        for (size_t i = 0; i + 1 < n_rung; i++) {
-            const double fa = rung[i].modal, fb = rung[i + 1].modal;
-            const double nya = (rung[i].dt     > 0.0) ? 0.5 / rung[i].dt     : 0.0;
-            const double nyb = (rung[i + 1].dt > 0.0) ? 0.5 / rung[i + 1].dt : 0.0;
-            const double fmax = (nya < nyb) ? nya : nyb;
-            const int ok = (fa > 0.0 && fb > 0.0 && fa <= fmax && fb <= fmax &&
-                            fabs(fa - fb) <= half);
-            if (ok) { if (cur == 0) cur = 2; else cur++; }
-            else cur = 0;
-            if (cur > best_run) best_run = cur;
+        /* HOW MANY RUNGS AGREE, NOT HOW MANY IN A ROW (item 118).
+         *
+         * Item 115 scored the longest run of CONSECUTIVE agreeing rungs, and
+         * item 117 measured what that costs on real data: C10 at 0.26 mm
+         * answers 0.998 / 0.997 / 0.997 / 1.000 Hz at 128/160/192/224 looks
+         * against an injected 1.000 and REFUSES at 96 and 256 -- four agreeing
+         * rungs, every answering rung correct, and rejected, because the gaps
+         * were refusals rather than disagreements.
+         *
+         * THE FIELD DOES NOT REQUIRE CONSECUTIVENESS. Poles are routinely not
+         * identified at every model order -- MATLAB's `modalsd` returns the
+         * missing ones as NaN -- and automated OMA CLUSTERS poles across the
+         * whole diagram and thresholds on MINIMUM CLUSTER SIZE. Requiring an
+         * unbroken run was this project's own addition and it discarded a case
+         * where the evidence was unanimous among everything that spoke.
+         *
+         * So each answering rung's frequency is taken as a candidate and the
+         * rungs agreeing with it are counted. A rung that cannot EXPRESS the
+         * candidate -- its Nyquist is below it, which happens at the low end of
+         * the ladder -- is excluded from the count entirely rather than treated
+         * as disagreeing, so a high-frequency mode is not penalised for rungs
+         * that were never able to see it. 'n_elig' reports how many could. */
+        size_t best_run = 0, best_elig = 0;
+        double best_f = 0.0;
+        for (size_t i = 0; i < n_rung; i++) {
+            if (!(rung[i].modal > 0.0)) continue;
+            const double f = rung[i].modal;
+            size_t sup = 0, elig = 0;
+            for (size_t j = 0; j < n_rung; j++) {
+                const double nyq = (rung[j].dt > 0.0) ? 0.5 / rung[j].dt : 0.0;
+                if (f > nyq) continue;          /* that rung cannot express f */
+                elig++;
+                if (rung[j].modal > 0.0 && fabs(rung[j].modal - f) <= half) sup++;
+            }
+            if (sup > best_run) { best_run = sup; best_elig = elig; best_f = f; }
         }
+
         const size_t n_bin = (spec.n_freq > RS_SPECTRUM_LEAKAGE_BINS)
                            ? spec.n_freq - RS_SPECTRUM_LEAKAGE_BINS : 1;
         /* REFUSES WHAT IT CANNOT TEST, as item 107's pair did. A ladder shorter
          * than the criterion cannot deliver a verdict at all, and saying so is
          * better than quietly applying a weaker one. */
-        const int too_short = (n_rung < RS_STABLE_MIN_CHAIN);
+        /* REFUSES WHAT IT CANNOT TEST, as item 107's pair did. A ladder with
+         * fewer rungs than the criterion -- or one where too few rungs could
+         * express the candidate at all -- cannot deliver a verdict, and saying
+         * so is better than quietly applying a weaker one. */
+        const int too_short = (n_rung < RS_STABLE_MIN_CHAIN) ||
+                              (best_run > 0 && best_elig < RS_STABLE_MIN_CHAIN);
         const int report = !too_short && best_run >= RS_STABLE_MIN_CHAIN;
 
         printf("  stabilization ladder, %zu rungs over %zu admissible bins:\n",
@@ -3182,16 +3214,22 @@ static int rs_cmd_mmotion(int argc, char **argv)
                 printf("            %5zu looks: REFUSED%s\n", rung[i].looks,
                        rung[i].path ? "" : "   <- this run");
         }
-        printf("            longest chain of CONSECUTIVE agreeing rungs: %zu of "
-               "%u needed -> %s\n",
-               best_run, RS_STABLE_MIN_CHAIN,
-               too_short ? "LADDER TOO SHORT -- no verdict"
-                         : (report ? "STABLE -> report" : "not persistent -- reject"));
+        if (best_run > 0)
+            printf("            %6.3f Hz is carried by %zu of %zu rungs able to "
+                   "express it, %u needed -> %s\n",
+                   best_f, best_run, best_elig, RS_STABLE_MIN_CHAIN,
+                   too_short ? "LADDER TOO SHORT -- no verdict"
+                             : (report ? "STABLE -> report"
+                                       : "not persistent -- reject"));
+        else
+            printf("            no rung answered, so nothing is carried -> "
+                   "reject\n");
         if (too_short)
-            printf("            %u rungs are needed and %zu were given. A shorter "
-                   "ladder cannot\n"
-                   "            test the criterion; pass more runs at other look "
-                   "counts.\n", RS_STABLE_MIN_CHAIN, n_rung);
+            printf("            %u rungs must be able to express it and %zu "
+                   "could. A shorter ladder\n"
+                   "            cannot test the criterion; pass more runs at "
+                   "other look counts.\n",
+                   RS_STABLE_MIN_CHAIN, best_elig);
         printf("            %zu of %zu comparable windows agree within half a "
                "bin (%.4f Hz) at\n"
                "            %zu looks; the verdict above is on the MODAL SET, "

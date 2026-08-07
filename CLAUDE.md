@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 117 items and their status.
+an index of all 118 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,31 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**THE LADDER'S THRESHOLD IS A PER-FIXTURE OPERATING CHARACTERISTIC, NOT A
+CONSTANT** (item 118, implemented). Item 117's consecutive requirement is fixed
+-- a candidate is now scored by **how many rungs CARRY it**, gaps included, with
+rungs whose Nyquist lies below it excluded from the count rather than counted as
+disagreeing, which is the cluster-size criterion automated OMA uses. **It moves
+NO verdict**, and that was pre-registered: C10 at 0.26 mm reads *"carried by 4 of
+6 rungs able to express it, 5 needed"* and is still rejected. **Consecutiveness
+was never the binding constraint; the threshold is.**
+
+**THE MEASUREMENT THAT MATTERS: the two fixtures have INCOMPATIBLE NULLS.** The
+24 synthetic motionless scenes reach support **4**; both real motionless controls
+sit at **0** because every rung refuses; and a real INJECTION -- C10 at 0.26 mm
+-- also sits at **4**. So at 5 the synthetic null is clean and that real
+injection is rejected, while at 2-4 it is recovered and two synthetic motionless
+scenes become false positives. **A real injection and a synthetic artefact occupy
+the same value, so no single threshold serves both.** Item 116 wrote this as a
+caveat; item 118 measures it as a fact. **Read the reported support and how many
+rungs could express the candidate; do not treat a verdict as transferable between
+fixtures.**
+
+One pre-registered prediction failed in its letter and is recorded as wrong: the
+support distribution is NOT the chain distribution, because an isolated answer
+now counts as support 1 where it counted as chain 0. Its kill criterion --
+anything reaching 5 -- did not fire.
 
 **THE LADDER TRANSFERS TO REAL DATA, AND "CONSECUTIVE" IS A DEFECT** (item 117,
 measurement only, no code change). First real-data test of items 115-116.
@@ -1578,7 +1603,7 @@ catches that. Neither substitutes for the other.
 
 **`docs/HANDOFF.md` is the current state of play** — what the last session
 established, the one named defect to work on next, and the assets on disk. Read
-it before `FOLLOW-UPS.md`, which is 117 items and is the record rather than the
+it before `FOLLOW-UPS.md`, which is 118 items and is the record rather than the
 plan.
 
 The short version: the tracker recovers signals the SELECTION discards, and item

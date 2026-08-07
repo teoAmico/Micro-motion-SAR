@@ -159,6 +159,7 @@ said, not better) and item 7's line numbers.
 | 115 | **ladder, not pair** | the field persists a pole across SEVERAL consecutive model orders; item 107 built the two-point case. The ladder decides 12 of 12 motionless scenes where the pair decided 1, keeps 6/6 injected -- and its chance model is wrong for the THIRD time, because rungs share pulses as windows share pixels |
 | 116 | **no p, a measured threshold** | the field attaches no probability to a stabilization diagram; two possible nulls both fail (items 11, 114). Threshold from the null's own distribution reproduces on UNSEEN seeds: 0 of 24 motionless, 12 of 12 injected, and the gap at the threshold is empty |
 | 117 | **the ladder on REAL data** | specificity TOTAL -- not one of 12 motionless rungs answered -- and every answering rung on an injection agreed with the truth, 0.997-1.000 Hz. But CONSECUTIVE is a defect: C10 at 0.26 mm has four agreeing rungs, every answering rung correct, and is rejected. The field clusters and thresholds on CLUSTER SIZE, not unbroken runs |
+| 118 | **counts, not runs -- and the threshold is per-fixture** | the field thresholds on cluster SIZE, so `--stable` now counts carrying rungs; it moves NO verdict, because consecutiveness was never the binding constraint. A real injection sits at support 4 and two synthetic motionless scenes also do, so no single threshold serves both fixtures |
 
 ---
 
@@ -10110,3 +10111,80 @@ evidence is unanimous among everything that spoke.
   0.26 mm.
 - Two real collects, one placement, one operating point, target put where it was
   found. **Still a selection result, not a detection.**
+
+---
+
+## 118. Counting rungs instead of requiring them consecutive is the right statistic and moves no verdict. What it exposes is that the threshold is per-fixture, not a constant.
+
+Pre-registered at `7ce1396`, which predicted that **nothing would move** and said
+why. `runs/synthetic/2026-08-07-cluster-count/`.
+
+### The change
+
+Item 117 measured `--stable`'s CONSECUTIVE requirement rejecting a real injection
+whose every answering rung was correct. **The field does not impose it**: poles
+are routinely not identified at every model order -- MATLAB's `modalsd` returns
+the missing ones as NaN -- and automated OMA clusters poles across the diagram
+and thresholds on **minimum cluster size**. So a candidate is now scored by **how
+many rungs CARRY it**, gaps included, with rungs whose Nyquist lies below it
+**excluded from the count** rather than treated as disagreeing.
+
+### It moves no verdict, and that was predicted
+
+C10 at 0.26 mm now reads *"0.998 Hz is carried by 4 of 6 rungs able to express
+it, 5 needed"* -- and is still rejected. **Consecutiveness was never the binding
+constraint; the threshold is.** Measuring the fix rather than assuming it is what
+caught that, since item 117 had pointed at consecutiveness.
+
+### The null under counting
+
+| support | 0 | 1 | 2 | 3 | 4 | 5+ |
+|---|---|---|---|---|---|---|
+| 24 motionless | 4 | 14 | 3 | 1 | **2** | **0** |
+| 12 injected | 0 | 0 | 0 | 0 | 0 | **12, all at 6** |
+
+**0 of 24 motionless report, 12 of 12 injected** -- identical to item 116.
+
+**H11 FAILS IN ITS LETTER.** It predicted the distribution would be UNCHANGED
+from the chain distribution; it is not, because an isolated answer now counts as
+support 1 where it counted as chain 0. The property that mattered -- **maximum 4,
+nothing at 5** -- survived, so the kill criterion did not fire. Recorded as a
+wrong prediction rather than quietly rounded to a pass.
+
+### THE FINDING: no single threshold serves both fixtures
+
+Real supports (item 117's measured ladders; C10 at 0.26 mm re-run to verify):
+
+| | support |
+|---|---|
+| both real motionless controls | **0**, every rung refuses |
+| C14 injected 0.13 mm | 1 |
+| **C10 injected 0.26 mm** | **4** |
+| C10 0.53, C14 0.26, C14 0.53 | 6 |
+
+**A real INJECTION sits at 4. Two synthetic MOTIONLESS scenes also sit at 4.**
+The populations overlap across fixtures:
+
+- at **5** the synthetic null stays clean and the real injection stays rejected;
+- at **2-4** the injection is recovered and two synthetic motionless scenes
+  become false positives.
+
+**`RS_STABLE_MIN_CHAIN` is a PER-FIXTURE OPERATING CHARACTERISTIC, not a
+constant.** Item 116 wrote that as a caveat; this measures it as a fact, and it
+is the reason the ladder cannot be shipped with a single number and trusted
+everywhere.
+
+### Why make the change at all
+
+**Because the statistic is right whether or not a verdict moves.** Requiring an
+unbroken run was this project's own addition and it discarded evidence that was
+unanimous among everything that spoke. The report now says what it means.
+
+### Bounds
+
+- Two fixture families, one operating point and one amplitude each.
+- **The real supports are arithmetic over item 117's measured ladders**, with
+  only C10 at 0.26 mm re-run end to end. The per-rung answers are the
+  measurement; counting them is not a second one.
+- Nothing bounds how far a motionless artefact's support can reach on a fixture
+  not tested here.

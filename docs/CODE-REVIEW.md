@@ -42,34 +42,36 @@ reader's memory model rather than to a flag.
 report geometry and timing, so it cannot describe a product larger than RAM --
 the one command whose entire job is to tell you what you have.
 
-## `--stable` requires CONSECUTIVE agreeing rungs where the field counts cluster size
+## `RS_STABLE_MIN_CHAIN` is a per-fixture operating characteristic shipped as a constant
 
-`--stable` (`src/main.c`) scores a frequency by the longest run of **consecutive**
-agreeing rungs against `RS_STABLE_MIN_CHAIN`. A rung whose modal set admits
-nothing breaks that run, so a frequency can be **unanimous among every rung that
-answered** and still be rejected.
+`--stable` compares a candidate's support against `RS_STABLE_MIN_CHAIN = 5`
+(`src/main.c`). **Measured (item 118), the two fixtures this project uses have
+incompatible nulls**, so no single value serves both:
 
-**Measured on real data** (item 117): C10 at 0.26 mm answers 0.998 / 0.997 /
-0.997 / 1.000 Hz at 128 / 160 / 192 / 224 looks against an injected 1.000, and
-refuses at 96 and 256. Chain 4, **rejected**, with not one disagreeing rung
-anywhere in the ladder.
+| | support |
+|---|---|
+| 24 synthetic motionless scenes | max **4** |
+| both real motionless controls | **0** — every rung refuses |
+| a real INJECTION (C10, 0.26 mm) | **4** |
+| all other injections, both fixtures | 6 |
 
-**The field does not do this.** Poles are routinely not identified at every model
-order — MATLAB's `modalsd` returns the missing ones as NaN — and automated OMA
-clusters poles across the whole diagram and thresholds on **minimum cluster
-size**. Consecutiveness is this project's own addition.
+At 5 the synthetic null stays clean and that real injection is rejected; at 2–4
+the injection is recovered and two synthetic motionless scenes become false
+positives. **A real injection and a synthetic artefact occupy the same value.**
 
-**The fix** is to count agreeing rungs rather than require them adjacent: a
-frequency's support is the number of rungs whose answer falls within half a bin
-of it, and the criterion applies to that count. A refusal then costs one rung of
-support instead of destroying the evidence either side of it. That changes the
-threshold's meaning, so `RS_STABLE_MIN_CHAIN` must be re-measured against the
-null's own distribution on both the synthetic fixture and these real collects.
+The constant carries a comment saying it must be re-measured before being quoted
+elsewhere, which is honest but does not stop the code applying it uniformly. **A
+fix has to make the criterion per-run** — derived from that collect's own null,
+which on a real collect means something like `--null-static` and is exactly what
+`--stable` was built to avoid needing. Until then, read the reported support and
+the number of rungs able to express the candidate, and do not treat a verdict as
+transferable between fixtures.
 
 ## Reviews performed
 
 | date | commit | scope | outcome |
 |---|---|---|---|
+| 2026-08-07 | `7ce1396` | Item 117's consecutive-requirement defect | **Fixed, and it moves no verdict — which is the finding.** `--stable` now counts the rungs carrying a candidate rather than requiring them adjacent, matching the cluster-size criterion automated OMA uses. C10 at 0.26 mm reads *carried by 4 of 6 rungs, 5 needed* and is still rejected: consecutiveness was never the binding constraint, the threshold is. The synthetic null under counting reaches support 4 and no higher, so 0 of 24 motionless and 12 of 12 injected report, unchanged. **But a real injection also sits at support 4 while both real motionless controls sit at 0**, so the two fixtures have incompatible nulls and no single threshold serves both. One pre-registered prediction failed in its letter — the support distribution is not the chain distribution, because isolated answers now count — and is recorded as wrong. |
 | 2026-08-07 | `d949eb1` | The ladder and its threshold on real Kilauea data | **Both transfer; the consecutive requirement does not.** Not one of twelve motionless rungs answered on either real control, so specificity is total and by absence rather than disagreement — H9, the hypothesis that could have killed the threshold, passes decisively. Every rung that answered on an injected scene agreed with the injected 1.00 Hz, 0.997–1.000 Hz across look counts 96–256, with no disagreeing rung anywhere. Recall is 3 of 6 against item 114's 5 of 6, and the shortfall is one case — C10 at 0.26 mm, four agreeing rungs, every answering rung correct, rejected because two rungs REFUSED rather than disagreed. Named in the pre-registration in advance and confirmed. |
 | 2026-08-07 | `21594bc` | Item 115's mis-calibrated ladder p | **Removed rather than repaired, on the field's own practice.** A stabilization diagram is an acceptance criterion, not a significance test — no probability is attached to one anywhere in the OMA literature, and the number of consecutive orders required is explicitly user-chosen. Two candidate nulls were considered and both fail: per-window chains cannot separate a scene-wide artefact from a scene-wide injection (item 11), and re-dividing the dwell returns the same answers (item 114's wall on a second axis). `RS_STABLE_MIN_CHAIN` is therefore measured from the null's own distribution. **The threshold was fitted to twelve scenes, so the run was designed with a separate arm on twelve UNSEEN seeds — which reproduced the fitted distribution exactly.** 0 of 24 motionless report, 12 of 12 injected, and no scene in 36 landed on the threshold itself. |
 | 2026-08-07 | `c2a0849` | Item 114's cost: the stabilization test losing its partner | **The field had the answer and item 107 had built its two-point special case.** OMA stabilization diagrams sweep model order and require persistence across several consecutive orders; `--stable` now takes a ladder and reports the longest chain of consecutive agreeing rungs. Measured on six look counts, it gives a definite verdict on **12 of 12** motionless scenes where the pair managed **1**, and keeps 6 of 6 injected on full 6-rung chains. **Its derived p is wrong by four orders of magnitude** — a motionless scene holds ~0.95 Hz across four consecutive rungs — because rungs share pulses exactly as windows share pixels. Third chance model here to assume independence where the construction manufactures correlation. |

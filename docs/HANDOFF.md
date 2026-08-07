@@ -1,76 +1,75 @@
-# Handoff — 2026-08-07 (ninth pass)
+# Handoff — 2026-08-07 (tenth pass)
 
 State of play at commit `HEAD`, written so a new session can pick up without
-re-reading 117 follow-up items. **Read `CLAUDE.md` first; this is the delta.**
+re-reading 118 follow-up items. **Read `CLAUDE.md` first; this is the delta.**
 
 Tree is clean, 23/23 tests pass, ASAN clean, nothing running in the background.
 
 ---
 
-## 1. Start here: one named defect, with its fix already known
+## 1. The named defect, and it is not a bug
 
-**`--stable` requires CONSECUTIVE agreeing rungs; the field counts CLUSTER SIZE.**
+**`RS_STABLE_MIN_CHAIN` is shipped as a constant and measured to be a per-fixture
+operating characteristic.**
 
-Measured on real data (item 117): C10 at 0.26 mm answers **0.998 / 0.997 / 0.997
-/ 1.000 Hz** at 128/160/192/224 looks against an injected 1.000, and refuses at
-96 and 256. **Four agreeing rungs, every answering rung correct, rejected** —
-because the gaps are refusals, not disagreements.
+| | support |
+|---|---|
+| 24 synthetic motionless scenes | max **4** |
+| both real motionless controls | **0** — every rung refuses |
+| a real INJECTION (C10, 0.26 mm) | **4** |
+| every other injection, both fixtures | 6 |
 
-Poles are routinely not identified at every model order (MATLAB's `modalsd`
-returns them as NaN); automated OMA clusters across the diagram and thresholds on
-minimum cluster size. **The fix**: a frequency's support is the number of rungs
-whose answer falls within half a bin of it, and the criterion applies to that
-count. A refusal then costs one rung instead of destroying the evidence either
-side. **That changes the threshold's meaning, so `RS_STABLE_MIN_CHAIN` must be
-re-measured** against the null on both the synthetic fixture and these real
-collects. `docs/CODE-REVIEW.md` has it.
+At 5 the synthetic null is clean and that real injection is rejected; at 2–4 the
+injection is recovered and two synthetic motionless scenes become false
+positives. **A real injection and a synthetic artefact sit at the same value.**
 
-## 2. What item 117 established, which is a lot
+A fix has to make the criterion **per-run**, derived from that collect's own
+null — which on a real collect means something like `--null-static`, and is
+exactly what `--stable` was built to avoid needing. That circle is the honest
+state of the instrument. `docs/CODE-REVIEW.md` has it.
 
-- **Specificity on real clutter is TOTAL.** Not one of twelve motionless rungs
-  answered; both controls refuse at every look count 96–256.
-- **Every answering rung on an injected scene was correct** — 0.997–1.000 Hz,
-  no disagreeing rung anywhere.
-- **The threshold transfers** — motionless chains of 0 against the 4 seen
-  synthetically, so it needs no upward revision.
-- **Recall is 3 of 6** against item 114's 5 of 6 on the same collects. The ladder
-  as it stands COSTS recall, and the one defect above accounts for the gap.
+## 2. Where the selection stage ended up (items 109–118)
 
-## 3. Where the selection stage stands (items 109–117)
-
-| | before 110 | 114 | 117 (real) |
+| | before 110 | 114 | 117–118 |
 |---|---|---|---|
 | real motionless controls refused | 0/2 | 2/2 | **2/2, every rung** |
-| real recall | 3/6 | 5/6 | **3/6** |
-| synthetic motionless reported | 1/12 | 0/12 | 0/24 (item 116) |
-| synthetic injected | 6/6 | 6/6 | 12/12 (item 116) |
+| real recall | 3/6 | **5/6** | 3/6 |
+| synthetic motionless reported | 1/12 | 0/12 | **0/24** |
+| synthetic injected | 6/6 | 6/6 | **12/12** |
 
 **Item 108 is closed** (114). **Item 107's surviving false positive is gone**
-(116). The open cost is recall, and it has one named cause.
+(116). **Item 96's 100% answer rate is gone** — on real clutter not one of twelve
+motionless rungs answered at all.
 
-## 4. Then what
+The open cost is real recall: 3/6 under the ladder against 5/6 under item 114's
+single-pair chain at 128 looks. The ladder buys specificity and spends recall,
+and §1 is why.
 
-1. **Count agreeing rungs, not consecutive ones** — §1, and re-measure the
-   threshold afterwards.
+## 3. What I would do next
+
+1. **Make the stabilization criterion per-run**, or accept the ladder as a
+   specificity instrument only and quote item 114's numbers for recall. §1.
 2. **TFCE** (Smith & Nichols 2009) — removes the arbitrary cluster-forming
    threshold `RS_MODAL_PER_WINDOW`, which item 71 measured as consequential.
 3. **Naples mode shapes** (item 94) — needs spatially-varying injection.
 
-**The strategic point, unchanged after nine items**: 109–117 are all SELECTION.
-They made the chain much better at not answering — and **none of them changed
-what the tracker can see.** Nothing here has detected real motion; the target is
-still put where it is found.
+**The strategic point, unchanged after ten items**: 109–118 are all SELECTION.
+The chain is far better at not answering and **none of it changed what the
+tracker can see.** Nothing here has detected real motion; the target is still put
+where it is found.
 
-## 5. Method lessons that earned their keep
+## 4. Method lessons that earned their keep
 
-- **Search the literature BEFORE designing.** Nine times. Items 113, 115, 116 and
-  117 were each solved, or explicitly declined, in another field.
+- **Search the literature BEFORE designing.** Nine times, nine hits.
+- **Measure the fix, do not assume it.** Item 118 was expected to recover a
+  rejected injection and did not — consecutiveness was not the binding
+  constraint. Predicting that in advance is what made the run informative.
 - **A threshold fitted to data must be tested on data it was not fitted to**
-  (item 116) — the independent arm reproduced the fitted one exactly.
-- **Name the failure mode you expect in the pre-registration** (item 117) — the
-  consecutive-requirement defect was predicted, then confirmed, rather than
-  discovered and rationalised.
-- **Read a bracket's ORDER, not just its width** (114).
+  (116).
+- **Name the failure mode you expect** (117) — predicted, then confirmed.
+- **Score a prediction's letter, not just its spirit** (118) — H11's distribution
+  claim was wrong even though its kill criterion held, and it is recorded as
+  wrong.
 
 ---
 
@@ -167,7 +166,7 @@ the run are how three wrong explanations got caught.**
 
 ## 7. Open, in the order I would take them
 
-1. **Count agreeing rungs, not consecutive ones** — §1 and §4 above.
+1. **Make the stabilization criterion per-run** — §1 and §3 above.
 2. **Item 98's remaining two**: the CCD *double change map* (two twins), and
    Bayer & Seljak's self-calibrating look-elsewhere correction, which needs no
    Monte Carlo and works per window where `p_chance` works on the block.

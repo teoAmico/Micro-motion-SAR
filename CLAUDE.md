@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 115 items and their status.
+an index of all 116 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -169,6 +169,36 @@ or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
 
+**THERE IS NO p-VALUE FOR A STABILIZATION DIAGRAM, AND THE FIELD DOES NOT
+PRETEND OTHERWISE** (item 116, implemented; **fixes item 115's defect**). A
+stabilization diagram is an **ACCEPTANCE CRITERION, not a significance test**:
+poles are marked stable when frequency, damping and mode shape persist across
+consecutive model orders under tolerances, the result is refined by CLUSTERING,
+and **no probability is attached anywhere**. The number of orders required is
+explicitly **application-dependent and chosen by the user**; the usual five is a
+convention. So `rs_stable_p()` is REMOVED rather than repaired.
+
+**Two nulls were considered and BOTH FAIL**, which is why the number is measured:
+calibrating on **per-window chains** fails because a scene-wide artefact and a
+scene-wide injection are structurally identical in window statistics (**item
+11**); and **re-dividing the dwell** fails because re-dividing returns the same
+answers, so no randomisation destroys a real mode while preserving a scene-pinned
+artefact (**item 114's wall on a second axis**).
+
+`RS_STABLE_MIN_CHAIN = 5` therefore comes from the null's OWN measured
+distribution (item 80's rule). **The threshold was fitted to twelve motionless
+scenes, so re-running those tests NOTHING** -- the run was designed with a
+consistency arm labelled arithmetic and a real test on **twelve UNSEEN seeds**.
+**The independent arm reproduced the fitted arm exactly**: eleven chains of 0 and
+one of 4, both times. **Over all 24 motionless scenes 22 reached chain 0, 2
+reached 4, NONE reached 5; over all 12 injected, every one reached 6. The gap at
+the threshold is EMPTY.** Item 107's surviving false positive and item 115's are
+the same scene class and both are now rejected. `--stable` also refuses a verdict
+outright when the ladder is shorter than the criterion. **Bounds: it is an
+operating characteristic of ONE fixture, NOT a probability, and must be
+re-measured before being quoted elsewhere; two scenes in 24 reached chain 4, one
+rung below the criterion.**
+
 **THE STABILIZATION TEST IS A LADDER, NOT A PAIR** (item 115, implemented).
 Item 107 built the two-point special case; **the field sweeps model order over a
 RANGE and marks a pole stable only when it persists across SEVERAL CONSECUTIVE
@@ -184,12 +214,12 @@ injected (every one a full 6-rung chain), and reports 1 of 12 motionless. That
 last row is what item 114 cost and this repays: the pair could not decide,
 because its partners were refusing.
 
-**BUT ITS CHANCE MODEL IS WRONG, FOR THE THIRD TIME AND ON A THIRD AXIS.** Seed
-31 -- a MOTIONLESS scene -- holds **0.954 / 0.958 / 0.950 / 0.965 Hz across four
-consecutive look counts**, a chain of 4 that `rs_stable_p()` prices at 1.3e-5 and
-which happened on 1 of 12 scenes: **wrong by four orders of magnitude**. Rungs
-are NOT independent -- every rung re-divides the SAME pulses over the SAME dwell.
-**READ THE CHAIN LENGTH; DO NOT QUOTE THE p.**
+**ITS CHANCE MODEL WAS WRONG, FOR THE THIRD TIME AND ON A THIRD AXIS** (fixed in
+item 116). Seed 31 -- a MOTIONLESS scene -- holds **0.954 / 0.958 / 0.950 /
+0.965 Hz across four consecutive look counts**, a chain of 4 that `rs_stable_p()`
+priced at 1.3e-5 and which happened on 1 of 12 scenes: **wrong by four orders of
+magnitude**. Rungs are NOT independent -- every rung re-divides the SAME pulses
+over the SAME dwell.
 
 **THE RULE THIS MAKES EXPLICIT: in this chain anything built by RE-DIVIDING ONE
 DWELL is correlated with everything else built the same way, and no chance model
@@ -1520,7 +1550,7 @@ catches that. Neither substitutes for the other.
 
 **`docs/HANDOFF.md` is the current state of play** — what the last session
 established, the one named defect to work on next, and the assets on disk. Read
-it before `FOLLOW-UPS.md`, which is 115 items and is the record rather than the
+it before `FOLLOW-UPS.md`, which is 116 items and is the record rather than the
 plan.
 
 The short version: the tracker recovers signals the SELECTION discards, and item

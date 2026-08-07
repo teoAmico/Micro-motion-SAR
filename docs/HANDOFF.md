@@ -1,77 +1,76 @@
-# Handoff — 2026-08-07 (seventh pass)
+# Handoff — 2026-08-07 (eighth pass)
 
 State of play at commit `HEAD`, written so a new session can pick up without
-re-reading 115 follow-up items. **Read `CLAUDE.md` first; this is the delta.**
+re-reading 116 follow-up items. **Read `CLAUDE.md` first; this is the delta.**
 
 Tree is clean, 23/23 tests pass, ASAN clean, nothing running in the background.
 
 ---
 
-## 1. The one rule this session produced
+## 1. The rule this session produced
 
 **In this chain, anything built by RE-DIVIDING ONE DWELL is correlated with
 everything else built the same way, and no chance model may assume otherwise.**
 
-Three chance models have now assumed independence and been wrong:
+Three chance models assumed independence and were wrong:
 
-| model | assumed independent | actually shares | error |
+| model | assumed independent | actually shares | error | now |
+|---|---|---|---|---|
+| `rs_modal_null()` before 113 | window nominations | **pixels** | p 0.001 for an honest 0.013 | permutation + bracket (113, 114) |
+| `rs_stable_p()` (115) | ladder rungs | **pulses** | p 1.3e-5 for a 1-in-12 event | **removed** (116) |
+
+And item 116 established the limit: **for the ladder there is no valid null at
+all.** Per-window chains cannot separate a scene-wide artefact from a scene-wide
+injection (item 11); re-dividing the dwell returns the same answers (item 114's
+wall). So the threshold is an *operating characteristic measured from the null's
+own distribution*, and it is **not a probability**.
+
+## 2. Where the selection stage ended up (items 109–116)
+
+| | before 110 | 114 | 116 |
 |---|---|---|---|
-| `rs_modal_null()` before item 113 | window nominations | **pixels** (50% overlap) | p 0.001 for an honest 0.013 |
-| `rs_stable_p()` (item 115, **unfixed**) | ladder rungs | **pulses** (same dwell) | p 1.3e-5 for a 1-in-12 event |
-| item 80's block null | — | — | superseded by the above |
-
-Item 114 established both the remedy and its limit: a permutation that preserves
-the correlation, and a **bracket** when no such permutation can be exact.
-
-## 2. Where the selection stage ended up (items 109–115)
-
-| | before 110 | 114 | 115 |
-|---|---|---|---|
-| H1 recovery, real | 3/6 | 5/6 | — (real arm not run) |
+| H1 recovery, real | 3/6 | **5/6** | not re-run |
 | real motionless controls refused by the chain | 0/2 | **2/2** | — |
-| motionless synthetic reported | 1/12 | 0/12 | 1/12 |
-| motionless synthetic given a DEFINITE verdict | — | 1/12 | **12/12** |
-| injected synthetic | 6/6 | 6/6 | **6/6** |
+| motionless synthetic reported | 1/12 | 0/12 | **0/24** |
+| motionless synthetic given a DEFINITE verdict | — | 1/12 | **24/24** |
+| injected synthetic | 6/6 | 6/6 | **12/12** |
 
-**Item 108 is closed** (item 114): the collect that led with 0.997 Hz against a
-sought 1.00 Hz now returns *nothing recurs*, its artefact's p having gone
-0.001 → 0.010 → 0.342 across four items.
-
-**`--stable` is now a ladder** (item 115): a comma-separated list of runs at
-different look counts, scored by the longest chain of consecutive agreeing rungs.
-**Read the chain length; the p is not calibrated** — see §1.
+**Item 108 is closed** (114). **Item 107's surviving false positive is gone**
+(116). `--stable` is a ladder scored on the longest chain of consecutive agreeing
+rungs against a threshold of 5, and refuses a verdict when the ladder is shorter.
 
 ## 3. What I would do next
 
-1. **A null for the ladder that re-divides the dwell rather than drawing
-   frequencies.** This is the named defect in §1, and it is the first null here
-   that costs real processing runs rather than a Monte Carlo over labels. Items
-   113–114 give the shape: preserve the correlation, and bracket if you cannot.
-2. **Run the ladder on real Kilauea data.** Deferred as a 60-minute arm
-   (6 rungs × 8 configurations at ~75 s). Everything in item 115 is synthetic.
+1. **Run the ladder on real Kilauea data.** Everything in items 115–116 is
+   synthetic. This is the deferred 60-minute arm (6 rungs × 8 configurations at
+   ~75 s) and it is now the single largest gap in the evidence.
+2. **Re-measure `RS_STABLE_MIN_CHAIN` wherever it is used.** It is an operating
+   characteristic of one fixture at one operating point, not a constant. Two
+   motionless scenes in 24 reached chain 4, one rung below it.
 3. **TFCE** (Smith & Nichols 2009) — removes the arbitrary cluster-forming
    threshold, here `RS_MODAL_PER_WINDOW`, which item 71 measured as consequential.
 
-**The strategic point is unchanged and worth repeating**: items 109–115 are all
-SELECTION. Seven items made the chain much better at NOT answering — item 96's
-100% false-positive rate is gone, three quarters of motionless scenes are silent,
-and item 108 is closed — and **none of them changed what the tracker can see.**
-Nothing here has detected real motion; the target is still put where it is found.
-The next real frontier is a collect over something that moves and is
-independently instrumented; Naples (item 94) is the cheapest approximation and
-needs spatially-varying injection that `--inject-wave` does not support.
+**The strategic point, unchanged after eight items**: 109–116 are all SELECTION.
+They made the chain much better at NOT answering — item 96's 100% false-positive
+rate is gone, item 108 is closed, 0 of 24 motionless scenes report — and **none
+of them changed what the tracker can see.** Nothing here has detected real
+motion; the target is still put where it is found. The next real frontier is a
+collect over something that moves and is independently instrumented; Naples
+(item 94) is the cheapest approximation and needs spatially-varying injection
+that `--inject-wave` does not support.
 
 ## 4. Method lessons that earned their keep
 
-- **Search the literature BEFORE designing.** Eight times now. Items 113 and 115
-  were both solved problems in another field (cluster-extent inference; OMA
-  stabilization diagrams), and in both cases this project had built the
-  degenerate special case.
-- **Read a bracket's ORDER, not just its width** (item 114) — a printed interval
-  of `54.0 to 42.9` caught a gate that was anti-conservative on some scenes.
-- **Measure the explanation before building on it** (item 114) — four
-  explanations in this arc were wrong; the last was caught in advance by
-  measuring correlation against window separation first.
+- **Search the literature BEFORE designing.** Eight times now. Items 113, 115 and
+  116 were all solved — or explicitly declined — in another field, and in each
+  case this project had built the degenerate special case or invented a statistic
+  the field knows better than to compute.
+- **A threshold fitted to data must be tested on data it was not fitted to.**
+  Item 116's whole design; the independent arm reproduced the fitted one exactly,
+  which is the only reason the number can be trusted at all.
+- **Read a bracket's ORDER, not just its width** (114).
+- **Measure the explanation before building on it** (114) — four explanations in
+  this arc were wrong; the last was caught in advance.
 
 ---
 
@@ -89,6 +88,7 @@ needs spatially-varying injection that `--inject-wave` does not support.
 | permutation null on cluster mass | 2x2 tile-shift preserves the correlation overlap creates; the gate tests `ev` | 113 |
 | bracketed p, gated on the conservative end per scene | no permutation null here can be exact, so bound it both ways | 114 |
 | `--stable CSV,CSV,...` | a LADDER of look counts; longest chain of consecutive agreeing rungs | 115 |
+| `RS_STABLE_MIN_CHAIN` | measured operating characteristic, not a p; no valid null exists for it | 116 |
 | `rs_transient_fit()` / `--tfit` | damped-sinusoid fit with onsets; works, changes nothing at chain level | 81 |
 | `docs/PREREGISTRATION.md` | the form; `tools/new-run.sh` seeds `PREREG.md` per run | 92 |
 
@@ -167,8 +167,7 @@ the run are how three wrong explanations got caught.**
 
 ## 7. Open, in the order I would take them
 
-1. **A ladder null that re-divides the dwell**, and the real-data ladder arm —
-   §3 above.
+1. **The real-data ladder arm**, and re-measuring the threshold — §3 above.
 2. **Item 98's remaining two**: the CCD *double change map* (two twins), and
    Bayer & Seljak's self-calibrating look-elsewhere correction, which needs no
    Monte Carlo and works per window where `p_chance` works on the block.

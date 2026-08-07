@@ -603,7 +603,7 @@ reports the **longest chain of consecutive agreeing rungs**:
               192 looks:  0.508 Hz
               224 looks:  0.510 Hz
               256 looks:  0.504 Hz
-            longest chain of CONSECUTIVE agreeing rungs: 6 (p 0.0000) -> STABLE -> report
+            longest chain of CONSECUTIVE agreeing rungs: 6 of 5 needed -> STABLE -> report
             25 of 37 comparable windows agree within half a bin (0.0252 Hz) at
             96 looks; the verdict above is on the MODAL SET, not on windows.
 ```
@@ -611,12 +611,21 @@ reports the **longest chain of consecutive agreeing rungs**:
 `stable_hz` and `stable` join the per-window CSV (1 stable, 0 moved, -1 not
 comparable).
 
-**READ THE CHAIN LENGTH, NOT THE p** (item 115). The p is derived assuming each
-rung is an independent draw over the band, and rungs are **not** independent —
-every one re-divides the *same pulses over the same dwell*. Measured, a
-motionless scene held ~0.95 Hz across four consecutive look counts, which the
-model prices at 1.3e-5 and which happened on 1 of 12 scenes. The chain length is
-sound; the probability attached to it is not.
+**There is no p-value here, and that is the field's position rather than a
+shortfall** (item 116). A stabilization diagram is an *acceptance criterion*: the
+OMA literature marks a pole stable when it persists across consecutive model
+orders and attaches no probability to it. Item 115 derived one anyway and it was
+wrong by four orders of magnitude, because rungs are **not** independent — every
+one re-divides the *same pulses over the same dwell*, so a motionless scene held
+~0.95 Hz across four consecutive look counts.
+
+**The five comes from the null's own measured distribution**, not from a model:
+over 24 motionless scenes the longest chain was 0 on 22 and 4 on 2, while all 12
+injected scenes reached 6 — and **twelve of those motionless seeds were never
+used to set the threshold and reproduced the same shape.** Nothing in 36 scenes
+landed on 5. It is an operating characteristic of that fixture, **not a
+probability**; re-measure it before trusting it elsewhere. A ladder shorter than
+five rungs gets no verdict at all.
 
 **Why it works.** A real vibration sits at the same Hz however the aperture is
 sliced; an artefact produced by the slicing need not. This is the

@@ -157,6 +157,7 @@ said, not better) and item 7's line numbers.
 | 113 | **fixes 108's cause** | the null assumed windows nominate independently where 50% overlap makes neighbours correlated -- Eklund/Nichols/Knutsson's published cluster-failure mode. Permutation null on cluster MASS: injected runs admit ONE mode, item 96's 100% answer rate broken, 108's p 0.001 -> 0.010 but not refused |
 | 114 | **REFUSES item 108** | correlation is confined to ADJACENT windows, so 113's residual guess was wrong; the real one is that any fixed partition loses correlation at its boundaries and no permutation null can be exact. Bracket p between two nulls, gate on the conservative: item 108 refused at p 0.342, recall 5/6, 8/12 motionless scenes silent |
 | 115 | **ladder, not pair** | the field persists a pole across SEVERAL consecutive model orders; item 107 built the two-point case. The ladder decides 12 of 12 motionless scenes where the pair decided 1, keeps 6/6 injected -- and its chance model is wrong for the THIRD time, because rungs share pulses as windows share pixels |
+| 116 | **no p, a measured threshold** | the field attaches no probability to a stabilization diagram; two possible nulls both fail (items 11, 114). Threshold from the null's own distribution reproduces on UNSEEN seeds: 0 of 24 motionless, 12 of 12 injected, and the gap at the threshold is empty |
 
 ---
 
@@ -9962,3 +9963,82 @@ way, and no chance model may assume otherwise.**
 One fixture family, one operating point, one amplitude (2 mm, 6.9x this
 fixture's floor). **Not run on real Kilauea data** -- 6 rungs x 8 configurations
 at ~75 s is a 60-minute arm, deferred.
+
+---
+
+## 116. There is no p-value for a stabilization diagram, and the field does not pretend otherwise. A threshold measured from the null's own distribution reproduces on seeds it never saw: 0 of 24 motionless, 12 of 12 injected.
+
+Pre-registered at `21594bc`, with the circularity handled by design rather than
+noticed afterwards. `runs/synthetic/2026-08-07-ladder-threshold/`.
+
+### The literature refuses to supply a number, and that is the answer
+
+Item 115 derived a p and it was wrong by four orders of magnitude. Searched
+twice: **a stabilization diagram is an ACCEPTANCE CRITERION, not a significance
+test.** Poles are marked stable when frequency, damping and mode shape persist
+across consecutive model orders under tolerances; the result is refined by
+CLUSTERING; and **no probability is attached to it anywhere.** The number of
+orders required is explicitly **application-dependent and chosen by the user** --
+the commonly quoted five is a convention, not a derivation.
+
+So `rs_stable_p()` is REMOVED rather than repaired.
+
+### Two nulls were considered and both fail, which is why the number is measured
+
+- **Per-window chains as an empirical null** -- fails, because a scene-wide
+  artefact and a scene-wide injection are structurally identical in window
+  statistics. That is **item 11**.
+- **Re-dividing the dwell to build the null** -- fails, because re-dividing
+  returns the same answers. There is no randomisation that destroys a real mode
+  while preserving a scene-pinned artefact. That is **item 114's wall on a second
+  axis**, and it means this null would have cost real processing runs and still
+  not worked.
+
+**So the number comes from the null's own measured distribution**, which is item
+80's rule for exactly this situation.
+
+### Measured, with the circularity designed around
+
+The threshold was read off item 115's twelve motionless scenes, **so re-running
+those tests nothing.** The run therefore has two arms and only one of them is
+evidence:
+
+| arm | scenes | chain 0 | chain 4 | chain 6 | reported |
+|---|---|---|---|---|---|
+| item 115's seeds (arithmetic) | 12 | 11 | 1 | 0 | **0** |
+| **twelve UNSEEN seeds (the test)** | 12 | **11** | **1** | 0 | **0** |
+| item 115's injected | 6 | 0 | 0 | 6 | **6** |
+| **six UNSEEN injected** | 6 | 0 | 0 | **6** | **6** |
+
+**The independent arm reproduces the fitted arm exactly** -- eleven chains of 0
+and one of 4, the same shape, on seeds the threshold had never seen.
+
+**Over all 24 motionless scenes: 22 at chain 0, 2 at chain 4, NONE at 5 or
+above. Over all 12 injected: every one at chain 6. The gap at the threshold is
+EMPTY** -- nothing in 36 scenes landed on 5, so the criterion sits in a void a
+rung wide on each side. The margin named as a risk in the pre-registration did
+not bite.
+
+### Against everything before it
+
+| | item 107 pair | item 115 ladder+p | item 116 ladder+threshold |
+|---|---|---|---|
+| motionless reported | 1/12 | 1/12 | **0/24** |
+| motionless given a DEFINITE verdict | 1/12 | 12/12 | **24/24** |
+| injected reported | 6/6 | 6/6 | **12/12** |
+
+**Item 107's surviving false positive is gone, and so is item 115's** -- they are
+the same scene class, a motionless artefact holding four consecutive rungs, and
+the criterion is now set above it by measurement rather than by assumption.
+`--stable` also **refuses a verdict outright when the ladder is shorter than the
+criterion**, rather than applying a weaker one.
+
+### Bounds
+
+- **One fixture family, one operating point, one amplitude.** The threshold is an
+  operating characteristic of THIS fixture and must be re-measured before being
+  quoted elsewhere. It is **not a probability** and must not be reported as one.
+- **Not run on real data.** The real-data ladder remains a deferred 60-minute arm.
+- **Two motionless scenes in 24 reached chain 4**, one rung below the criterion.
+  A fixture whose artefacts persist one rung longer would defeat it, and nothing
+  here bounds how far that persistence can go.

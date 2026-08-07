@@ -1,55 +1,59 @@
-# Handoff — 2026-08-07 (fourth pass)
+# Handoff — 2026-08-07 (fifth pass)
 
 State of play at commit `HEAD`, written so a new session can pick up without
-re-reading 112 follow-up items. **Read `CLAUDE.md` first; this is the delta.**
+re-reading 113 follow-up items. **Read `CLAUDE.md` first; this is the delta.**
 
 Tree is clean, 23/23 tests pass, ASAN clean, nothing running in the background.
 
 ---
 
-## 1. Start here: the selection thread is closed
+## 1. Start here
 
-**Items 109 → 110 → 111 → 112 are one thread and it has arrived somewhere.**
+**Items 109 → 113 are one thread: the selection stage, taken apart.**
 
-| | before 110 | 110 | 111 | 112 |
-|---|---|---|---|---|
-| H1, 128-look modal answer correct | 3 of 6 | 5 of 6 | 5 of 6 | **6 of 6** |
-| H3 real controls refused | 2 of 2 | 2 of 2 | 2 of 2 | **2 of 2** |
-| H3b motionless synthetic | 1 of 12 | 1 of 12 | 1 of 12 | **0 of 12** |
-| injected synthetic recall | 6 of 6 | 6 of 6 | 6 of 6 | **6 of 6** |
+| | before 110 | 110 | 111 | 112 | 113 |
+|---|---|---|---|---|---|
+| H1, 128-look modal answer correct | 3/6 | 5/6 | 5/6 | 6/6 | **6/6** |
+| H3 real controls refused | 2/2 | 2/2 | 2/2 | 2/2 | **2/2** |
+| H3b motionless synthetic reporting | 1/12 | 1/12 | 1/12 | 0/12 | **0/12** |
+| motionless synthetic REFUSED outright | 0/12 | 0/12 | 0/12 | 0/12 | **4/12** |
+| modes admitted per injected run | — | 8-10 | 8-10 | 8-10 | **1** |
 
-Three defects, each found only after the previous fix:
+Four defects, each visible only once the previous was fixed:
 
 1. **Admission** (110) — the binomial `support_min` is a fraction of the whole
-   window grid, so a localised mode could not reach it: 28 of a required 34.
-   Admission is now the 2×2 block floor, with the chance model drawn under the
-   same rule.
-2. **The band-edge bias** (111) — the local background was estimated from 10
-   reference bins at the band edges against 20 mid-band, and 39% of the band took
-   **72% of the maxima** on scenes containing nothing. Fixed by NARROWING every
-   neighbourhood, not widening; widening fails `test_tracking`'s red-floor case.
-3. **The strength term** (112) — `median_ratio` was a median over every
-   nominator, and ~22 of 225 nominate any bin by chance, so **a factor of five in
-   signal moved it by 7%**. Over the mode's own block instead it moves 4.7×.
+   grid, so a localised mode could not reach it: 28 of a required 34.
+2. **Band-edge bias** (111) — 10 reference bins at the edges against 20
+   mid-band; 39% of the band took 72% of the maxima on empty scenes. Fixed by
+   NARROWING, not widening.
+3. **Strength term** (112) — `median_ratio` was a median over every nominator
+   and ~22 of 225 nominate any bin by chance, so a 5x change in signal moved it
+   7%. Now taken over the mode's own block.
+4. **The null** (113) — it assumed windows nominate independently where 50%
+   overlap makes neighbours correlated. **This was item 108's cause.**
 
-### Two things to quote carefully
+**Item 113 is worth reading in full**: it is the seventh time a literature search
+found the field ahead of this project, and the match is exact — Eklund, Nichols &
+Knutsson (PNAS 2016) on cluster-extent inference invalidated by a mis-modelled
+spatial autocorrelation, with permutation nulls and cluster MASS as the remedies.
+Both were adopted and both worked.
 
-- **H1 and `--stable` now differ.** H1 is the 128-look modal answer, 6 of 6.
-  `--stable` adjudicates it and abstains on C10 at 0.13 mm (its 256-look answer
-  is above the 128-look Nyquist), so the stabilization test reports 5 of 6.
-  Earlier items could quote one number because they agreed.
-- **Item 103's competition floor is NOT a scene property.** C10 now recovers at
-  0.13 mm, below the 0.13–0.26 mm item 103 measured, because the floor depends on
-  the selection as well as the scene. Target and clutter floors are scene
-  properties; the competition floor is not.
+## The one thing still open
 
-### The one thing four items have not moved
+**Item 108's false positive is improved tenfold and NOT solved.** C14's
+motionless collect still leads with 0.997 Hz against a sought 1.00 Hz, now at
+p 0.010 rather than 0.001 with 2 admitted modes rather than 8. The residual is
+most likely that correlation extends **beyond the 2×2 tile** the null
+decorrelates — a fully dilated null puts the same block at p ≈ 0.5, bracketing
+the truth. `--stable` remains the only thing that rejects it.
 
-**Item 108's false positive.** C14's motionless control leads with **0.997 Hz at
-`ev` 28.4** against an injected 1.00 Hz. Its block is 17 windows and its ratio
-only 5.3 — it is diffuse, not a clean scatterer — and `--stable` is still the
-only thing that rejects it, on a 256-look answer of 9.327 Hz. **This is the
-sharpest open problem here.**
+The next step is measurable: estimate the correlation length from the data
+(the shared-nomination excess as a function of window separation) and shift
+tiles of that size, rather than assuming 2×2. TFCE (Smith & Nichols 2009) would
+additionally remove the arbitrary nomination threshold, `RS_MODAL_PER_WINDOW`.
+
+**Bound to carry forward: C10 at 0.13 mm sits exactly on p = 0.050.** One Monte
+Carlo trial moves it across. It is the threshold, not a recovery.
 
 ---
 
@@ -64,6 +68,7 @@ sharpest open problem here.**
 | `rs_mode_t.evidence` | `n_contiguous * log(median_ratio)`, the modal set's ranking key; `ev` in the report | 110 |
 | `tests/test_modalset.c` | the first test over `rs_spectrum_modal_set()`; pins admission against ranking in both directions | 111 |
 | block-median `median_ratio` | strength summarised over the mode's footprint, not over every nominator | 112 |
+| permutation null on cluster mass | 2x2 tile-shift preserves the correlation overlap creates; the gate tests `ev` | 113 |
 | `rs_transient_fit()` / `--tfit` | damped-sinusoid fit with onsets; works, changes nothing at chain level | 81 |
 | `docs/PREREGISTRATION.md` | the form; `tools/new-run.sh` seeds `PREREG.md` per run | 92 |
 
@@ -142,8 +147,8 @@ the run are how three wrong explanations got caught.**
 
 ## 7. Open, in the order I would take them
 
-1. **Item 108's false positive** — §1 above. Four items of selection work have
-   not touched it.
+1. **Item 108's residual** — §1 above: estimate the correlation length instead
+   of assuming 2×2, and consider TFCE to remove the nomination threshold.
 2. **Item 98's remaining two**: the CCD *double change map* (two twins), and
    Bayer & Seljak's self-calibrating look-elsewhere correction, which needs no
    Monte Carlo and works per window where `p_chance` works on the block.

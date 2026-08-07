@@ -154,6 +154,7 @@ said, not better) and item 7's line numbers.
 | 110 | **corrects 109 and fixes it** | not the guard band: the localised target is refused by the SUPPORT gate at 28 of 34, then out-ranked on EXTENT. 5 of 6 recover, false positives unchanged at 1/12 |
 | 111 | **fixes 110's leftovers** | the band-edge bias is real and measured (72% of maxima on 39% of the band); the fix is to NARROW not widen. Nothing lost, one artefact gone, abstentions 5/12 -> 3/12. Third defect named: median_ratio is a median over CHANCE nominators |
 | 112 | **first 6 of 6** | the ranking's strength term was a median over CHANCE nominators; over the mode's own block instead, recall 5/6 -> 6/6 and synthetic false positives 1/12 -> 0/12. Item 103's competition floor is a property of the SELECTION too |
+| 113 | **fixes 108's cause** | the null assumed windows nominate independently where 50% overlap makes neighbours correlated -- Eklund/Nichols/Knutsson's published cluster-failure mode. Permutation null on cluster MASS: injected runs admit ONE mode, item 96's 100% answer rate broken, 108's p 0.001 -> 0.010 but not refused |
 
 ---
 
@@ -9639,3 +9640,120 @@ competition -- keep their meanings, but only the first two are scene properties.
 - **Item 108 is untouched by four items of work.** C14's motionless control
   still leads with 0.997 Hz against an injected 1.00 Hz, now at `ev` 28.4, and
   `--stable` is still the only thing that rejects it.
+
+---
+
+## 113. Item 108's cause is a null that assumed independence where window overlap makes neighbours correlated. It is a published failure mode, and the fix makes the reports go quiet.
+
+Pre-registered at `87d27eb`, with four predictions recorded in advance and
+scored below -- including one stating that the primary aim would NOT be met.
+`runs/kilauea/2026-08-07-clustermass/`,
+`runs/synthetic/2026-08-07-clustermass-null/`.
+
+### The diagnosis, and two wrong explanations killed by their own controls
+
+`--shifts` on the motionless C14 collect, nomination replicated offline (the
+replica reproduces the binary exactly: support 35, block 17).
+
+**Phase coherence** at the artefact's bin across its 17-window block is 0.673 --
+which looks like a coherent oscillation until the controls run. Random
+contiguous 17-window blocks elsewhere reach **up to 0.703**, and bin 6 ranks only
+**5th of 62 bins** on those same windows. **Amplitude** is **1.54 mm**, the
+clutter noise level and ~1000x the seismometer truth. It is noise.
+
+**What is real is the CORRELATION.** Windows are laid at half their width, so
+neighbours share half their pixels and track the same dominant scatterer -- item
+41 measured overlapping windows returning BIT-IDENTICAL series. Measured: an
+adjacent pair shares **2.37 of 6** nominations against **0.71** for a random
+pair. Three nulls on the same observed block of 17:
+
+| null | median | p95 | p(block >= 17) |
+|---|---|---|---|
+| independent draw (shipped until now) | 6 | 8 | **0.001**, above its own 300-trial max of 9 |
+| 2x2 tile-shift (observed correlation kept) | 11 | 15 | **0.013** |
+| 2x2 dilated (neighbours assumed identical) | 16 | 24 | ~0.5 |
+
+And that one motionless scene had **EIGHT bins clearing p <= 0.05** where the
+family-wise design intends 0.05 in total.
+
+### THE SEVENTH TIME A SEARCH FOUND THE FIELD ALREADY THERE
+
+Eklund, Nichols & Knutsson, **PNAS 2016**, *Cluster failure: why fMRI inferences
+for spatial extent have inflated false-positive rates*: three million analyses
+across the major fMRI packages found parametric **cluster-extent inference
+invalid** at a nominal 5% family-wise rate, the cause being *"spatial
+autocorrelation functions that do not follow the assumed shape"*, while a
+**nonparametric permutation gives nominal rates**. The window grid is their voxel
+grid, window overlap is their smoothing, `n_contiguous` is their cluster extent,
+and `p_chance` was their invalid parametric p.
+
+Their remedy for the power cost is theirs too: **cluster MASS** is reported as
+more powerful than extent and specifically better for **small but intense**
+clusters (Zhang, Nichols & Johnson 2009; Hayasaka & Nichols 2004) -- which is
+exactly the injected target, block 13 at ratio 40, that an extent threshold
+refuses. **Item 108's false positive is the LARGEST block in its scene and
+nearly the WEAKEST mass**, so no extent threshold separates it and mass can.
+That is why both halves of this change are one idea.
+
+### What was built
+
+`rs_modal_null()` keeps every window's own observed nominations and ratios and
+gives each **2x2 TILE** an independent circular shift of the band -- correlation
+preserved within a tile, destroyed across tiles. The **2x2 tile is geometry**:
+the same half-width stride the block floor and `freq_se`'s `n_eff = n/4` already
+come from. Admission then tests **`evidence`** against that null instead of block
+size, and `p_chance` becomes P(a chance run reaches this evidence).
+
+### Measured: the reports went quiet
+
+**H1 6 of 6. H2 passes. H3 2 of 2. H3b 0 of 12 reporting with recall 6 of 6.**
+
+The gate change did not move answers; it removed the competition:
+
+| run | modes admitted, item 112 | item 113 |
+|---|---|---|
+| C10 motionless | 4 | **0** |
+| C14 motionless | 8 | **2** |
+| every injected run, both collects | 8-10 | **1** |
+
+**Every injected run now admits exactly one mode and it is the injected
+frequency.** There is no longer a list to rank.
+
+**AND ITEM 96 IS BROKEN FOR THE FIRST TIME.** That item measured twelve of twelve
+motionless synthetic scenes returning a confident frequency -- a 100% answer rate
+-- and called a per-scene null the only thing standing between this chain and it.
+**Four of those twelve now return NO MODAL ANSWER AT ALL** before `--stable` is
+consulted, and **C10's motionless real collect refuses outright**, the first real
+motionless collect ever to do so.
+
+### The four pre-registered predictions, scored
+
+| prediction | outcome |
+|---|---|
+| H2 passes, admitted modes at least halve | **RIGHT** -- 12 across the two motionless collects becomes 2 |
+| C10's motionless control refused entirely | **RIGHT** |
+| **Item 108's own false positive is NOT refused** | **RIGHT, and it is the honest half of this item** |
+| H1 falls to 5 of 6 | **WRONG**, in the better direction -- 6 of 6 |
+
+### Item 108: an order of magnitude, not a solution
+
+C14's motionless control still leads with **0.997 Hz** against a sought 1.00 Hz.
+What changed is the number attached to it: **p 0.001 becomes 0.010**, and the
+scene admits 2 modes rather than 8. The offline analysis predicted 0.013 for this
+block under the same null design, so the implementation agrees with the analysis.
+**The residual is most likely that correlation extends beyond the 2x2 tile this
+null decorrelates** -- the dilated null puts the same block at p ~ 0.5, which
+brackets the truth between. `--stable` is still what rejects it.
+
+### Bounds
+
+- **C10 at 0.13 mm sits exactly on p = 0.050**, `ev` 21.6 against a critical
+  21.6. One Monte Carlo trial either way moves it across. It is the threshold,
+  not a recovery, and `--stable` abstains on it anyway.
+- 0 of 12 and 4 of 12 are rates on twelve realisations with wide intervals.
+- The abstention tally on the synthetic arm rose to 7 of 12, but **six of those
+  are REFUSALS** -- no modal set at either look count -- which is a different
+  and better failure than an answer outside the common band. The scorer lumps
+  them; read the `REFUSED` column.
+- Two real collects, one placement, one operating point. **Still a selection
+  result, not a detection.**

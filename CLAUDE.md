@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 112 items and their status.
+an index of all 113 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,48 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**THE CHANCE MODEL ASSUMED WINDOWS NOMINATE INDEPENDENTLY, AND 50% OVERLAP MAKES
+NEIGHBOURS CORRELATED** (item 113, implemented; **this is item 108's cause**).
+Windows are laid at half their width, so neighbours share half their pixels and
+track the same dominant scatterer -- item 41 measured them returning
+BIT-IDENTICAL series. Measured on the real motionless collect, an adjacent pair
+shares **2.37 of 6** nominations against **0.71** for a random pair, and the
+independent null's own 300-trial maximum block is **9** where the scene shows
+**17**. That was quoted at **p = 0.001** against an honest **0.013**, and one
+motionless scene had **EIGHT bins clearing p <= 0.05** where the family-wise
+design intends 0.05 in total.
+
+**SEVENTH TIME A SEARCH FOUND THE FIELD ALREADY THERE.** Eklund, Nichols &
+Knutsson (**PNAS 2016**), *Cluster failure: why fMRI inferences for spatial
+extent have inflated false-positive rates* -- parametric cluster-extent inference
+is invalid because the assumed spatial autocorrelation is wrong; a nonparametric
+PERMUTATION gives nominal rates. Window overlap is their smoothing,
+`n_contiguous` is their cluster extent. **Their remedy for the power cost is also
+theirs**: cluster **MASS** beats extent and is specifically better for SMALL
+INTENSE clusters -- exactly the injected target an extent gate refuses. Item
+108's false positive is the **largest block in its scene and nearly the weakest
+mass**, so extent cannot separate it and mass can.
+
+`rs_modal_null()` now shifts **2x2 TILES** independently, preserving correlation
+within a tile and destroying it across -- the 2x2 tile being the same half-width
+stride the block floor and `freq_se`'s `n_eff = n/4` come from -- and admission
+tests `evidence` rather than block size.
+
+**The reports went quiet.** H1 **6 of 6**, H2 passes, H3 2 of 2, H3b 0 of 12 with
+recall 6 of 6. **Every injected run now admits EXACTLY ONE mode and it is the
+injected frequency**, where item 112 admitted 8-10; C10's motionless collect
+**refuses outright**, the first real motionless collect to do so; and **item 96
+is broken for the first time** -- 4 of its 12 motionless scenes now return NO
+modal answer at all, against the 100% answer rate it measured.
+
+**ITEM 108 IS IMPROVED BY AN ORDER OF MAGNITUDE AND NOT SOLVED.** C14's
+motionless control still leads with 0.997 Hz against a sought 1.00 Hz, now at
+**p 0.010** rather than 0.001 and with 2 admitted modes rather than 8. The
+residual is most likely correlation extending **beyond the 2x2 tile**; a fully
+dilated null puts the same block at p ~ 0.5, bracketing the truth. `--stable` is
+still what rejects it. **Bound: C10 at 0.13 mm sits exactly on p = 0.050** --
+the threshold, not a recovery.
 
 **THE RANKING'S STRENGTH TERM WAS MEASURING THE BACKGROUND** (item 112,
 implemented). `median_ratio` was the median over EVERY window that nominated a
@@ -1414,7 +1456,7 @@ catches that. Neither substitutes for the other.
 
 **`docs/HANDOFF.md` is the current state of play** — what the last session
 established, the one named defect to work on next, and the assets on disk. Read
-it before `FOLLOW-UPS.md`, which is 112 items and is the record rather than the
+it before `FOLLOW-UPS.md`, which is 113 items and is the record rather than the
 plan.
 
 The short version: the tracker recovers signals the SELECTION discards, and item
@@ -1422,9 +1464,11 @@ The short version: the tracker recovers signals the SELECTION discards, and item
 SUPPORT gate (28 of a required 34) and, had it been admitted, out-ranked on
 EXTENT by artefacts covering one more window. Item 111 removed the band-edge
 bias manufacturing the artefacts it lost to; item 112 stopped the strength term
-measuring the background. **Recall is now 6 of 6 and the synthetic
-false-positive rate 0 of 12.** Still open: item 108's false positive, which four
-items of work have not moved and nothing but `--stable` rejects.
+measuring the background; item 113 replaced a null that assumed independent
+windows where overlap makes them correlated. **Recall is 6 of 6, the synthetic
+false-positive rate 0 of 12, and every injected run now admits exactly one
+mode.** Item 108's false positive survives at p 0.010 rather than 0.001 --
+improved tenfold, not solved, and still rejected only by `--stable`.
 
 ## State of the work
 

@@ -742,25 +742,25 @@ set** — every bin whose nominating windows form a block chance does not reach,
 ranked by how much evidence that block carries:
 
 ```
-  modal set: 7 modes recurring in >= 4 of 49 voting windows,
+  modal set: 1 mode recurring in >= 4 of 49 voting windows,
            admitted by the size of their largest contiguous block, ranked by
            that block times log of how far they stand above their own background
            (6 nominations each over 62 admissible bins. A scene-wide mode
             would need support 11 for 0.39 bins expected by chance -- that is
             REPORTED, not required: item 110's localised target reached 28 of
             225 against a threshold of 34 and its block said mode anyway)
-           chance alone reaches block 7 here (1000 trials, worst 9), so the
-           block a mode must beat is derived from this configuration, not fixed
+           chance alone reaches evidence 54.0 here (1000 trials, worst 81.7), so what
+           a mode must beat is derived from this configuration, not fixed. The null
+           SHIFTS 2x2 TILES of windows, preserving the correlation that window
+           overlap creates -- an independent draw understates it about tenfold
             0.504 Hz (sub-bin 0.502 +- 0.006)   block  30 (p 0.001)   support  35/49   ratio 126.0   ev 145.1
-            0.756 Hz (sub-bin 0.758 +- 0.020)   block  13 (p 0.001)   support  18/49   ratio 11.3   ev 31.5
-            1.563 Hz (sub-bin 1.554 +- 0.015)   block  10 (p 0.001)   support  11/49   ratio 20.2   ev 30.0
-            1.512 Hz (sub-bin 1.535 +- 0.004)   block   8 (p 0.005)   support   8/49   ratio 34.2   ev 28.3
 ```
 
-That is a 2 mm injection at a true 0.500 Hz, and the ordering is the whole point:
-**the true line leads on `ev` 96.1 while the 1.512 Hz artefact is the SHARPEST
-thing in the band at ratio 34.2** and finishes fourth, on a quarter of the
-ground. Ranking on the ratio alone reports the artefact.
+That is a 2 mm injection at a true 0.500 Hz, and **one mode is admitted.** Before
+item 113 the same scene reported four, led by the same correct answer but with
+the 1.512 Hz artefact — the sharpest line in the band at ratio 34.2 — third.
+The gate now tests `ev` against a null that models the correlation window overlap
+creates, and the competition does not clear it.
 
 Nothing there is tuned. The block floor of 4 is the window geometry, since
 windows are laid at half their width so a resolvable target falls in a 2×2 block
@@ -800,10 +800,18 @@ from 5 of 6 to 6 of 6.
 
 **The chance line is the one to read first.** That floor of 4 is a floor and
 never a separator (item 77): the number of admissible bins falls with the look
-count, so windows agree by accident more often, and `chance alone reaches block
-6` at 128 looks becomes **block 20 at 48 looks**. A block of 21 means opposite
-things at the two settings. The chance model prices that automatically, which a
-fixed constant cannot.
+count, so windows agree by accident more often, and what chance reaches moves
+with the configuration. The chance model prices that automatically, which a fixed
+constant cannot.
+
+**And the null it prices against is a PERMUTATION, not an independent draw**
+(item 113). Windows are laid at half their width, so neighbours share half their
+pixels and their nominations are correlated — measured, an adjacent pair shares
+2.37 of 6 nominations against 0.71 for a random pair. Drawing them independently
+understated what chance reaches by about tenfold, which is
+[the documented failure mode of cluster-extent inference in neuroimaging](https://www.pnas.org/doi/10.1073/pnas.1602413113).
+The null now shifts 2×2 tiles of windows, keeping the correlation inside a tile
+and destroying it across tiles.
 
 **Read the block and the evidence, not the support.** A noise line can be
 nominated by as many windows as a real mode — measured, 12 of 49 each — and loses

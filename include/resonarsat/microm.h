@@ -2059,8 +2059,15 @@ typedef struct {
      * was P(reaching this BLOCK) under an independent draw, and both halves of
      * that were wrong: the statistic ignored strength, and the null ignored the
      * correlation. A p quoted from before item 113 is a different quantity and
-     * is anti-conservative by roughly an order of magnitude. */
+     * is anti-conservative by roughly an order of magnitude.
+     *
+     * This is the OPTIMISTIC end of a bracket (item 114). Its null
+     * under-correlates, because any fixed 2x2 partition destroys the
+     * correlation across its own boundaries; 'p_chance_max' is the conservative
+     * end, and ADMISSION IS GATED ON THAT ONE. Read them as an interval: a mode
+     * whose bracket straddles RS_MODAL_P_MAX is one the evidence cannot place. */
     double p_chance;
+    double p_chance_max;  /* conservative end of the bracket -- the gated one */
 } rs_mode_t;
 
 /* Most modes reported. A structure's low-order modes are what a dwell this
@@ -2153,8 +2160,9 @@ typedef struct {
      * independent null's own 300-trial maximum was 9, and quoted it at p = 0.001
      * against an honest 0.013. See rs_modal_null(). */
     size_t n_trial;       /* Monte Carlo trials run */
-    double null_ev_crit;  /* smallest evidence with p <= RS_MODAL_P_MAX */
-    double null_ev_max;   /* largest evidence any trial reached */
+    double null_ev_crit;  /* optimistic null: evidence at p = RS_MODAL_P_MAX */
+    double null_ev_crit_max; /* conservative null, the GATE (item 114) */
+    double null_ev_max;   /* largest evidence the conservative null reached */
 
     /* THE CLOSEST THING TO A MODE THAT WAS REFUSED, and why a refusal here is
      * diagnosable where a bare "nothing recurs" is not. A candidate can fail

@@ -2921,10 +2921,12 @@ static int rs_cmd_mmotion(int argc, char **argv)
                    ms.null_ev_crit, ms.n_trial, ms.null_ev_max);
             for (size_t i = 0; i < ms.n_mode; i++)
                 printf("           %6.3f Hz (sub-bin %.3f +- %.3f)   block %3zu "
-                       "(p %.3f)   support %3zu/%zu   ratio %.1f   ev %.1f\n",
+                       "(p %.3f-%.3f)   support %3zu/%zu   ratio %.1f   "
+                       "ev %.1f\n",
                        ms.mode[i].freq_hz, ms.mode[i].freq_mean,
                        ms.mode[i].freq_sd, ms.mode[i].n_contiguous,
-                       ms.mode[i].p_chance, ms.mode[i].n_support, ms.n_voting,
+                       ms.mode[i].p_chance, ms.mode[i].p_chance_max,
+                       ms.mode[i].n_support, ms.n_voting,
                        ms.mode[i].median_ratio, ms.mode[i].evidence);
             printf("           The leading figure is the BIN CENTRE, which is what "
                    "every earlier\n"
@@ -2952,7 +2954,7 @@ static int rs_cmd_mmotion(int argc, char **argv)
                        ms.near_miss.freq_hz, ms.near_miss.n_support,
                        ms.n_voting, ms.near_miss.n_contiguous,
                        ms.near_miss.evidence,
-                       ms.near_miss.p_chance, ms.null_ev_crit);
+                       ms.near_miss.p_chance_max, ms.null_ev_crit_max);
             else if (ms.near_miss.n_support > 0)
                 printf("           the closest was %.3f Hz at %zu of %zu windows, "
                        "short of the %zu\n"

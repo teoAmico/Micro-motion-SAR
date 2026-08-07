@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 110 items and their status.
+an index of all 111 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -169,6 +169,42 @@ or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
 
+**THE BAND-EDGE BIAS IS REAL, AND THE FIX IS TO NARROW THE NEIGHBOURHOOD**
+(item 111, implemented). Measured on **200 realisations of noise containing
+NOTHING**, recording which bin won `rs_local_ratio()`'s maximum: the 39% of the
+band whose neighbourhood was clipped took **72% of the maxima**, 2.98% per bin
+against 0.75% -- **4.0x**. It is a VARIANCE effect, not a level one: the
+background is a median, the median of 10 draws is twice as variable as the median
+of 20, and the statistic is then MAXIMISED over the band. Item 110 tried
+WIDENING every neighbourhood to mid-band's 20 and `test_tracking`'s red-floor
+case killed it. **Levelling the count DOWN works** -- every bin takes the 10
+NEAREST references outside the guard, what the band floor itself can supply, so
+the span never exceeds what it was anywhere. **4.0x becomes 0.89x.** Nothing was
+lost: **H1 5 of 6, H3 2 of 2, H3b 1 of 12 with recall 6 of 6**, item 110's
+numbers exactly, and all three pre-registered predictions were correct for the
+first time here. **What changed is an artefact vanishing**: the 10.148 Hz answer
+that led C10's motionless control was **bin 61, inside the starved zone**, and
+the control now leads with a mid-band 5.823 Hz. **The practical gain is in the
+ABSTENTIONS** -- 5 of 12 to 3 of 12 synthetic, 2 of 8 to 1 of 8 real -- because
+fewer answers land on edge bins whose 256-look partner falls above the 128-look
+Nyquist. A discriminator that abstains less at the same false-positive rate is
+strictly better.
+
+**AND THE RANKING'S STRENGTH TERM IS A MEDIAN OVER CHANCE NOMINATORS** (item 111,
+NOT fixed). `tests/test_modalset.c` is the first test ever to touch
+`rs_spectrum_modal_set()` -- not one test contained the word "modal" before it,
+and `test_modalfit.c` is a different estimator despite the name. Writing it
+exposed this: every window nominates `RS_MODAL_PER_WINDOW` bins wherever they
+fall, so each bin collects about `n_win * M / K` nominations from noise alone --
+**22 of 225 at the 65-bin operating point everything here is quoted at**, against
+reported supports of 28-46. Measured, planting a line at gain 40 and at gain 200
+moves `median_ratio` from **5.97 to 6.39**: a factor of five in signal is nearly
+invisible to the statistic that ranks it. The fix is to take the median over the
+LARGEST BLOCK, the mode's measured footprint, instead of over every nominator;
+it changes `evidence` and needs item 110's two arms re-run. **It does not
+invalidate items 109-111** -- the dilution applies to every candidate equally, so
+it costs RESOLUTION rather than biasing toward a frequency.
+
 **A LOCALISED TARGET IS REFUSED BY THE SUPPORT GATE AND THEN OUT-RANKED ON
 EXTENT** (item 110, implemented; **corrects item 109**). Pre-registered at
 `fce5869` with the kill criterion written first. **Item 109's guard-band
@@ -209,9 +245,9 @@ crosses between 0.13 and 0.26 mm — item 103's competition floor, reached
 independently through a different statistic.** **NOT fixed: C14's motionless
 control still leads with 0.997 Hz at `ev` 28.3** against an injected 1.00 Hz, so
 item 108 stands and `--stable` is still the only thing rejecting it. A defect
-found and deliberately left: `rs_local_ratio()` scores band-edge bins against
-**10 reference bins against mid-band's 20**, and the obvious fix fails
-`test_tracking`'s red-floor case — see `docs/CODE-REVIEW.md`.
+found and left for item 111, which fixed it: `rs_local_ratio()` scored band-edge
+bins against **10 reference bins against mid-band's 20**. Read item 111's figures
+in preference to this item's `ev` values, which were measured under that bias.
 
 **THE STABILIZATION TEST CAUGHT A FALSE POSITIVE SITTING ON THE SOUGHT
 FREQUENCY** (item 108). Pre-registered at `25f7351`; `--stable` put on a
@@ -1350,15 +1386,17 @@ catches that. Neither substitutes for the other.
 
 **`docs/HANDOFF.md` is the current state of play** — what the last session
 established, the one named defect to work on next, and the assets on disk. Read
-it before `FOLLOW-UPS.md`, which is 110 items and is the record rather than the
+it before `FOLLOW-UPS.md`, which is 111 items and is the record rather than the
 plan.
 
 The short version: the tracker recovers signals the SELECTION discards, and item
 110 found where — a localised target is refused by the modal set's binomial
 SUPPORT gate (28 of a required 34) and, had it been admitted, out-ranked on
 EXTENT by artefacts covering one more window. Both are fixed and item 109's
-guard-band diagnosis is withdrawn. What is still open is item 108's false
-positive, which nothing but `--stable` rejects.
+guard-band diagnosis is withdrawn. Item 111 then removed the band-edge bias that
+was manufacturing the artefacts it lost to, and named the next defect. Still
+open: item 108's false positive, which nothing but `--stable` rejects, and item
+111's `median_ratio` dilution.
 
 ## State of the work
 

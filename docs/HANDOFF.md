@@ -1,62 +1,61 @@
-# Handoff — 2026-08-07 (second pass)
+# Handoff — 2026-08-07 (third pass)
 
 State of play at commit `HEAD`, written so a new session can pick up without
-re-reading 110 follow-up items. **Read `CLAUDE.md` first; this is the delta.**
+re-reading 111 follow-up items. **Read `CLAUDE.md` first; this is the delta.**
 
-Tree is clean, 22/22 tests pass, ASAN clean, nothing running in the background.
+Tree is clean, 23/23 tests pass, ASAN clean, nothing running in the background.
 
 ---
 
-## 1. Start here: what just closed, and what is open
+## 1. Start here: three items closed, two defects named
 
-**Item 109's named defect was wrong and item 110 fixed the real one.** Item 109
-said `rs_local_ratio()`'s guard band lost the localised target. Measured — by
-replicating the whole nomination offline from a `--shifts` dump, a replica that
-reproduces the binary exactly — sweeping the guard 2 to 8 bins never recovers the
-line, and the Hann-skirt argument does not apply at `--overlap 0` where the floor
-is flat. **That was the third wrong explanation of one failure** (window
-boundary, local clutter, guard band).
+**Items 109 → 110 → 111 are one thread and it is now resolved.** Item 109 said
+`rs_local_ratio()`'s guard band lost a localised target. That was wrong — the
+third wrong explanation of one failure. Item 110 found the target was lost
+**twice**: refused at the binomial `support_min` gate (28 of a required 34,
+because that threshold is a fraction of the whole window grid), and then
+out-ranked on **extent** by artefacts covering one more window. Item 111 removed
+the **band-edge bias** that was manufacturing those artefacts.
 
-The target was lost **twice**, in `rs_spectrum_modal_set()`:
+| | before 110 | item 110 | item 111 |
+|---|---|---|---|
+| H1 recovery (real, 128 looks) | 3 of 6 | 5 of 6 | **5 of 6** |
+| H3 real controls refused | 2 of 2 | 2 of 2 | **2 of 2** |
+| H3b motionless synthetic | 1 of 12 | 1 of 12 | **1 of 12** |
+| injected synthetic recall | 6 of 6 | 6 of 6 | **6 of 6** |
+| synthetic abstentions | 4 of 12 | 5 of 12 | **3 of 12** |
 
-1. **The binomial `support_min` gate.** 34 of 225 required, 28 delivered. That
-   threshold is a fraction of the whole window grid, so a mode on a handful of
-   windows cannot reach it however strong. It is CLAUDE.md's own
-   localised-target rule in the one gate nobody had checked it against.
-2. **Block-first ranking.** Fourth place, behind three artefacts covering one
-   more window each, while leading every rival two-to-one on strength.
+**What item 111 bought is decisiveness, not rate.** The band-edge bias was
+measured on 200 realisations of noise containing nothing: 39% of the band took
+**72% of the maxima**, 4.0x the per-bin rate. Fixing it made the 10.148 Hz
+artefact that led C10's motionless control vanish — it was bin 61, inside the
+starved zone — and dropped abstentions from 5 of 12 to 3 of 12, because fewer
+answers land on edge bins whose 256-look partner falls above the 128-look
+Nyquist.
 
-Both fixed: admission is `RS_MODAL_BLOCK_MIN` (the 2x2 block floor restated, so
-support refuses only what the block gate refuses anyway) with `rs_modal_null()`
-drawn under the same rule so the chance block rises to compensate; ranking is
-`evidence = n_contiguous * log(median_ratio)`.
+**The fix direction is the lesson.** Widening every neighbourhood to the count
+mid-band has is the obvious fix, it equalises the count, and `test_tracking`'s
+red-floor case kills it: on a floor rolling off as sinc² it reaches past the
+first null. **Narrowing to the count the band FLOOR can supply** equalises the
+count the other way and never enlarges the span. The header had said a steep
+floor needs a narrower neighbourhood since item 47.
 
-**H1 5 of 6** (was 3), **H3 2 of 2**, kill criterion **H3b 1 of 12** unchanged
-from item 107, injected recall **6 of 6** unchanged.
+### The two named defects, in the order I would take them
 
-### The one thing that did NOT move, and is now the named defect
-
-**Item 108's false positive.** C14's motionless control still leads with
-**0.997 Hz at `ev` 28.3** against an injected 1.00 Hz. Nothing in item 110
-touches it; `--stable` is still the only thing that rejects it, on the strength
-of a 256-look answer of 5.996 Hz. A scene with nothing in it answering 0.003 Hz
-from the frequency being sought is the sharpest open problem here.
-
-### And recovery is now a number you can read off the report
-
-`ev` for the injected line against its own scene's competition, 128 looks:
-
-| amp mm | C10 injected | C10 competition | C14 injected | C14 competition |
-|---|---|---|---|---|
-| 0.00 | — | **25.0** | — | **28.3** |
-| 0.13 | 16.6 (5th) | 23.8 | **40.5** | 15.5 |
-| 0.26 | **24.0** | 23.8 | **51.6** | 15.5 |
-| 0.53 | **28.5** | 23.8 | **55.1** | 17.5 |
-
-C10 crosses between 0.13 and 0.26 mm — **item 103's competition floor, reached
-independently through a different statistic.** That is the first time this
-project has had a *reportable* quantity that predicts recovery rather than
-explaining it afterwards.
+1. **`median_ratio` is a median over CHANCE nominators** (item 111, measured, not
+   fixed). Every window nominates `RS_MODAL_PER_WINDOW` bins wherever they fall,
+   so each bin collects ~`n_win * M / K` nominations from noise alone — **22 of
+   225 at the 65-bin operating point**, against reported supports of 28-46.
+   Planting a line at gain 40 and at gain 200 moves `median_ratio` from **5.97
+   to 6.39**: a factor of five in signal, nearly invisible to the statistic that
+   ranks it. Fix: median over the **largest block**, the mode's measured
+   footprint, not over every nominator. Needs `nom[k]` indexed by window and
+   `rs_largest_block()` returning membership. Changes `evidence`, so it needs
+   both arms re-run behind a pre-registration.
+2. **Item 108's false positive.** C14's motionless control leads with
+   **0.997 Hz at `ev` 28.0** against an injected 1.00 Hz. Three items have now
+   changed the selection around it and it has not moved; only `--stable` rejects
+   it, on a 256-look answer of 9.327 Hz.
 
 ---
 
@@ -69,6 +68,7 @@ explaining it afterwards.
 | `rs_microm_floor()` | per-window detectable-amplitude floor from that window's circular phase sd; `floor_mm` in the CSV | 103 |
 | `mmotion --stable CSV` | keeps only frequencies surviving a change of **look count** | 107, 109 |
 | `rs_mode_t.evidence` | `n_contiguous * log(median_ratio)`, the modal set's ranking key; `ev` in the report | 110 |
+| `tests/test_modalset.c` | the first test over `rs_spectrum_modal_set()`; pins admission against ranking in both directions | 111 |
 | `rs_transient_fit()` / `--tfit` | damped-sinusoid fit with onsets; works, changes nothing at chain level | 81 |
 | `docs/PREREGISTRATION.md` | the form; `tools/new-run.sh` seeds `PREREG.md` per run | 92 |
 
@@ -147,23 +147,16 @@ the run are how three wrong explanations got caught.**
 
 ## 7. Open, in the order I would take them
 
-1. **Item 108's false positive**, now the sharpest thing here: a motionless real
-   collect leads with 0.997 Hz at `ev` 28.3 against an injected 1.00 Hz, and only
-   `--stable` refuses it. Item 110 raised the ranking's resolution without
-   touching this.
-2. **A test over `rs_spectrum_modal_set()`**, which has none — item 110 changed
-   its admission rule and its sort key and `ctest` could not have noticed. See
-   `docs/CODE-REVIEW.md` for what it needs to pin.
-3. **`rs_local_ratio()`'s band-edge starvation** — 10 reference bins at the band
-   floor against 20 mid-band, measured to matter (bin 3's block 14 → 9) and
-   NOT fixed, because the obvious fix fails `test_tracking`'s red-floor case.
-   Needs a narrower neighbourhood or a fitted slope. `docs/CODE-REVIEW.md`.
-4. **Item 98's remaining two**: the CCD *double change map* (two twins), and
+1. **`median_ratio`'s chance dilution** and **item 108's false positive** — both
+   in §1 above, with their measurements.
+2. **Item 98's remaining two**: the CCD *double change map* (two twins), and
    Bayer & Seljak's self-calibrating look-elsewhere correction, which needs no
    Monte Carlo and works per window where `p_chance` works on the block.
-5. **`--stable` with closer look counts** (128 vs 192): it abstained on 2 of 8
-   real comparisons in item 110 because the 256-look answer landed above the
-   128-look Nyquist. Closer counts share more band.
-6. **Naples mode shapes** (item 94) — sensor *x,y,z* exist, so a real mode shape
+3. **`--stable` with closer look counts** (128 vs 192): it still abstained on
+   1 of 8 real comparisons in item 111 because the 256-look answer landed above
+   the 128-look Nyquist. Closer counts share more band, and item 111 shows this
+   axis is worth something — removing the edge bias alone took synthetic
+   abstentions from 5 of 12 to 3.
+4. **Naples mode shapes** (item 94) — sensor *x,y,z* exist, so a real mode shape
    could be injected. Needs spatially-varying injection, which
    `--inject-wave` does not support.

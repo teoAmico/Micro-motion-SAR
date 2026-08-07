@@ -622,7 +622,11 @@ both look counts can have its strongest window report 0.504 at one and 2.571 at
 the other, so comparing windows would reject a true recovery. That makes this
 test downstream of the modal set's ranking — when item 110 changed the ranking,
 these figures were re-measured on the same twelve scenes and came out identical,
-1 of 12 and 6 of 6, with a *different* scene surviving.
+1 of 12 and 6 of 6, with a *different* scene surviving. Item 111 re-measured them
+again after fixing a band-edge bias in the nomination and got 1 of 12 and 6 of 6
+once more — but the ABSTENTIONS fell from 5 of 12 to 3, because fewer answers
+land on band-edge bins whose 256-look partner falls above the 128-look Nyquist.
+The rate is what the test is quoted at; the abstention count is what changed.
 
 **It refuses what it cannot test:** equal look counts (vacuous), a different
 window grid, or a missing file. It warns when `df` differs, since that is a
@@ -738,7 +742,7 @@ set** — every bin whose nominating windows form a block chance does not reach,
 ranked by how much evidence that block carries:
 
 ```
-  modal set: 4 modes recurring in >= 4 of 49 voting windows,
+  modal set: 7 modes recurring in >= 4 of 49 voting windows,
            admitted by the size of their largest contiguous block, ranked by
            that block times log of how far they stand above their own background
            (6 nominations each over 62 admissible bins. A scene-wide mode
@@ -747,11 +751,16 @@ ranked by how much evidence that block carries:
             225 against a threshold of 34 and its block said mode anyway)
            chance alone reaches block 7 here (1000 trials, worst 9), so the
            block a mode must beat is derived from this configuration, not fixed
-            0.504 Hz (sub-bin 0.502 +- 0.006)   block  30 (p 0.001)   support  35/49   ratio 25.0   ev 96.6
-            1.512 Hz (sub-bin 1.535 +- 0.004)   block  11 (p 0.001)   support  11/49   ratio 38.8   ev 40.2
-            0.756 Hz (sub-bin 0.755 +- 0.017)   block  10 (p 0.001)   support  12/49   ratio 9.3   ev 22.3
-            2.167 Hz (sub-bin 2.159 +- 0.013)   block   7 (p 0.025)   support  10/49   ratio 4.1   ev 10.0
+            0.504 Hz (sub-bin 0.502 +- 0.006)   block  30 (p 0.001)   support  35/49   ratio 24.6   ev 96.1
+            0.756 Hz (sub-bin 0.758 +- 0.020)   block  13 (p 0.001)   support  18/49   ratio 10.1   ev 30.1
+            1.563 Hz (sub-bin 1.554 +- 0.015)   block  10 (p 0.001)   support  11/49   ratio 17.0   ev 28.3
+            1.512 Hz (sub-bin 1.535 +- 0.004)   block   8 (p 0.005)   support   8/49   ratio 34.2   ev 28.3
 ```
+
+That is a 2 mm injection at a true 0.500 Hz, and the ordering is the whole point:
+**the true line leads on `ev` 96.1 while the 1.512 Hz artefact is the SHARPEST
+thing in the band at ratio 34.2** and finishes fourth, on a quarter of the
+ground. Ranking on the ratio alone reports the artefact.
 
 Nothing there is tuned. The block floor of 4 is the window geometry, since
 windows are laid at half their width so a resolvable target falls in a 2×2 block
@@ -777,6 +786,16 @@ hands this very fixture to the 1.512 Hz artefact — sharper than the true line,
 a third of the ground. It is an **ordering** statistic only; overlapping windows
 are not independent looks, so do not exponentiate it or read it as a likelihood
 ratio.
+
+**One known weakness in `ratio`, so you do not over-read it** (item 111). It is
+the median over every window that nominated the bin — and each window nominates
+six bins wherever they fall, so on a 62-bin band about **22 of 225 windows
+nominate any given bin from noise alone**. A mode carried by a dozen windows
+therefore has its strength measured by a median that is mostly background:
+measured, planting a line at five times the amplitude moves `ratio` from 5.97 to
+6.39. It compresses the ranking rather than biasing it toward any frequency, so
+it costs resolution and not correctness. The fix — median over the largest block
+instead of over every nominator — is in `docs/CODE-REVIEW.md` and is not done.
 
 **The chance line is the one to read first.** That floor of 4 is a floor and
 never a separator (item 77): the number of admissible bins falls with the look

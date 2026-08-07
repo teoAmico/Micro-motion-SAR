@@ -1,0 +1,3 @@
+
+  starved bins: 24 of 62 (39% of the band) took 36% of the maxima
+  per-bin rate: starved 1.50%  vs  full 1.68%   ratio 0.89x

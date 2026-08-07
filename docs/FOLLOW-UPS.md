@@ -152,6 +152,7 @@ said, not better) and item 7's line numbers.
 | 108 | **bounds 107** | it caught a motionless scene answering 0.997 Hz; but recall on a weak OFF-CENTRE target is untested and it abstains 3 of 8 |
 | 109 | **names the defect** | the injected line wins on support AND block and is still not reported: the loss is in the local-ratio NOMINATION |
 | 110 | **corrects 109 and fixes it** | not the guard band: the localised target is refused by the SUPPORT gate at 28 of 34, then out-ranked on EXTENT. 5 of 6 recover, false positives unchanged at 1/12 |
+| 111 | **fixes 110's leftovers** | the band-edge bias is real and measured (72% of maxima on 39% of the band); the fix is to NARROW not widen. Nothing lost, one artefact gone, abstentions 5/12 -> 3/12. Third defect named: median_ratio is a median over CHANCE nominators |
 
 ---
 
@@ -9420,3 +9421,110 @@ deep tail and inflates the low bins it was meant to demote. What a real fix need
 is in `docs/CODE-REVIEW.md`; it is a narrower neighbourhood or a fitted slope,
 which is what `rs_spectrum_local_window()`'s header already said and nobody had
 needed until now.
+
+---
+
+## 111. The band-edge bias was real, the fix is to NARROW the neighbourhood, and a third defect is now named: the ranking's strength term is a median over chance nominators.
+
+Pre-registered at `8885312` with item 110's thresholds restated unchanged,
+because this is a re-measurement of the same claim under a changed estimator and
+moving the bar would make the comparison meaningless.
+`runs/kilauea/2026-08-07-refbins/`, `runs/synthetic/2026-08-07-refbins-null/`.
+
+### The bias, measured for the first time on scenes containing nothing
+
+Item 110 asserted the band-edge starvation mattered and left it. It does. On
+**200 realisations of flat unit-mean noise with nothing planted at all**,
+recording which bin won `rs_local_ratio()`'s maximum each time:
+
+| | starved bins (24 of 62, 39% of the band) | full-neighbourhood bins |
+|---|---|---|
+| before | **72% of maxima**, 2.98% per bin | 0.75% per bin |
+| after | 36% of maxima, 1.50% per bin | 1.68% per bin |
+
+**4.0x over-representation becomes 0.89x.** The mechanism is variance, not level:
+the background is a MEDIAN, the median of 10 draws is about twice as variable as
+the median of 20, and the statistic is then MAXIMISED over the band, so the
+noisier denominators win the maximum out of proportion to their content. The
+measurement is `runs/kilauea/2026-08-07-refbins/measure_edge_bias.c`.
+
+### The fix is the OPPOSITE of the one item 110 tried
+
+Item 110 widened -- grow the neighbourhood outward until every bin has the 20
+references mid-band has -- and `test_tracking`'s red-floor case killed it,
+because on a floor rolling off as sinc^2 the extension reaches past the first
+null into the deep tail and inflates the low bins it was meant to demote.
+**Levelling the count DOWN works**: every bin takes the
+`RS_LOCAL_HALF_BINS - RS_LOCAL_GUARD_BINS` = 10 NEAREST references outside the
+guard, which is what the bin at the band floor can supply. The span then never
+exceeds what it was anywhere and mid-band shrinks to about +-7. A narrower
+neighbourhood is what `rs_spectrum_local_window()`'s header has said a steep
+floor needs since item 47; widening was the opposite of its own advice.
+
+### Measured: nothing lost, one artefact gone
+
+**H1 5 of 6, H3 2 of 2, and the kill criterion H3b 1 of 12 with injected recall
+6 of 6** -- item 110's numbers exactly. **All three pre-registered predictions
+were correct**, the first time that has happened here; items 103, 105, 109 and
+110 each recorded one that was wrong.
+
+**What visibly changed is an artefact disappearing.** The 10.148 Hz answer that
+led C10's motionless control in item 110 is **bin 61, inside the starved zone**,
+and it is gone: the control now leads with 5.823 Hz, a mid-band bin, and the
+competition fell with it.
+
+| | item 110 | item 111 |
+|---|---|---|
+| C10 competition `ev` | 23.8 - 25.0 | **17.1 - 18.8** |
+| C10 leading control frequency | 10.148 Hz (bin 61, starved) | 5.823 Hz (mid-band) |
+| real-arm abstentions | 2 of 8 | **1 of 8** |
+| synthetic abstentions | 5 of 12 | **3 of 12** |
+
+The abstentions are the practical gain: fewer answers land on band-edge bins, so
+fewer 256-look answers fall above the 128-look Nyquist and `--stable` decides on
+9 of 12 motionless scenes where it decided on 7. **A discriminator that abstains
+less at the same false-positive rate is strictly better**, and that -- not the
+rate -- is what this bought.
+
+C10 still crosses between 0.13 and 0.26 mm, so item 110's agreement with item
+103's competition floor stands. **The 0.26 mm margin is thin in both runs**, 19.6
+against 18.7 here and 24.0 against 23.8 there; do not quote it as comfortable.
+
+### THE THIRD DEFECT, FOUND BY THE TEST THAT DID NOT EXIST
+
+`tests/test_modalset.c` now covers `rs_spectrum_modal_set()` -- until this, **not
+one test in the suite contained the word "modal"**, and `test_modalfit.c` is a
+different estimator despite the name. It reproduces item 109's geometry (a
+localised block of 16 at ratio 68 beating a broad block of 20 at ratio 16) and
+item 107's (a broad block of 30 at ratio 27 beating a sharp block of 9 at ratio
+48), so reverting to either ranking key alone is caught **in both directions**.
+
+Writing it exposed something none of items 70-110 had noticed. **`median_ratio`,
+the strength term in the ranking key, is a median over CHANCE nominators.** Every
+window nominates `RS_MODAL_PER_WINDOW` bins wherever they fall, so each bin of a
+K-bin band collects about `n_win * M / K` nominations from noise alone --
+**22 of 225 at the 65-bin operating point everything in this file is quoted at**,
+against reported supports of 28 to 46 on the item 109 collect. Measured: planting
+a line on 16 windows at gain 40 and at gain 200 -- a factor of five in signal --
+moves `median_ratio` from **5.97 to 6.39**. The plant is nearly invisible to the
+statistic that ranks it. The test had to move to a 257-bin band, where the chance
+floor is about 5, before a plant dominated its own statistics.
+
+**The fix is to take the median over the windows in the LARGEST BLOCK** rather
+than over every nominator: the block is already computed and is the mode's
+measured footprint, so scattered chance nominators are excluded by construction.
+It changes `evidence` and needs these two arms run again behind a
+pre-registration. Not done; `docs/CODE-REVIEW.md` carries it.
+
+**It is not a reason to doubt items 109-111.** The dilution applies to every
+candidate in a scene equally, so it costs the ranking RESOLUTION rather than
+biasing it toward a frequency, and the arms measured the ranking end to end at
+the operating point in use. It is a reason to expect better separation once
+fixed, not a different answer.
+
+### What still does not move
+
+**C14's motionless control leads with 0.997 Hz at `ev` 28.0** against an injected
+1.00 Hz. Three items have now changed the selection around it and item 108 is
+exactly where it was: only `--stable` rejects it, on the strength of a 256-look
+answer of 9.327 Hz.

@@ -156,6 +156,7 @@ said, not better) and item 7's line numbers.
 | 112 | **first 6 of 6** | the ranking's strength term was a median over CHANCE nominators; over the mode's own block instead, recall 5/6 -> 6/6 and synthetic false positives 1/12 -> 0/12. Item 103's competition floor is a property of the SELECTION too |
 | 113 | **fixes 108's cause** | the null assumed windows nominate independently where 50% overlap makes neighbours correlated -- Eklund/Nichols/Knutsson's published cluster-failure mode. Permutation null on cluster MASS: injected runs admit ONE mode, item 96's 100% answer rate broken, 108's p 0.001 -> 0.010 but not refused |
 | 114 | **REFUSES item 108** | correlation is confined to ADJACENT windows, so 113's residual guess was wrong; the real one is that any fixed partition loses correlation at its boundaries and no permutation null can be exact. Bracket p between two nulls, gate on the conservative: item 108 refused at p 0.342, recall 5/6, 8/12 motionless scenes silent |
+| 115 | **ladder, not pair** | the field persists a pole across SEVERAL consecutive model orders; item 107 built the two-point case. The ladder decides 12 of 12 motionless scenes where the pair decided 1, keeps 6/6 injected -- and its chance model is wrong for the THIRD time, because rungs share pulses as windows share pixels |
 
 ---
 
@@ -9874,3 +9875,90 @@ conservative there); the synthetic arm gained a refusal, 8 of 12 to 9 of 12.
   together; the synthetic injection is 2 mm, 6.9x that fixture's floor.
 - Two real collects, one placement, one operating point, target put where it was
   found. **Still a selection result, not a detection.**
+
+---
+
+## 115. The stabilization test should be a LADDER, and the field said so. It decides 12 of 12 where a pair decided 1 -- and its chance model is wrong for the third time, on a third axis.
+
+Pre-registered before the sweep. `runs/synthetic/2026-08-07-ladder/`.
+
+### The literature: item 107 built the two-point special case
+
+Item 107 implemented the OMA stabilization diagram as **one run at 128 looks
+against one at 256**. Searched properly this time -- the eighth time this
+project's own rule has paid -- the field sweeps model order over a **RANGE** and
+marks a pole stable only when it persists across **SEVERAL CONSECUTIVE** orders,
+**five** being the figure usually quoted, with tolerances like 1% in frequency
+and MAC >= 0.95 between successive orders. Automated methods (Reynders et al.
+2012 and successors) go further and **CLUSTER** poles across the whole diagram
+rather than comparing two of them.
+
+Two reasons it matters here. A pair agreeing by chance is about `1/n_bin` --
+**0.016 at 62 bins, only just under a 5% bar** -- and item 107's surviving
+1-of-12 false positive is exactly a lucky pair. And **item 114 made single rungs
+REFUSE** often enough that a two-point test loses its partner and abstains.
+
+What does NOT transfer, and is recorded rather than borrowed: their tolerances
+are for SSI poles, far more precise than a periodogram bin, so the tolerance here
+stays half a bin; and this chain has no damping or mode shape to require
+consistency in, so persistence in FREQUENCY is all that is available.
+
+### Built
+
+`--stable` takes a **comma-separated list**. Each file is a rung, this run is a
+rung, rungs sort by look count, adjacent pairs are compared inside the band that
+PAIR shares, and the statistic is the **longest chain of consecutive agreeing
+rungs**. A refusing rung **breaks a chain instead of ending the test**, which is
+what a ladder buys.
+
+### Measured, on 96/128/160/192/224/256 looks
+
+| | two-point (item 114) | ladder |
+|---|---|---|
+| injected reported | 6/6 | **6/6**, every one on a full 6-rung chain |
+| motionless reported | 0/12 | **1/12** |
+| motionless given a DEFINITE verdict | **1/12** | **12/12** |
+
+**That last row is the result.** The pair could decide only one motionless scene
+because item 114 left its partners refusing; the ladder decides all twelve --
+eleven with no two rungs agreeing at all.
+
+### AND THE CHANCE MODEL IS WRONG AGAIN, ON A THIRD AXIS
+
+Seed 31 -- which survived items 107, 110 and 111 -- reports on a chain of
+**four** at a claimed p of **0.0000**:
+
+```
+   96 looks 0.954 | 128 looks 0.958 | 160 looks 0.950 | 192 looks 0.965
+  224 looks 0.153 | 256 looks 0.151
+```
+
+**A motionless scene holds ~0.95 Hz across four consecutive look counts.**
+`rs_stable_p()` prices that at 3 x (1/62)^3 = 1.3e-5 and it happened on 1 of 12
+scenes -- **wrong by four orders of magnitude**. The cause is the assumption:
+**rungs are not independent.** Every rung uses the SAME pulses over the SAME
+dwell, divided differently, so 192 looks and 224 looks build sub-apertures from
+largely the same phase history and a scene-pinned artefact survives the change.
+
+**This is item 113's error on a second axis and the THIRD time here that a chance
+model has assumed independence where the construction manufactures correlation**
+-- windows overlapping in pixels (113), and now rungs overlapping in pulses.
+The pattern is now explicit enough to state as a rule: **in this chain, anything
+built by re-dividing one dwell is correlated with everything else built the same
+way, and no chance model may assume otherwise.**
+
+### What stands
+
+- **The persistence statistic is sound and is a real improvement.** Read the
+  CHAIN LENGTH.
+- **Its p is not calibrated. Do not quote it.** `docs/CODE-REVIEW.md` carries
+  what a fix has to do.
+- H3b passes at its bar of 1 of 12 but **for the wrong reason**: the ladder did
+  not remove item 107's surviving false positive, it re-detected it with more
+  confidence.
+
+### Bounds
+
+One fixture family, one operating point, one amplitude (2 mm, 6.9x this
+fixture's floor). **Not run on real Kilauea data** -- 6 rungs x 8 configurations
+at ~75 s is a 60-minute arm, deferred.

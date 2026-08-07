@@ -1,75 +1,77 @@
-# Handoff — 2026-08-07 (sixth pass)
+# Handoff — 2026-08-07 (seventh pass)
 
 State of play at commit `HEAD`, written so a new session can pick up without
-re-reading 114 follow-up items. **Read `CLAUDE.md` first; this is the delta.**
+re-reading 115 follow-up items. **Read `CLAUDE.md` first; this is the delta.**
 
 Tree is clean, 23/23 tests pass, ASAN clean, nothing running in the background.
 
 ---
 
-## 1. Start here: the selection arc is finished, and item 108 is closed
+## 1. The one rule this session produced
 
-**Items 109 → 114 took the selection stage apart, one defect at a time.**
+**In this chain, anything built by RE-DIVIDING ONE DWELL is correlated with
+everything else built the same way, and no chance model may assume otherwise.**
 
-| | before 110 | 110 | 111 | 112 | 113 | 114 |
-|---|---|---|---|---|---|---|
-| H1, 128-look answer correct (real) | 3/6 | 5/6 | 5/6 | 6/6 | 6/6 | **5/6** |
-| real motionless controls refused | 0/2 by chain | 0/2 | 0/2 | 0/2 | 1/2 | **2/2** |
-| motionless synthetic reporting | 1/12 | 1/12 | 1/12 | 0/12 | 0/12 | **0/12** |
-| motionless synthetic REFUSED @128 | 0/12 | 0/12 | 0/12 | 0/12 | 4/12 | **9/12** |
-| item 108's artefact, p | 0.001 | 0.001 | 0.001 | 0.001 | 0.010 | **0.342, refused** |
+Three chance models have now assumed independence and been wrong:
 
-Five defects, each visible only once the previous was fixed: the **admission**
-threshold (110), the **band-edge bias** (111), the **strength term** (112), the
-**null's independence assumption** (113), and the fact that **no permutation null
-on the nominations can be exact** (114).
+| model | assumed independent | actually shares | error |
+|---|---|---|---|
+| `rs_modal_null()` before item 113 | window nominations | **pixels** (50% overlap) | p 0.001 for an honest 0.013 |
+| `rs_stable_p()` (item 115, **unfixed**) | ladder rungs | **pulses** (same dwell) | p 1.3e-5 for a 1-in-12 event |
+| item 80's block null | — | — | superseded by the above |
 
-**Item 108 is closed.** The collect that led with 0.997 Hz against a sought
-1.00 Hz now returns *nothing recurs*, and both real motionless controls are
-refused by the chain rather than by `--stable`.
+Item 114 established both the remedy and its limit: a permutation that preserves
+the correlation, and a **bracket** when no such permutation can be exact.
 
-## 2. The two costs item 114 charged
+## 2. Where the selection stage ended up (items 109–115)
 
-- **H1 fell 6/6 → 5/6.** C10 at 0.13 mm is refused at p 0.942. Item 113 had it at
-  exactly p = 0.050 and already called it "the threshold, not a recovery".
-- **`--stable` reportable fell 5/6 → 3/6, and this was NOT predicted.** It rejects
-  nothing; the **256-look runs now refuse**, so there is no partner to compare
-  against. A more specific chain gives the stabilization test less to work with.
+| | before 110 | 114 | 115 |
+|---|---|---|---|
+| H1 recovery, real | 3/6 | 5/6 | — (real arm not run) |
+| real motionless controls refused by the chain | 0/2 | **2/2** | — |
+| motionless synthetic reported | 1/12 | 0/12 | 1/12 |
+| motionless synthetic given a DEFINITE verdict | — | 1/12 | **12/12** |
+| injected synthetic | 6/6 | 6/6 | **6/6** |
 
-## 3. What I would do next, in order
+**Item 108 is closed** (item 114): the collect that led with 0.997 Hz against a
+sought 1.00 Hz now returns *nothing recurs*, its artefact's p having gone
+0.001 → 0.010 → 0.342 across four items.
 
-1. **`--stable` at 128 vs 192 looks.** Promoted to the top *by* item 114's second
-   cost. Closer counts share more band (fewer "not comparable" abstentions,
-   item 108's old weakness) **and** both runs are likelier to clear the gate.
-   Cheap, needs no new data, repairs what 114 damaged.
-2. **TFCE** (Smith & Nichols 2009) — the literature's third remedy, untaken. It
-   removes the arbitrary cluster-forming threshold, here `RS_MODAL_PER_WINDOW`,
-   which item 71 measured as consequential.
-3. **Item 98's remaining two**: the CCD double change map, and Bayer & Seljak's
-   self-calibrating look-elsewhere correction.
+**`--stable` is now a ladder** (item 115): a comma-separated list of runs at
+different look counts, scored by the longest chain of consecutive agreeing rungs.
+**Read the chain length; the p is not calibrated** — see §1.
 
-**But the strategic point: items 109–114 are all SELECTION.** Six items made the
-chain much better at NOT answering and none of them changed what the tracker can
-see. Nothing here has detected real motion; the target is still put where it is
-found. The archive search is finished and negative (item 85), and the field's own
-validations either bolt corner reflectors to the structure (item 104) or use a
-steel bridge that supplies its own 20-26 dB (item 106). The next real frontier is
-a collect over something that moves and is independently instrumented — **Naples
-(item 94) is the cheapest approximation**, and it needs spatially-varying
-injection that `--inject-wave` does not support.
+## 3. What I would do next
 
-## 4. A method lesson worth keeping
+1. **A null for the ladder that re-divides the dwell rather than drawing
+   frequencies.** This is the named defect in §1, and it is the first null here
+   that costs real processing runs rather than a Monte Carlo over labels. Items
+   113–114 give the shape: preserve the correlation, and bracket if you cannot.
+2. **Run the ladder on real Kilauea data.** Deferred as a 60-minute arm
+   (6 rungs × 8 configurations at ~75 s). Everything in item 115 is synthetic.
+3. **TFCE** (Smith & Nichols 2009) — removes the arbitrary cluster-forming
+   threshold, here `RS_MODAL_PER_WINDOW`, which item 71 measured as consequential.
 
-**Read a bracket's ORDER, not just its width.** Item 114's first pass was
-discarded because the printed interval read `54.0 to 42.9` — the "conservative"
-null below the optimistic one, because that draw was not monotone in the thing it
-was supposed to vary. It would have reintroduced the very anti-conservatism the
-item exists to remove.
+**The strategic point is unchanged and worth repeating**: items 109–115 are all
+SELECTION. Seven items made the chain much better at NOT answering — item 96's
+100% false-positive rate is gone, three quarters of motionless scenes are silent,
+and item 108 is closed — and **none of them changed what the tracker can see.**
+Nothing here has detected real motion; the target is still put where it is found.
+The next real frontier is a collect over something that moves and is
+independently instrumented; Naples (item 94) is the cheapest approximation and
+needs spatially-varying injection that `--inject-wave` does not support.
 
-**And measure the explanation before building on it.** Four explanations in this
-arc were wrong (window boundary, local clutter, guard band, correlation length);
-the last was caught *before* anything was built on it, by measuring the
-correlation as a function of window separation first.
+## 4. Method lessons that earned their keep
+
+- **Search the literature BEFORE designing.** Eight times now. Items 113 and 115
+  were both solved problems in another field (cluster-extent inference; OMA
+  stabilization diagrams), and in both cases this project had built the
+  degenerate special case.
+- **Read a bracket's ORDER, not just its width** (item 114) — a printed interval
+  of `54.0 to 42.9` caught a gate that was anti-conservative on some scenes.
+- **Measure the explanation before building on it** (item 114) — four
+  explanations in this arc were wrong; the last was caught in advance by
+  measuring correlation against window separation first.
 
 ---
 
@@ -86,6 +88,7 @@ correlation as a function of window separation first.
 | block-median `median_ratio` | strength summarised over the mode's footprint, not over every nominator | 112 |
 | permutation null on cluster mass | 2x2 tile-shift preserves the correlation overlap creates; the gate tests `ev` | 113 |
 | bracketed p, gated on the conservative end per scene | no permutation null here can be exact, so bound it both ways | 114 |
+| `--stable CSV,CSV,...` | a LADDER of look counts; longest chain of consecutive agreeing rungs | 115 |
 | `rs_transient_fit()` / `--tfit` | damped-sinusoid fit with onsets; works, changes nothing at chain level | 81 |
 | `docs/PREREGISTRATION.md` | the form; `tools/new-run.sh` seeds `PREREG.md` per run | 92 |
 
@@ -164,7 +167,8 @@ the run are how three wrong explanations got caught.**
 
 ## 7. Open, in the order I would take them
 
-1. **`--stable` at 128 vs 192 looks**, and **TFCE** — §3 above.
+1. **A ladder null that re-divides the dwell**, and the real-data ladder arm —
+   §3 above.
 2. **Item 98's remaining two**: the CCD *double change map* (two twins), and
    Bayer & Seljak's self-calibrating look-elsewhere correction, which needs no
    Monte Carlo and works per window where `p_chance` works on the block.

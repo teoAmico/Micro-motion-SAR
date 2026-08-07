@@ -42,10 +42,36 @@ reader's memory model rather than to a flag.
 report geometry and timing, so it cannot describe a product larger than RAM --
 the one command whose entire job is to tell you what you have.
 
+## `rs_stable_p()` assumes the ladder's rungs are independent, and they share pulses
+
+`rs_stable_p()` (`src/main.c`) prices a chain of `r` consecutive agreeing rungs
+as `(n_rung - r + 1) / n_bin^(r-1)`, which is right only if each rung's reported
+frequency is an independent draw over the band. **Every rung re-divides the SAME
+pulses over the SAME dwell** -- 192 looks and 224 looks build sub-apertures from
+largely the same phase history -- so a scene-pinned artefact survives the change
+and consecutive rungs agree far more often than the model allows.
+
+**Measured** (item 115): on a MOTIONLESS scene, seed 31 holds 0.954 / 0.958 /
+0.950 / 0.965 Hz across four consecutive look counts. The model prices that at
+**1.3e-5**; it occurred on **1 of 12** scenes. Wrong by four orders of magnitude.
+
+**This is the third chance model in this project to assume independence where the
+construction manufactures correlation** -- `rs_modal_null()` over windows that
+share pixels (item 113), and this over rungs that share pulses. Items 113 and 114
+established both the remedy and its limit: a permutation that preserves the
+correlation, and a bracket when no such permutation can be exact.
+
+**Not fixed.** A fix has to build the null by re-dividing the same dwell rather
+than by drawing frequencies, which means the null costs real processing runs
+rather than a Monte Carlo over labels — the first time that has been true here.
+Until then the CHAIN LENGTH is the statistic to read and the p must not be
+quoted.
+
 ## Reviews performed
 
 | date | commit | scope | outcome |
 |---|---|---|---|
+| 2026-08-07 | `c2a0849` | Item 114's cost: the stabilization test losing its partner | **The field had the answer and item 107 had built its two-point special case.** OMA stabilization diagrams sweep model order and require persistence across several consecutive orders; `--stable` now takes a ladder and reports the longest chain of consecutive agreeing rungs. Measured on six look counts, it gives a definite verdict on **12 of 12** motionless scenes where the pair managed **1**, and keeps 6 of 6 injected on full 6-rung chains. **Its derived p is wrong by four orders of magnitude** — a motionless scene holds ~0.95 Hz across four consecutive rungs — because rungs share pulses exactly as windows share pixels. Third chance model here to assume independence where the construction manufactures correlation. |
 | 2026-08-07 | `6fb1cb4` | Item 113's residual: is the permutation null still anti-conservative? | **Yes, and it cannot be made exact -- so bracket it.** Item 113 guessed the correlation reached beyond its 2x2 tile; measured, it is confined to ADJACENT windows (2.16 shared of 6 at separation 1, 0.59 at separation 2 against a 0.63 baseline), which is the pixel-sharing range and means the tile was right. The real residual is that any fixed partition destroys correlation across its own boundaries -- half of adjacent pairs straddle one, so the null reproduces 66% of observed sharing; jittering gives 63%, and a boundary-free field only matches as it becomes globally constant, preserving what it should destroy. Two nulls now bound the truth and admission gates on the conservative end. **Item 108's false positive is refused at p 0.342 after four items at 0.001 and 0.010**, both real motionless controls go silent, 8 of 12 motionless synthetic scenes refuse outright against item 96's 12-of-12 answer rate, and recall is 5 of 6. Unpredicted cost recorded: `--stable` reportable falls 5 of 6 to 3 of 6 because the 256-look runs now refuse, leaving no partner to compare. |
 | 2026-08-07 | `87d27eb` | Item 108's false positive, chased to a cause | **The chance model was invalid, and it is a published failure mode.** `rs_modal_null()` drew each window's nominations independently where 50% window overlap makes neighbours strongly correlated -- measured, an adjacent pair shares 2.37 of 6 nominations against 0.71 for a random pair, and the independent null's own 300-trial maximum block is 9 where a real motionless scene shows 17, quoted at p 0.001 against an honest 0.013. One motionless scene had eight bins clearing p <= 0.05 against a family-wise budget of 0.05. This is Eklund, Nichols & Knutsson (PNAS 2016) exactly -- cluster-extent inference invalidated by a mis-modelled spatial autocorrelation -- and their remedies are a permutation null and cluster MASS over extent, both adopted. **Every injected run now admits exactly one mode; item 96's 100% answer rate on motionless scenes is broken; recall holds at 6 of 6.** Two candidate explanations were tested first and both died to their own controls. Item 108 improves tenfold and is not solved: the residual is correlation extending past the 2x2 tile the null decorrelates. |
 | 2026-08-07 | `eb0775f` | The `median_ratio` dilution item 111 named and left | **Fixed, and it is what recall was waiting on.** The strength term in the ranking key was a median over every nominating window, and about 22 of 225 nominate any bin by chance at the operating point in use, so it measured the background: a factor of five in the planted signal moved it seven percent. Over the windows of the mode's own largest block it moves 4.7x, and on the real collect the injected line's ratio went 9.0 to 40.3 while the competition barely moved. **H1 reaches 6 of 6 for the first time, H3b falls to 0 of 12**, and seed 31 -- which had survived items 107, 110 and 111 -- is finally rejected. The pre-registered risk (removing the dilution raises artefacts too, and item 108's control is a clean small block) was measured and did not happen: that control gained +0.4 where the injections gained +7.6 to +14.9, because its block is not clean at all. Also revises item 103: the COMPETITION floor is a property of the scene and the selection together, not of the scene alone. |

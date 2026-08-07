@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 114 items and their status.
+an index of all 115 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,34 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**THE STABILIZATION TEST IS A LADDER, NOT A PAIR** (item 115, implemented).
+Item 107 built the two-point special case; **the field sweeps model order over a
+RANGE and marks a pole stable only when it persists across SEVERAL CONSECUTIVE
+orders** -- five is the usual figure, with automated methods clustering poles
+across the whole diagram (Reynders et al. 2012). Eighth time a search found the
+field ahead. `--stable` now takes a comma-separated list; the statistic is the
+**longest chain of consecutive agreeing rungs**, and a refusing rung BREAKS a
+chain instead of ending the test.
+
+**Measured on 96/128/160/192/224/256 looks: the ladder gives a DEFINITE verdict
+on 12 of 12 motionless scenes where the pair managed 1**, keeps **6 of 6**
+injected (every one a full 6-rung chain), and reports 1 of 12 motionless. That
+last row is what item 114 cost and this repays: the pair could not decide,
+because its partners were refusing.
+
+**BUT ITS CHANCE MODEL IS WRONG, FOR THE THIRD TIME AND ON A THIRD AXIS.** Seed
+31 -- a MOTIONLESS scene -- holds **0.954 / 0.958 / 0.950 / 0.965 Hz across four
+consecutive look counts**, a chain of 4 that `rs_stable_p()` prices at 1.3e-5 and
+which happened on 1 of 12 scenes: **wrong by four orders of magnitude**. Rungs
+are NOT independent -- every rung re-divides the SAME pulses over the SAME dwell.
+**READ THE CHAIN LENGTH; DO NOT QUOTE THE p.**
+
+**THE RULE THIS MAKES EXPLICIT: in this chain anything built by RE-DIVIDING ONE
+DWELL is correlated with everything else built the same way, and no chance model
+may assume otherwise.** Windows overlap in pixels (item 113), rungs overlap in
+pulses (item 115). Three chance models have now assumed independence and been
+wrong.
 
 **ITEM 108 IS REFUSED, AND NO PERMUTATION NULL ON THE NOMINATIONS CAN BE EXACT**
 (item 114, implemented). Item 113's residual guess -- correlation reaching beyond
@@ -1492,7 +1520,7 @@ catches that. Neither substitutes for the other.
 
 **`docs/HANDOFF.md` is the current state of play** — what the last session
 established, the one named defect to work on next, and the assets on disk. Read
-it before `FOLLOW-UPS.md`, which is 114 items and is the record rather than the
+it before `FOLLOW-UPS.md`, which is 115 items and is the record rather than the
 plan.
 
 The short version: the tracker recovers signals the SELECTION discards, and item

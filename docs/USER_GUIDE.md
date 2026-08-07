@@ -591,24 +591,40 @@ controls still answering. It is opt-in and it is not a result. `--tfit` and
 
 ### The stabilization test
 
-`--stable OTHER_WINDOWS_CSV` compares this run against another run of **the same
-scene at a different look count**, and keeps only what survives:
+`--stable CSV[,CSV...]` compares this run against other runs of **the same scene
+at different look counts** — a LADDER, one rung per file plus this run — and
+reports the **longest chain of consecutive agreeing rungs**:
 
 ```
-  stabilization against 256 looks (this run 128), common band 0 - 3.226 Hz:
-            modal set: 0.504 Hz here, 0.504 Hz there -> STABLE -> report
-            5 of 20 comparable windows agree within half a bin (0.0252 Hz)
+  stabilization ladder, 6 rungs over 62 admissible bins:
+               96 looks:  0.502 Hz
+              128 looks:  0.504 Hz   <- this run
+              160 looks:  0.500 Hz
+              192 looks:  0.508 Hz
+              224 looks:  0.510 Hz
+              256 looks:  0.504 Hz
+            longest chain of CONSECUTIVE agreeing rungs: 6 (p 0.0000) -> STABLE -> report
+            25 of 37 comparable windows agree within half a bin (0.0252 Hz) at
+            96 looks; the verdict above is on the MODAL SET, not on windows.
 ```
 
 `stable_hz` and `stable` join the per-window CSV (1 stable, 0 moved, -1 not
 comparable).
+
+**READ THE CHAIN LENGTH, NOT THE p** (item 115). The p is derived assuming each
+rung is an independent draw over the band, and rungs are **not** independent —
+every one re-divides the *same pulses over the same dwell*. Measured, a
+motionless scene held ~0.95 Hz across four consecutive look counts, which the
+model prices at 1.3e-5 and which happened on 1 of 12 scenes. The chain length is
+sound; the probability attached to it is not.
 
 **Why it works.** A real vibration sits at the same Hz however the aperture is
 sliced; an artefact produced by the slicing need not. This is the
 operational-modal-analysis *stabilization diagram* with the look count standing
 in for model order. Measured, it takes a motionless fixture from **12 of 12 false
 positives to 1 of 12** while keeping **6 of 6** injected scenes
-(`FOLLOW-UPS.md` item 107).
+(`FOLLOW-UPS.md` item 107). As a ladder it also gives a **definite verdict on
+12 of 12** motionless scenes where the two-point form managed 1 (item 115).
 
 **Why it matters more than the other controls here.** `--null-static` needs a
 simulated motionless realisation; `--twin` needs a run differing in nothing but

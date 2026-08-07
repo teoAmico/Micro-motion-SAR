@@ -1869,6 +1869,50 @@ resonarsat_status_t rs_transient_fit_windows(rs_spectrum_t *spec,
                                              double f_min,
                                              rs_transient_stats_t *out_stats);
 
+/* THE DETECTABLE-AMPLITUDE FLOOR OF ONE WINDOW, PREDICTED FROM ITS OWN NOISE.
+ *
+ * WHY PER WINDOW. Item 102 predicted a floor from a scene's MEDIAN phase noise
+ * and item 103 measured what that costs: on the same Kilauea collect the
+ * scene median is 1.693 rad while the window holding a bright injected target
+ * is 0.050 rad -- **34x quieter**, so the median over-states that window's floor
+ * by the same factor and item 103's H1 failed on exactly that error. A floor is
+ * a property of a WINDOW, not of a scene, because a scene carries both bright
+ * scatterers and diffuse clutter and their phase noise differs by more than an
+ * order of magnitude.
+ *
+ * THE ARITHMETIC. Phase is a WRAPPED quantity and must be summarised on the
+ * circle -- item 101 recorded the cost of not doing so. For a window's phase
+ * series the resultant length is R = |mean(exp(i*psi))| and the circular
+ * standard deviation is
+ *
+ *     sd = sqrt(-2 * ln R)
+ *
+ * which becomes an apparent displacement through d = psi*lambda/(4*pi), and a
+ * sinusoid of amplitude A in that noise reaches unit signal-to-noise in the
+ * periodogram after N looks at
+ *
+ *     A_floor = sd * lambda/(4*pi) * sqrt(2/N)
+ *
+ * VALID ONLY ON A RUN WITH NOTHING INJECTED IN THAT WINDOW. The circular sd of a
+ * window that contains real motion includes the motion, so the number returned
+ * is then an over-estimate of the floor rather than the floor. That is the
+ * conservative direction and it is still not a floor.
+ *
+ * IT IS NOT THE THRESHOLD FOR RECOVERY. Item 103 measured three distinct floors
+ * on one collect: this one (the TARGET floor, ~0.015 mm), the CLUTTER floor from
+ * the scene median (0.52 mm), and the COMPETITION floor at which an injection
+ * beats the scene's own strongest artefact (0.13-0.26 mm). The last is the
+ * operative one and is 8-17x this. **Say which floor a number is.**
+ *
+ * PHASE ROUTE ONLY. Returns RS_ERR_ARG when 'm->phase' is NULL, which is every
+ * estimator that does not read pixel phase.
+ *
+ * Writes the floor in METRES to 'out_floor_m' and the circular sd in radians to
+ * 'out_phase_sd'; either may be NULL. */
+resonarsat_status_t rs_microm_floor(const rs_microm_t *m, double lambda_m,
+                                    size_t window, double *out_floor_m,
+                                    double *out_phase_sd);
+
 /* THE TWO-SAMPLE CHANGE STATISTIC FOR A PAIRED RUN, AND ITS EXACT p-VALUE.
  *
  * WHY THIS RATHER THAN A DIFFERENCE. `--twin` first reported `P_inj - P_twin`,

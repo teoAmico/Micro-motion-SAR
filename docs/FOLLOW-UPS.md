@@ -8830,3 +8830,17 @@ strongest artefact until it clears it.
 
 **Quote a floor with the scatterer it was measured on attached** (item 101) is
 now sharpened: quote it with the WINDOW, because the same scene carries both.
+
+### Implemented
+
+`rs_microm_floor()` computes it per window and every phase-route run prints the
+floor at the strongest-prominence window beside the scene median and the
+quietest; `floor_mm` joins the per-window CSV. Verified against this item's hand
+computation -- 0.0157 mm at phase sd 0.049 rad against 0.0154 and 0.050.
+
+**And it produced a measurement this item missed.** On the UNINJECTED Kilauea
+collect **no window is quiet**: floors run **0.4237 to 0.6491 mm, a ratio of
+1.3x**. The 34x quiet window in the injected run IS the injected target. So that
+scene contains **no naturally bright scatterer anywhere**, and item 102's verdict
+is stronger than it was stated -- not that the scene's median is bad, but that
+it has no good window at all.

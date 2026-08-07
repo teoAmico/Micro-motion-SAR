@@ -589,6 +589,36 @@ recovered against the periodogram's 3 of 12 on the same sweep, with both static
 controls still answering. It is opt-in and it is not a result. `--tfit` and
 `--stft` both replace the spectrum and cannot be combined.
 
+### The predicted floor
+
+Every phase-route run now prints the smallest displacement each window could
+detect, computed from that window's own phase noise:
+
+```
+  predicted floor, per window (phase route):
+            strongest-prominence window 96: 0.0157 mm (phase sd 0.049 rad)
+            scene median 0.5400 mm | quietest window 0.0157 mm | ratio 34.4x
+```
+
+`floor_mm` joins the per-window CSV.
+
+**Why per window and not per scene.** A scene carries both bright scatterers and
+diffuse clutter, and their phase noise differs by more than an order of
+magnitude. On a real Kilauea collect the window holding a bright injected target
+measured **34x quieter** than the scene median, so a scene-median floor
+overstates that window's by the same factor — which is exactly the error
+`FOLLOW-UPS.md` item 103 records.
+
+**Three floors, and this is one of them.** The *target* floor (this number), the
+*clutter* floor (the scene median), and the *competition* floor — the amplitude
+at which a signal beats the scene's own strongest artefact, which ran 8–17×
+higher on real clutter. **The competition floor is the operative one.** Say which
+you mean.
+
+**It is only a floor where nothing is injected.** A window containing real motion
+has that motion in its circular sd, so the number returned is inflated —
+conservative, but not the floor.
+
 ### The twin difference
 
 `--twin PATH` differences this run against a previous one's `_windows.csv`, at

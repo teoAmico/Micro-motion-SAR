@@ -1880,6 +1880,41 @@ static double rs_median_inplace(double *v, size_t n)
     return (n % 2) ? v[n / 2] : 0.5 * (v[n / 2 - 1] + v[n / 2]);
 }
 
+/* Predicted detectable-amplitude floor of one window. See microm.h for the
+ * derivation, and for the three different floors this is one of. */
+resonarsat_status_t rs_microm_floor(const rs_microm_t *m, double lambda_m,
+                                    size_t window, double *out_floor_m,
+                                    double *out_phase_sd)
+{
+    if (out_floor_m)  *out_floor_m = 0.0;
+    if (out_phase_sd) *out_phase_sd = 0.0;
+    if (!m || !m->phase) {
+        rs_set_error("window floor: no phase series; this is the phase route only");
+        return RS_ERR_ARG;
+    }
+    if (window >= m->n_win || m->n_looks < 2 || !(lambda_m > 0.0)) {
+        rs_set_error("window floor: window %zu of %zu, %zu looks, lambda %g m",
+                     window, m->n_win, m->n_looks, lambda_m);
+        return RS_ERR_ARG;
+    }
+    /* Circular mean resultant: a wrapped series has no linear standard
+     * deviation, and treating it as if it had is what item 101 corrected. */
+    double sx = 0.0, sy = 0.0;
+    for (size_t k = 0; k < m->n_looks; k++) {
+        const double p = m->phase[window * m->n_looks + k];
+        sx += cos(p); sy += sin(p);
+    }
+    double R = sqrt(sx * sx + sy * sy) / (double)m->n_looks;
+    if (R < 1e-12) R = 1e-12;          /* uniform phase: sd saturates, not diverges */
+    if (R > 1.0)   R = 1.0;
+    const double sd = sqrt(-2.0 * log(R));
+    if (out_phase_sd) *out_phase_sd = sd;
+    if (out_floor_m)
+        *out_floor_m = sd * lambda_m / (4.0 * M_PI)
+                     * sqrt(2.0 / (double)m->n_looks);
+    return RS_OK;
+}
+
 /* Two-sample change statistic for a paired run. See microm.h for the model, the
  * derivation and the two-degrees-of-freedom ceiling this carries. */
 resonarsat_status_t rs_twin_llr(double p_injected, double p_twin,

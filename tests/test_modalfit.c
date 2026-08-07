@@ -259,6 +259,63 @@ int main(void)
         RS_CHECK_NEAR(p, 1.0, 1e-12);
     }
 
+    /* THE PER-WINDOW FLOOR. Constructed by hand so the arithmetic is checked
+     * against a known circular sd rather than against another run. */
+    RS_CASE("window floor: a coherent window has a low floor");
+    {
+        enum { NL = 128 };
+        static double ph[NL];
+        rs_microm_t mm; memset(&mm, 0, sizeof mm);
+        mm.phase = ph; mm.n_win = 1; mm.n_looks = NL;
+        const double LAM = 0.031;
+        /* Zero phase everywhere: R = 1, so the circular sd is 0 and so is the
+         * floor. This is the degenerate end and must not divide by zero. */
+        for (int i = 0; i < NL; i++) ph[i] = 0.0;
+        double f = -1.0, sd = -1.0;
+        RS_CHECK_OK(rs_microm_floor(&mm, LAM, 0, &f, &sd));
+        RS_CHECK_NEAR(sd, 0.0, 1e-9);
+        RS_CHECK_NEAR(f, 0.0, 1e-15);
+
+        /* A known circular sd: phase alternating +-a gives R = cos(a). */
+        const double a = 0.5;
+        for (int i = 0; i < NL; i++) ph[i] = (i % 2) ? a : -a;
+        RS_CHECK_OK(rs_microm_floor(&mm, LAM, 0, &f, &sd));
+        const double want_sd = sqrt(-2.0 * log(cos(a)));
+        RS_CHECK_NEAR(sd, want_sd, 1e-9);
+        RS_CHECK_NEAR(f, want_sd * LAM / (4.0 * M_PI) * sqrt(2.0 / (double)NL), 1e-15);
+        printf("    alternating +-%.1f rad -> sd %.4f rad, floor %.5f mm\n",
+               a, sd, f * 1e3);
+    }
+
+    RS_CASE("window floor: uniform phase saturates rather than diverging");
+    {
+        enum { NL = 360 };
+        static double ph[NL];
+        rs_microm_t mm; memset(&mm, 0, sizeof mm);
+        mm.phase = ph; mm.n_win = 1; mm.n_looks = NL;
+        for (int i = 0; i < NL; i++)
+            ph[i] = -M_PI + 2.0 * M_PI * (double)i / (double)NL;
+        double f = 0.0, sd = 0.0;
+        RS_CHECK_OK(rs_microm_floor(&mm, 0.031, 0, &f, &sd));
+        RS_CHECK(isfinite(sd) && isfinite(f));
+        RS_CHECK(sd > 3.0);       /* a full circle is maximal scatter */
+    }
+
+    RS_CASE("window floor: error contract");
+    {
+        enum { NL = 8 };
+        static double ph[NL];
+        rs_microm_t mm; memset(&mm, 0, sizeof mm);
+        mm.phase = ph; mm.n_win = 1; mm.n_looks = NL;
+        double f = 0.0, sd = 0.0;
+        RS_CHECK_ERR(rs_microm_floor(NULL, 0.031, 0, &f, &sd), RS_ERR_ARG);
+        RS_CHECK_ERR(rs_microm_floor(&mm, 0.031, 5, &f, &sd), RS_ERR_ARG);
+        RS_CHECK_ERR(rs_microm_floor(&mm, 0.0, 0, &f, &sd), RS_ERR_ARG);
+        rs_microm_t nop; memset(&nop, 0, sizeof nop);
+        nop.n_win = 1; nop.n_looks = NL;   /* phase NULL: not the phase route */
+        RS_CHECK_ERR(rs_microm_floor(&nop, 0.031, 0, &f, &sd), RS_ERR_ARG);
+    }
+
     /* Contract: malformed input produces a status and a message, never a crash
      * or a partly-written result. */
     RS_CASE("error contract");

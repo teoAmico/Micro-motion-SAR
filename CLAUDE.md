@@ -169,6 +169,22 @@ or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
 
+**THE PREDICTED FLOOR IS NOW PER WINDOW** (item 103, implemented).
+`rs_microm_floor()` takes a window's own phase series, summarises it CIRCULARLY
+(`sd = sqrt(-2 ln R)`, item 101's correction) and returns
+`sd * lambda/(4*pi) * sqrt(2/N)`. Every phase-route run prints the floor at the
+strongest-prominence window beside the scene median and the quietest window, and
+`floor_mm` joins the per-window CSV. Verified against item 103's hand
+computation: **0.0157 mm and phase sd 0.049 rad at the injected target against a
+hand-computed 0.0154 and 0.050, ratio 34.4x against 34.0x.** **A NEW MEASUREMENT
+FELL OUT: on the UNINJECTED Kilauea collect no window is quiet — floors run
+0.4237 to 0.6491 mm with a ratio of only 1.3x**, so that scene contains no
+naturally bright scatterer at all and item 102's conclusion is stronger than it
+was stated: it is not that the median is bad, it is that there is no good window
+anywhere in the scene. **Valid as a floor only where nothing is injected** — a
+moving window's circular sd includes the motion — and it is the TARGET floor, not
+the COMPETITION floor that actually governs recovery.
+
 **THE FLOOR IS PER-TARGET: THREE FLOORS, 34x APART** (item 103). The injection
 framework run on real Kilauea clutter, pre-registered at `201d897`. **H1 FAILED
 as stated**: recovery occurs BELOW item 102's predicted floor — at 0.5x on one

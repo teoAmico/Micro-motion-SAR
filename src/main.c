@@ -2856,6 +2856,61 @@ static int rs_cmd_mmotion(int argc, char **argv)
         }
     }
 
+    /* The PREDICTED FLOOR, per window, from each window's own phase noise.
+     * Item 103: a scene carries both bright scatterers and diffuse clutter and
+     * their floors differ by 34x, so a scene-median floor mis-states every
+     * window. Reported for the window the selection actually chose, beside the
+     * scene's median and its quietest window, so the three cannot be confused. */
+    if (m.phase && c.lambda > 0.0) {
+        double *fl = malloc(spec.n_win * sizeof *fl);
+        if (fl) {
+            size_t n_ok = 0, w_best = 0;
+            for (size_t w = 0; w < spec.n_win; w++) {
+                double f = 0.0;
+                if (rs_microm_floor(&m, c.lambda, w, &f, NULL) == RS_OK) {
+                    fl[n_ok++] = f;
+                    if (f < fl[w_best < n_ok ? w_best : 0]) w_best = w;
+                }
+            }
+            if (n_ok > 0) {
+                double sel = 0.0, sd_sel = 0.0, quiet = fl[0];
+                for (size_t i = 1; i < n_ok; i++) if (fl[i] < quiet) quiet = fl[i];
+                /* The strongest-prominence window, recomputed here rather than
+                 * carried out of the selection block above, so this report does
+                 * not depend on that block's scope. */
+                size_t w_rep = 0;
+                for (size_t w = 1; w < spec.n_win; w++)
+                    if (spec.prominence[w] > spec.prominence[w_rep]) w_rep = w;
+                rs_microm_floor(&m, c.lambda, w_rep, &sel, &sd_sel);
+                double *srt = malloc(n_ok * sizeof *srt);
+                double med = 0.0;
+                if (srt) {
+                    memcpy(srt, fl, n_ok * sizeof *srt);
+                    qsort(srt, n_ok, sizeof *srt, rs_cmp_double_asc);
+                    med = (n_ok % 2) ? srt[n_ok / 2]
+                        : 0.5 * (srt[n_ok / 2 - 1] + srt[n_ok / 2]);
+                    free(srt);
+                }
+                printf("  predicted floor, per window (phase route):\n"
+                       "            strongest-prominence window %zu: %.4f mm "
+                       "(phase sd %.3f rad)\n"
+                       "            scene median %.4f mm | quietest window %.4f mm"
+                       " | ratio %.1fx\n"
+                       "            This is the TARGET floor of a window, not the"
+                       " amplitude at which a\n"
+                       "            signal WINS: it must also beat this scene's own"
+                       " artefact, which on\n"
+                       "            real clutter ran 8-17x higher (item 103). Valid"
+                       " as a floor only\n"
+                       "            where nothing is injected -- a moving window's"
+                       " sd includes the motion.\n",
+                       w_rep, sel * 1e3, sd_sel, med * 1e3, quiet * 1e3,
+                       quiet > 0.0 ? med / quiet : 0.0);
+            }
+            free(fl);
+        }
+    }
+
     /* The twin difference, reported beside the other statistics and gating
      * nothing. See the --twin block above for why. */
     if (twin_probe) {
@@ -3363,9 +3418,10 @@ static int rs_cmd_mmotion(int argc, char **argv)
                           ? " INSIDE_THE_HANN_SKIRT" : "");
             fprintf(wf, "window,iaz,irg,dominant_hz,prominence,quality,"
                         "excursion_px,snr,sigma_px,d_a,passed_gates,"
-                        "agrees_with_consensus,passed_cull%s%s\n",
+                        "agrees_with_consensus,passed_cull%s%s%s\n",
                     probe_hz > 0.0 ? ",probe_psd,probe_prominence" : "",
-                    twin_probe ? ",twin_delta,twin_llr,twin_p" : "");
+                    twin_probe ? ",twin_delta,twin_llr,twin_p" : "",
+                    (m.phase && c.lambda > 0.0) ? ",floor_mm" : "");
             for (size_t w = 0; w < spec.n_win; w++) {
                 const double exc = spec.excursion_px ? spec.excursion_px[w] : 0.0;
                 const int passed = (spec.quality[w] >= q_min_rep) &&
@@ -3412,6 +3468,11 @@ static int rs_cmd_mmotion(int argc, char **argv)
                         fprintf(wf, ",%.12g,%.12g,%.12g",
                                 p_prom - twin_probe[w], l, pv);
                     }
+                }
+                if (m.phase && c.lambda > 0.0) {
+                    double f = 0.0;
+                    rs_microm_floor(&m, c.lambda, w, &f, NULL);
+                    fprintf(wf, ",%.12g", f * 1e3);
                 }
                 fputc('\n', wf);
             }

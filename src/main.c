@@ -1416,27 +1416,45 @@ static int rs_cmp_rung(const void *a, const void *b)
     return (x->looks < y->looks) ? -1 : (x->looks > y->looks);
 }
 
-/* P(some chain of 'run' consecutive agreeing rungs arises by chance), for a
- * ladder of 'n_rung' rungs over 'n_bin' admissible bins.
+/* How many CONSECUTIVE agreeing rungs a frequency must hold to be reported.
  *
- * DERIVED, NOT CHOSEN. Under the null a rung's reported frequency falls anywhere
- * in the admissible band, so two rungs agree within half a bin with probability
- * about 1/n_bin, and a chain of 'run' rungs needs run-1 such agreements. There
- * are n_rung-run+1 places a chain of that length could start, which is the
- * look-elsewhere cost along the ladder and is inside this number.
+ * THERE IS NO p-VALUE HERE, AND THAT IS THE FIELD'S POSITION RATHER THAN A
+ * SHORTFALL (item 116). A stabilization diagram is an ACCEPTANCE CRITERION, not
+ * a significance test: the OMA literature marks a pole stable when it persists
+ * across several consecutive model orders under tolerances on frequency, damping
+ * and mode shape, refines the result by CLUSTERING, and attaches no probability
+ * to it. Searched twice; the number of orders required is explicitly
+ * application-dependent and chosen by the user rather than derived.
  *
- * THIS IS WHY A LONGER LADDER DEMANDS MORE PERSISTENCE, and it is the part a
- * two-point test could not express: at 62 bins a single agreeing PAIR is
- * p = 0.016 and passes, but over six rungs the same pair is p = 0.081 and does
- * not, because there were five chances for it. Item 107's 1-of-12 residual
- * false positive is exactly a lucky pair. */
-static double rs_stable_p(size_t n_rung, size_t run, size_t n_bin)
-{
-    if (run < 2 || n_rung < run || n_bin == 0) return 1.0;
-    double p = (double)(n_rung - run + 1);
-    for (size_t i = 1; i < run; i++) p /= (double)n_bin;
-    return p > 1.0 ? 1.0 : p;
-}
+ * ITEM 115 DERIVED ONE ANYWAY AND IT WAS WRONG BY FOUR ORDERS OF MAGNITUDE.
+ * `rs_stable_p()` priced a chain of r rungs as (n_rung-r+1)/n_bin^(r-1), which
+ * assumes each rung's answer is an independent draw over the band. Rungs are not
+ * independent: every one RE-DIVIDES THE SAME PULSES OVER THE SAME DWELL, so a
+ * scene-pinned artefact survives the change. Measured, a MOTIONLESS scene held
+ * 0.954 / 0.958 / 0.950 / 0.965 Hz across four consecutive look counts -- priced
+ * at 1.3e-5, observed on 1 of 12 scenes.
+ *
+ * Two other nulls were considered and both fail for reasons worth recording.
+ * Calibrating on the PER-WINDOW chains fails because a scene-wide artefact and a
+ * scene-wide injection are structurally identical in window statistics, which is
+ * item 11. Re-dividing the dwell to build the null fails because re-dividing
+ * returns the same answers -- there is no randomisation that destroys a real
+ * mode while preserving the artefact, which is item 114's wall on a second axis.
+ *
+ * SO THE NUMBER IS MEASURED FROM THE NULL'S OWN DISTRIBUTION, which is what item
+ * 80 says to do when a model cannot be trusted. Over item 107's twelve motionless
+ * scenes on a six-rung ladder, the longest chain reached was:
+ *
+ *     eleven scenes    chain 0     (no two rungs agreed at all)
+ *     one scene        chain 4
+ *     six INJECTED     chain 6     (every rung, every scene)
+ *
+ * Five separates them with a rung to spare on each side, and it coincides with
+ * the figure the OMA literature most often quotes -- corroboration, not
+ * derivation. **It is an operating characteristic measured on ONE fixture family
+ * at ONE operating point, not a probability**, and it should be re-measured
+ * before being quoted anywhere else. */
+#define RS_STABLE_MIN_CHAIN 5u
 
 /* The per-window 'dominant_hz' column of another run of the SAME SCENE at a
  * DIFFERENT LOOK COUNT, for the stabilization test below.
@@ -3148,8 +3166,11 @@ static int rs_cmd_mmotion(int argc, char **argv)
         }
         const size_t n_bin = (spec.n_freq > RS_SPECTRUM_LEAKAGE_BINS)
                            ? spec.n_freq - RS_SPECTRUM_LEAKAGE_BINS : 1;
-        const double p_stab = rs_stable_p(n_rung, best_run, n_bin);
-        const int report = (best_run >= 2) && (p_stab <= RS_MODAL_P_MAX);
+        /* REFUSES WHAT IT CANNOT TEST, as item 107's pair did. A ladder shorter
+         * than the criterion cannot deliver a verdict at all, and saying so is
+         * better than quietly applying a weaker one. */
+        const int too_short = (n_rung < RS_STABLE_MIN_CHAIN);
+        const int report = !too_short && best_run >= RS_STABLE_MIN_CHAIN;
 
         printf("  stabilization ladder, %zu rungs over %zu admissible bins:\n",
                n_rung, n_bin);
@@ -3161,12 +3182,16 @@ static int rs_cmd_mmotion(int argc, char **argv)
                 printf("            %5zu looks: REFUSED%s\n", rung[i].looks,
                        rung[i].path ? "" : "   <- this run");
         }
-        printf("            longest chain of CONSECUTIVE agreeing rungs: %zu "
-               "(p %.4f) -> %s\n",
-               best_run, p_stab,
-               (best_run < 2) ? "no two rungs agree -- reject"
-                              : (report ? "STABLE -> report"
-                                        : "not persistent enough -- reject"));
+        printf("            longest chain of CONSECUTIVE agreeing rungs: %zu of "
+               "%u needed -> %s\n",
+               best_run, RS_STABLE_MIN_CHAIN,
+               too_short ? "LADDER TOO SHORT -- no verdict"
+                         : (report ? "STABLE -> report" : "not persistent -- reject"));
+        if (too_short)
+            printf("            %u rungs are needed and %zu were given. A shorter "
+                   "ladder cannot\n"
+                   "            test the criterion; pass more runs at other look "
+                   "counts.\n", RS_STABLE_MIN_CHAIN, n_rung);
         printf("            %zu of %zu comparable windows agree within half a "
                "bin (%.4f Hz) at\n"
                "            %zu looks; the verdict above is on the MODAL SET, "

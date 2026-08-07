@@ -1,76 +1,76 @@
-# Handoff — 2026-08-07 (eighth pass)
+# Handoff — 2026-08-07 (ninth pass)
 
 State of play at commit `HEAD`, written so a new session can pick up without
-re-reading 116 follow-up items. **Read `CLAUDE.md` first; this is the delta.**
+re-reading 117 follow-up items. **Read `CLAUDE.md` first; this is the delta.**
 
 Tree is clean, 23/23 tests pass, ASAN clean, nothing running in the background.
 
 ---
 
-## 1. The rule this session produced
+## 1. Start here: one named defect, with its fix already known
 
-**In this chain, anything built by RE-DIVIDING ONE DWELL is correlated with
-everything else built the same way, and no chance model may assume otherwise.**
+**`--stable` requires CONSECUTIVE agreeing rungs; the field counts CLUSTER SIZE.**
 
-Three chance models assumed independence and were wrong:
+Measured on real data (item 117): C10 at 0.26 mm answers **0.998 / 0.997 / 0.997
+/ 1.000 Hz** at 128/160/192/224 looks against an injected 1.000, and refuses at
+96 and 256. **Four agreeing rungs, every answering rung correct, rejected** —
+because the gaps are refusals, not disagreements.
 
-| model | assumed independent | actually shares | error | now |
-|---|---|---|---|---|
-| `rs_modal_null()` before 113 | window nominations | **pixels** | p 0.001 for an honest 0.013 | permutation + bracket (113, 114) |
-| `rs_stable_p()` (115) | ladder rungs | **pulses** | p 1.3e-5 for a 1-in-12 event | **removed** (116) |
+Poles are routinely not identified at every model order (MATLAB's `modalsd`
+returns them as NaN); automated OMA clusters across the diagram and thresholds on
+minimum cluster size. **The fix**: a frequency's support is the number of rungs
+whose answer falls within half a bin of it, and the criterion applies to that
+count. A refusal then costs one rung instead of destroying the evidence either
+side. **That changes the threshold's meaning, so `RS_STABLE_MIN_CHAIN` must be
+re-measured** against the null on both the synthetic fixture and these real
+collects. `docs/CODE-REVIEW.md` has it.
 
-And item 116 established the limit: **for the ladder there is no valid null at
-all.** Per-window chains cannot separate a scene-wide artefact from a scene-wide
-injection (item 11); re-dividing the dwell returns the same answers (item 114's
-wall). So the threshold is an *operating characteristic measured from the null's
-own distribution*, and it is **not a probability**.
+## 2. What item 117 established, which is a lot
 
-## 2. Where the selection stage ended up (items 109–116)
+- **Specificity on real clutter is TOTAL.** Not one of twelve motionless rungs
+  answered; both controls refuse at every look count 96–256.
+- **Every answering rung on an injected scene was correct** — 0.997–1.000 Hz,
+  no disagreeing rung anywhere.
+- **The threshold transfers** — motionless chains of 0 against the 4 seen
+  synthetically, so it needs no upward revision.
+- **Recall is 3 of 6** against item 114's 5 of 6 on the same collects. The ladder
+  as it stands COSTS recall, and the one defect above accounts for the gap.
 
-| | before 110 | 114 | 116 |
+## 3. Where the selection stage stands (items 109–117)
+
+| | before 110 | 114 | 117 (real) |
 |---|---|---|---|
-| H1 recovery, real | 3/6 | **5/6** | not re-run |
-| real motionless controls refused by the chain | 0/2 | **2/2** | — |
-| motionless synthetic reported | 1/12 | 0/12 | **0/24** |
-| motionless synthetic given a DEFINITE verdict | — | 1/12 | **24/24** |
-| injected synthetic | 6/6 | 6/6 | **12/12** |
+| real motionless controls refused | 0/2 | 2/2 | **2/2, every rung** |
+| real recall | 3/6 | 5/6 | **3/6** |
+| synthetic motionless reported | 1/12 | 0/12 | 0/24 (item 116) |
+| synthetic injected | 6/6 | 6/6 | 12/12 (item 116) |
 
 **Item 108 is closed** (114). **Item 107's surviving false positive is gone**
-(116). `--stable` is a ladder scored on the longest chain of consecutive agreeing
-rungs against a threshold of 5, and refuses a verdict when the ladder is shorter.
+(116). The open cost is recall, and it has one named cause.
 
-## 3. What I would do next
+## 4. Then what
 
-1. **Run the ladder on real Kilauea data.** Everything in items 115–116 is
-   synthetic. This is the deferred 60-minute arm (6 rungs × 8 configurations at
-   ~75 s) and it is now the single largest gap in the evidence.
-2. **Re-measure `RS_STABLE_MIN_CHAIN` wherever it is used.** It is an operating
-   characteristic of one fixture at one operating point, not a constant. Two
-   motionless scenes in 24 reached chain 4, one rung below it.
-3. **TFCE** (Smith & Nichols 2009) — removes the arbitrary cluster-forming
-   threshold, here `RS_MODAL_PER_WINDOW`, which item 71 measured as consequential.
+1. **Count agreeing rungs, not consecutive ones** — §1, and re-measure the
+   threshold afterwards.
+2. **TFCE** (Smith & Nichols 2009) — removes the arbitrary cluster-forming
+   threshold `RS_MODAL_PER_WINDOW`, which item 71 measured as consequential.
+3. **Naples mode shapes** (item 94) — needs spatially-varying injection.
 
-**The strategic point, unchanged after eight items**: 109–116 are all SELECTION.
-They made the chain much better at NOT answering — item 96's 100% false-positive
-rate is gone, item 108 is closed, 0 of 24 motionless scenes report — and **none
-of them changed what the tracker can see.** Nothing here has detected real
-motion; the target is still put where it is found. The next real frontier is a
-collect over something that moves and is independently instrumented; Naples
-(item 94) is the cheapest approximation and needs spatially-varying injection
-that `--inject-wave` does not support.
+**The strategic point, unchanged after nine items**: 109–117 are all SELECTION.
+They made the chain much better at not answering — and **none of them changed
+what the tracker can see.** Nothing here has detected real motion; the target is
+still put where it is found.
 
-## 4. Method lessons that earned their keep
+## 5. Method lessons that earned their keep
 
-- **Search the literature BEFORE designing.** Eight times now. Items 113, 115 and
-  116 were all solved — or explicitly declined — in another field, and in each
-  case this project had built the degenerate special case or invented a statistic
-  the field knows better than to compute.
-- **A threshold fitted to data must be tested on data it was not fitted to.**
-  Item 116's whole design; the independent arm reproduced the fitted one exactly,
-  which is the only reason the number can be trusted at all.
+- **Search the literature BEFORE designing.** Nine times. Items 113, 115, 116 and
+  117 were each solved, or explicitly declined, in another field.
+- **A threshold fitted to data must be tested on data it was not fitted to**
+  (item 116) — the independent arm reproduced the fitted one exactly.
+- **Name the failure mode you expect in the pre-registration** (item 117) — the
+  consecutive-requirement defect was predicted, then confirmed, rather than
+  discovered and rationalised.
 - **Read a bracket's ORDER, not just its width** (114).
-- **Measure the explanation before building on it** (114) — four explanations in
-  this arc were wrong; the last was caught in advance.
 
 ---
 
@@ -167,7 +167,7 @@ the run are how three wrong explanations got caught.**
 
 ## 7. Open, in the order I would take them
 
-1. **The real-data ladder arm**, and re-measuring the threshold — §3 above.
+1. **Count agreeing rungs, not consecutive ones** — §1 and §4 above.
 2. **Item 98's remaining two**: the CCD *double change map* (two twins), and
    Bayer & Seljak's self-calibrating look-elsewhere correction, which needs no
    Monte Carlo and works per window where `p_chance` works on the block.

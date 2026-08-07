@@ -1,0 +1,10 @@
+collect amp chain verdict
+C10 0.00 0 not_persistent_--_reject
+C10 0.13 0 not_persistent_--_reject
+C10 0.26 4 not_persistent_--_reject
+C10 0.53 6 STABLE_->_report
+C14 0.00 0 not_persistent_--_reject
+C14 0.13 0 not_persistent_--_reject
+C14 0.26 6 STABLE_->_report
+C14 0.53 6 STABLE_->_report
+LADDERREAL_DONE

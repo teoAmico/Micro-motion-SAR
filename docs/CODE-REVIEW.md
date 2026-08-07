@@ -42,10 +42,35 @@ reader's memory model rather than to a flag.
 report geometry and timing, so it cannot describe a product larger than RAM --
 the one command whose entire job is to tell you what you have.
 
+## `--stable` requires CONSECUTIVE agreeing rungs where the field counts cluster size
+
+`--stable` (`src/main.c`) scores a frequency by the longest run of **consecutive**
+agreeing rungs against `RS_STABLE_MIN_CHAIN`. A rung whose modal set admits
+nothing breaks that run, so a frequency can be **unanimous among every rung that
+answered** and still be rejected.
+
+**Measured on real data** (item 117): C10 at 0.26 mm answers 0.998 / 0.997 /
+0.997 / 1.000 Hz at 128 / 160 / 192 / 224 looks against an injected 1.000, and
+refuses at 96 and 256. Chain 4, **rejected**, with not one disagreeing rung
+anywhere in the ladder.
+
+**The field does not do this.** Poles are routinely not identified at every model
+order — MATLAB's `modalsd` returns the missing ones as NaN — and automated OMA
+clusters poles across the whole diagram and thresholds on **minimum cluster
+size**. Consecutiveness is this project's own addition.
+
+**The fix** is to count agreeing rungs rather than require them adjacent: a
+frequency's support is the number of rungs whose answer falls within half a bin
+of it, and the criterion applies to that count. A refusal then costs one rung of
+support instead of destroying the evidence either side of it. That changes the
+threshold's meaning, so `RS_STABLE_MIN_CHAIN` must be re-measured against the
+null's own distribution on both the synthetic fixture and these real collects.
+
 ## Reviews performed
 
 | date | commit | scope | outcome |
 |---|---|---|---|
+| 2026-08-07 | `d949eb1` | The ladder and its threshold on real Kilauea data | **Both transfer; the consecutive requirement does not.** Not one of twelve motionless rungs answered on either real control, so specificity is total and by absence rather than disagreement — H9, the hypothesis that could have killed the threshold, passes decisively. Every rung that answered on an injected scene agreed with the injected 1.00 Hz, 0.997–1.000 Hz across look counts 96–256, with no disagreeing rung anywhere. Recall is 3 of 6 against item 114's 5 of 6, and the shortfall is one case — C10 at 0.26 mm, four agreeing rungs, every answering rung correct, rejected because two rungs REFUSED rather than disagreed. Named in the pre-registration in advance and confirmed. |
 | 2026-08-07 | `21594bc` | Item 115's mis-calibrated ladder p | **Removed rather than repaired, on the field's own practice.** A stabilization diagram is an acceptance criterion, not a significance test — no probability is attached to one anywhere in the OMA literature, and the number of consecutive orders required is explicitly user-chosen. Two candidate nulls were considered and both fail: per-window chains cannot separate a scene-wide artefact from a scene-wide injection (item 11), and re-dividing the dwell returns the same answers (item 114's wall on a second axis). `RS_STABLE_MIN_CHAIN` is therefore measured from the null's own distribution. **The threshold was fitted to twelve scenes, so the run was designed with a separate arm on twelve UNSEEN seeds — which reproduced the fitted distribution exactly.** 0 of 24 motionless report, 12 of 12 injected, and no scene in 36 landed on the threshold itself. |
 | 2026-08-07 | `c2a0849` | Item 114's cost: the stabilization test losing its partner | **The field had the answer and item 107 had built its two-point special case.** OMA stabilization diagrams sweep model order and require persistence across several consecutive orders; `--stable` now takes a ladder and reports the longest chain of consecutive agreeing rungs. Measured on six look counts, it gives a definite verdict on **12 of 12** motionless scenes where the pair managed **1**, and keeps 6 of 6 injected on full 6-rung chains. **Its derived p is wrong by four orders of magnitude** — a motionless scene holds ~0.95 Hz across four consecutive rungs — because rungs share pulses exactly as windows share pixels. Third chance model here to assume independence where the construction manufactures correlation. |
 | 2026-08-07 | `6fb1cb4` | Item 113's residual: is the permutation null still anti-conservative? | **Yes, and it cannot be made exact -- so bracket it.** Item 113 guessed the correlation reached beyond its 2x2 tile; measured, it is confined to ADJACENT windows (2.16 shared of 6 at separation 1, 0.59 at separation 2 against a 0.63 baseline), which is the pixel-sharing range and means the tile was right. The real residual is that any fixed partition destroys correlation across its own boundaries -- half of adjacent pairs straddle one, so the null reproduces 66% of observed sharing; jittering gives 63%, and a boundary-free field only matches as it becomes globally constant, preserving what it should destroy. Two nulls now bound the truth and admission gates on the conservative end. **Item 108's false positive is refused at p 0.342 after four items at 0.001 and 0.010**, both real motionless controls go silent, 8 of 12 motionless synthetic scenes refuse outright against item 96's 12-of-12 answer rate, and recall is 5 of 6. Unpredicted cost recorded: `--stable` reportable falls 5 of 6 to 3 of 6 because the 256-look runs now refuse, leaving no partner to compare. |

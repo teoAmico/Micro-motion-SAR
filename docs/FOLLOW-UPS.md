@@ -158,6 +158,7 @@ said, not better) and item 7's line numbers.
 | 114 | **REFUSES item 108** | correlation is confined to ADJACENT windows, so 113's residual guess was wrong; the real one is that any fixed partition loses correlation at its boundaries and no permutation null can be exact. Bracket p between two nulls, gate on the conservative: item 108 refused at p 0.342, recall 5/6, 8/12 motionless scenes silent |
 | 115 | **ladder, not pair** | the field persists a pole across SEVERAL consecutive model orders; item 107 built the two-point case. The ladder decides 12 of 12 motionless scenes where the pair decided 1, keeps 6/6 injected -- and its chance model is wrong for the THIRD time, because rungs share pulses as windows share pixels |
 | 116 | **no p, a measured threshold** | the field attaches no probability to a stabilization diagram; two possible nulls both fail (items 11, 114). Threshold from the null's own distribution reproduces on UNSEEN seeds: 0 of 24 motionless, 12 of 12 injected, and the gap at the threshold is empty |
+| 117 | **the ladder on REAL data** | specificity TOTAL -- not one of 12 motionless rungs answered -- and every answering rung on an injection agreed with the truth, 0.997-1.000 Hz. But CONSECUTIVE is a defect: C10 at 0.26 mm has four agreeing rungs, every answering rung correct, and is rejected. The field clusters and thresholds on CLUSTER SIZE, not unbroken runs |
 
 ---
 
@@ -10042,3 +10043,70 @@ criterion**, rather than applying a weaker one.
 - **Two motionless scenes in 24 reached chain 4**, one rung below the criterion.
   A fixture whose artefacts persist one rung longer would defeat it, and nothing
   here bounds how far that persistence can go.
+
+---
+
+## 117. The ladder transfers to real data, specificity is total, and the CONSECUTIVE requirement is a defect the literature already knows about.
+
+Pre-registered at `d949eb1`, **no code changes** -- this measures the shipped
+chain. `runs/kilauea/2026-08-07-ladder-real/`.
+
+Everything in items 115-116 was synthetic. This is the first real-data test.
+
+### Specificity on real clutter is TOTAL
+
+**Not one of the twelve motionless rungs answered.** Both controls refuse at
+every look count from 96 to 256, so the chain is 0 **by absence, not by
+disagreement**. **H9 passes decisively and it was the hypothesis that could have
+killed the threshold**: real artefacts did not persist across look counts better
+than synthetic ones, they did not persist at all. The threshold does not need
+re-measuring upward.
+
+### Every rung that answered on an injected scene was right
+
+Across the four injected configurations that answered anywhere, **every single
+answering rung agreed with the injected 1.00 Hz**, spanning **0.997-1.000 Hz**
+over look counts 96 to 256. **There is not one disagreeing rung in the table.**
+
+| collect | amp | 96 | 128 | 160 | 192 | 224 | 256 | chain | verdict |
+|---|---|---|---|---|---|---|---|---|---|
+| C10 | 0.00 | -- | -- | -- | -- | -- | -- | 0 | reject |
+| C10 | 0.13 | -- | -- | -- | -- | -- | -- | 0 | reject |
+| C10 | 0.26 | -- | **0.998** | **0.997** | **0.997** | **1.000** | -- | **4** | **reject** |
+| C10 | 0.53 | 0.997 | 0.998 | 0.997 | 0.997 | 1.000 | 0.998 | 6 | **report** |
+| C14 | 0.00 | -- | -- | -- | -- | -- | -- | 0 | reject |
+| C14 | 0.13 | -- | 0.997 | -- | -- | -- | -- | 0 | reject |
+| C14 | 0.26 | 0.998 | 0.997 | 0.999 | 0.999 | 1.000 | 0.999 | 6 | **report** |
+| C14 | 0.53 | 0.998 | 0.997 | 0.999 | 0.999 | 1.000 | 0.999 | 6 | **report** |
+
+**H8 passes** (both controls rejected). **H1 passes at exactly its bar, 3 of 6**
+-- and why it is only 3 is the finding.
+
+### C10 at 0.26 mm: four agreeing rungs, every answering rung correct, REJECTED
+
+The two missing rungs are **REFUSALS, not disagreements**, and the criterion
+demands five CONSECUTIVE. `PREREG.md` named this in advance: *"a refusing rung
+breaks a chain... the criterion must count agreements among ANSWERING rungs
+rather than demand consecutive ones."*
+
+**THE LITERATURE ALREADY DOES IT THAT WAY, AND THIS IS THE NINTH TIME A SEARCH
+HAS FOUND THE FIELD AHEAD.** Poles are routinely **not identified at every model
+order** -- MATLAB's `modalsd` returns the missing ones as **NaN** -- and
+automated methods **CLUSTER poles across the whole diagram and threshold on
+MINIMUM CLUSTER SIZE**, not on an unbroken run. Requiring consecutiveness is this
+project's own addition, and it is the wrong one: it discards a case where the
+evidence is unanimous among everything that spoke.
+
+### What this establishes
+
+- **The ladder transfers.** Perfect specificity on real clutter; every answering
+  rung correct on every injection.
+- **The threshold transfers** -- motionless chains of 0 against the 4 seen
+  synthetically.
+- **The CONSECUTIVE requirement does not**, and is now a named defect with a
+  real-data demonstration and a literature-standard replacement.
+- **Recall is 3 of 6 against item 114's 5 of 6** on the same collects. As it
+  stands the ladder COSTS recall; counting answering rungs would recover C10 at
+  0.26 mm.
+- Two real collects, one placement, one operating point, target put where it was
+  found. **Still a selection result, not a detection.**

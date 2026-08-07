@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 116 items and their status.
+an index of all 117 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,34 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**THE LADDER TRANSFERS TO REAL DATA, AND "CONSECUTIVE" IS A DEFECT** (item 117,
+measurement only, no code change). First real-data test of items 115-116.
+**SPECIFICITY IS TOTAL: not one of the twelve motionless rungs answered** --
+both real controls refuse at every look count from 96 to 256, so the chain is 0
+**by absence, not disagreement**. That settles the hypothesis that could have
+killed the threshold: real artefacts did not persist across look counts better
+than synthetic ones, **they did not persist at all**, so the threshold needs no
+re-measuring upward.
+
+**Every rung that answered on an injected scene was right** -- 0.997 to 1.000 Hz
+against an injected 1.000, across look counts 96 to 256, **with not one
+disagreeing rung anywhere in the table.**
+
+**But recall is 3 of 6 against item 114's 5 of 6, and the shortfall is one case
+that names the defect.** C10 at 0.26 mm answers **0.998 / 0.997 / 0.997 / 1.000**
+at 128/160/192/224 and REFUSES at 96 and 256: **four agreeing rungs, every
+answering rung correct, REJECTED** because the criterion demands five
+CONSECUTIVE and the gaps are refusals rather than disagreements. Predicted in the
+pre-registration and confirmed.
+
+**NINTH TIME THE FIELD WAS AHEAD: poles are routinely NOT identified at every
+model order** -- MATLAB's `modalsd` returns the missing ones as NaN -- and
+automated OMA **CLUSTERS poles across the diagram and thresholds on MINIMUM
+CLUSTER SIZE**, not on an unbroken run. **Requiring consecutiveness is this
+project's own addition and it is the wrong one.** The fix is to count agreeing
+rungs rather than require them adjacent, which re-opens the threshold and needs
+it re-measured; `docs/CODE-REVIEW.md` carries it.
 
 **THERE IS NO p-VALUE FOR A STABILIZATION DIAGRAM, AND THE FIELD DOES NOT
 PRETEND OTHERWISE** (item 116, implemented; **fixes item 115's defect**). A
@@ -1550,7 +1578,7 @@ catches that. Neither substitutes for the other.
 
 **`docs/HANDOFF.md` is the current state of play** — what the last session
 established, the one named defect to work on next, and the assets on disk. Read
-it before `FOLLOW-UPS.md`, which is 116 items and is the record rather than the
+it before `FOLLOW-UPS.md`, which is 117 items and is the record rather than the
 plan.
 
 The short version: the tracker recovers signals the SELECTION discards, and item

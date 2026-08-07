@@ -731,28 +731,49 @@ is no twin to pair against, which is why `--null-static` exists.
 ### The modal set
 
 A structure does not have *a* frequency, so `mmotion` also prints a **modal
-set** — every bin nominated by enough windows, ranked by the size of the largest
-contiguous block of windows nominating it:
+set** — every bin whose nominating windows form a block chance does not reach,
+ranked by how much evidence that block carries:
 
 ```
-  modal set: 3 modes recurring in >= 11 of 49 voting windows,
-           ranked by the size of their largest contiguous block of windows
-           (6 nominations each over 62 admissible bins; 0.39 bins expected
-            to clear that by chance, so the threshold is a family-wise budget)
-           chance alone reaches block 6 here (1000 trials, worst 7), so the
+  modal set: 4 modes recurring in >= 4 of 49 voting windows,
+           admitted by the size of their largest contiguous block, ranked by
+           that block times log of how far they stand above their own background
+           (6 nominations each over 62 admissible bins. A scene-wide mode
+            would need support 11 for 0.39 bins expected by chance -- that is
+            REPORTED, not required: item 110's localised target reached 28 of
+            225 against a threshold of 34 and its block said mode anyway)
+           chance alone reaches block 7 here (1000 trials, worst 9), so the
            block a mode must beat is derived from this configuration, not fixed
-            0.302 Hz (sub-bin 0.309 +- 0.016)   block  31 (p 0.001)   support  34/49   ratio 7.1
-            1.512 Hz (sub-bin 1.521 +- 0.016)   block  17 (p 0.001)   support  17/49   ratio 13.2
-            0.655 Hz (sub-bin 0.646 +- 0.008)   block  12 (p 0.001)   support  13/49   ratio 3.2
+            0.504 Hz (sub-bin 0.502 +- 0.006)   block  30 (p 0.001)   support  35/49   ratio 25.0   ev 96.6
+            1.512 Hz (sub-bin 1.535 +- 0.004)   block  11 (p 0.001)   support  11/49   ratio 38.8   ev 40.2
+            0.756 Hz (sub-bin 0.755 +- 0.017)   block  10 (p 0.001)   support  12/49   ratio 9.3   ev 22.3
+            2.167 Hz (sub-bin 2.159 +- 0.013)   block   7 (p 0.025)   support  10/49   ratio 4.1   ev 10.0
 ```
 
-Nothing there is tuned. The support threshold is computed from a binomial null
-at a budget of half a bin over the band; the block floor of 4 is the window
-geometry, since windows are laid at half their width so a resolvable target falls
-in a 2×2 block at minimum; and the `p` beside each block is a Monte Carlo over
-that same null — nominations reshuffled across the band a thousand times, the
-statistic being the largest block *anywhere*, so the look-elsewhere cost is
-inside it.
+Nothing there is tuned. The block floor of 4 is the window geometry, since
+windows are laid at half their width so a resolvable target falls in a 2×2 block
+at minimum; the same 4 is the support floor, because four windows are what a
+block of four needs; and the `p` beside each block is a Monte Carlo over the
+band — nominations reshuffled a thousand times, the statistic being the largest
+block *anywhere*, so the look-elsewhere cost is inside it.
+
+**The support figure is reported and does not gate** (item 110). The binomial
+threshold beside it — `support 11` in the run above — is a correct family-wise
+budget and the wrong question for a *localised* target, because it is a fraction
+of the whole window grid. On a real collect with a point target injected, the
+true line reached 28 windows of 225 against a threshold of 34 and was refused
+before anything looked at its shape, while its block of 13 stood against a chance
+model reaching 9. Read `support` as a description of how much ground carries the
+mode, never as a verdict.
+
+**`ev` is the ranking key**: the block times the log of the ratio, which is what
+you get by adding up each carrying window's evidence under the exponential model
+`rs_twin_llr()` states exactly. Neither factor works alone, and both failures are
+measured: the block alone loses the localised target above, and the ratio alone
+hands this very fixture to the 1.512 Hz artefact — sharper than the true line, on
+a third of the ground. It is an **ordering** statistic only; overlapping windows
+are not independent looks, so do not exponentiate it or read it as a likelihood
+ratio.
 
 **The chance line is the one to read first.** That floor of 4 is a floor and
 never a separator (item 77): the number of admissible bins falls with the look
@@ -761,12 +782,13 @@ count, so windows agree by accident more often, and `chance alone reaches block
 things at the two settings. The chance model prices that automatically, which a
 fixed constant cannot.
 
-**Read the block, not the support.** A noise line can be nominated by as many
-windows as a real mode — measured, 12 of 49 each — and loses only on shape. When
-nothing clears the gates the refusal says which one spoke, and that distinction
-is the useful part: *short of the support needed* means the tracker never carried
-the frequency, while a block *chance reaches anyway* means it did and the shape
-is not evidence.
+**Read the block and the evidence, not the support.** A noise line can be
+nominated by as many windows as a real mode — measured, 12 of 49 each — and loses
+only on shape and strength. When nothing clears the gates the refusal says which
+one spoke, and that distinction is the useful part: *short of the support needed*
+now means fewer than four windows nominated it at all, so the tracker never
+carried the frequency, while a block *chance reaches anyway* means it did and the
+shape is not evidence.
 
 **The leading frequency is the bin centre**, which is what every measurement in
 `FOLLOW-UPS.md` is quoted at. The sub-bin figure interpolates the peak per window

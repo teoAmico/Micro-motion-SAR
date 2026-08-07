@@ -1595,6 +1595,24 @@ typedef struct {
  * sensitivity in FOLLOW-UPS item 47. */
 #define RS_LOCAL_HALF_BINS 12u
 
+/* The MOST reference bins a candidate can be scored against -- a mid-band bin's
+ * count, and the size every scratch buffer for the statistic needs. Bins near
+ * either end of the band get fewer, because the neighbourhood is clipped rather
+ * than extended.
+ *
+ * THAT CLIPPING IS A MEASURED BIAS AND IT IS STILL HERE (item 110). The
+ * background is a median, and the median of ten draws is about twice as variable
+ * as the median of twenty; the statistic is then MAXIMISED over the band, so a
+ * bin scored against fewer references wins the maximum more often for no reason
+ * in the scene. Measured on item 109's collect the first admissible bin held the
+ * largest block of nominating windows, 14 of 225, with both band edges
+ * over-represented -- and making the count constant by growing the neighbourhood
+ * outward drops it to 9. It is NOT fixed that way: on a floor rolling off as
+ * sinc^2 the extension reaches past the first null and inflates the low bins
+ * instead, which test_tracking's red-floor case catches. See rs_local_ratio()
+ * and `docs/CODE-REVIEW.md`. */
+#define RS_LOCAL_REF_BINS (2u * (RS_LOCAL_HALF_BINS - RS_LOCAL_GUARD_BINS))
+
 /* Find the strongest peak measured against ITS OWN neighbourhood rather than
  * against the whole spectrum.
  *
@@ -1982,6 +2000,40 @@ typedef struct {
     size_t n_contiguous;  /* largest 4-connected block of those windows */
     double median_ratio;  /* median local ratio across those windows */
 
+    /* THE ORDERING STATISTIC: n_contiguous * log(median_ratio), zero when the
+     * median ratio does not exceed 1.
+     *
+     * WHY NEITHER FACTOR ORDERS ALONE, MEASURED BOTH WAYS (item 110). The block
+     * alone was the ranking key for four items and it loses a LOCALISED target:
+     * on item 109's real collect the injected line held block 13 at a median
+     * ratio of 8.98 while three artefacts held block 14 at 4.5-5.5, so it lost
+     * by ONE WINDOW of extent while beating every rival two-to-one on strength.
+     * The ratio alone was then tried and is worse: on the 2 mm injected
+     * synthetic fixture of item 107 it reports seed 7's 1.512 Hz common-mode
+     * artefact -- ratio 38.8 over block 11 -- ahead of the true 0.504 Hz at
+     * ratio 25.0 over block 30, breaking six recoveries that the block gets
+     * right. A sharp artefact on a little ground and a moderate line on a lot of
+     * ground are the two failure modes, and each key has exactly one of them.
+     *
+     * WHERE THE FORM COMES FROM. A periodogram bin is exponentially distributed
+     * about its background, so the log-likelihood ratio of "a line here at r
+     * times the background" against "background only" is monotone in log r --
+     * the same model rs_twin_llr() states exactly. Windows carrying the mode
+     * contribute independently to first order, so the evidence for a mode ADDS
+     * over them, and summing log r over the contiguous block is
+     * n_contiguous * log(median_ratio). Extent and strength enter as they do in
+     * the likelihood rather than as a chosen weighting: log r saturates the
+     * reward for a very sharp line, which is what stops the artefact above.
+     *
+     * IT IS AN ORDERING STATISTIC AND NOT A CALIBRATED EVIDENCE VALUE. Windows
+     * overlap at half their width, so a block of n is not n independent looks --
+     * the same reason freq_se divides by sqrt(n_support/4) -- and this applies
+     * no such discount because a monotone ranking does not need one. Do not
+     * exponentiate it, quote it as a likelihood ratio, or compare it across
+     * configurations. What refuses is still the gates: support_min, the 2x2
+     * geometric floor and p_chance. This only orders what survived them. */
+    double evidence;
+
     /* PER-MODE UNCERTAINTY (item 80). Two independent things can be wrong with
      * a reported mode and they need separate numbers: it can be at a slightly
      * different frequency, or it can not be a mode at all. */
@@ -1995,6 +2047,18 @@ typedef struct {
  * short can resolve at all; beyond a handful the list stops being a description
  * and becomes a spectrum with extra steps. */
 #define RS_MODAL_MAX_MODES 12u
+
+/* The smallest largest-block that can describe a spatially resolved mode, and
+ * so also the smallest support that can produce one.
+ *
+ * IT IS THE WINDOW GEOMETRY AND NOT A TUNED CONSTANT. Windows are laid at a
+ * stride of half their width, so a target resolvable at all falls inside a 2x2
+ * block; a largest block below four cannot describe a mode whatever its support
+ * says. Since a block of four needs four nominating windows, the same number is
+ * the floor on support, and using it there makes the support test exactly
+ * REDUNDANT with the block test rather than a second and stricter hurdle -- see
+ * rs_modal_set_t.support_min for the measurement that forced this. */
+#define RS_MODAL_BLOCK_MIN 4u
 
 /* How many peaks each window nominates.
  *
@@ -2022,13 +2086,41 @@ typedef struct {
 /* A modal SET and the evidence for it. */
 typedef struct {
     rs_mode_t mode[RS_MODAL_MAX_MODES];
-    size_t n_mode;        /* modes clearing the support threshold, strongest first */
+    size_t n_mode;        /* modes clearing every gate, strongest local ratio first */
 
     size_t n_voting;      /* windows that nominated anything */
     size_t n_bin;         /* admissible bins searched, the family size */
     size_t n_per_window;  /* peaks each window nominated */
-    size_t support_min;   /* the derived threshold, in windows */
+    /* THE BINOMIAL SUPPORT THRESHOLD, WHICH IS REPORTED AND NO LONGER GATES
+     * (item 110). It is the smallest support at which fewer than half a bin is
+     * expected to clear it by chance over the band -- a family-wise budget, and
+     * correct as such. What it is NOT is a criterion a LOCALISED target can
+     * meet, because it is a fraction of the whole window grid: a mode that
+     * occupies four windows of 225 is being asked to appear in 34 of them.
+     *
+     * Measured on item 109's collect, and this is what item 109 was actually
+     * looking for. The injected 1.00 Hz line reached support 28 against a
+     * threshold of 34 and was refused before any ranking touched it, while
+     * holding a contiguous block of 13 against a chance model that reaches 9.
+     * Its own shape said mode and its count said nothing recurs. That is
+     * CLAUDE.md's standing rule -- a localised target cannot reach a fraction
+     * calibrated on fixtures where the whole scene vibrates -- recurring in the
+     * one gate nobody had checked it against.
+     *
+     * Admission is now RS_MODAL_BLOCK_MIN on support, which is the block floor
+     * restated and therefore adds nothing the block test does not already
+     * enforce, plus the block's own Monte Carlo. The family-wise correction is
+     * not lost with it: 'p_chance' is calibrated over the SAME admission rule,
+     * so relaxing this raises the chance blocks to match. Measured -- on that
+     * collect chance went from block 7 to block 9 and the reported answer
+     * changed from the band floor to the injected frequency.
+     *
+     * Keep reading 'support_min': a mode far below it is carried by a small
+     * patch of ground, which is what a localised target looks like and also what
+     * a local artefact looks like. It is a description, not a verdict. */
+    size_t support_min;   /* binomial family-wise threshold -- REPORTED, not a gate */
     double expected_false;/* bins expected to clear it by chance alone */
+    size_t admit_min;     /* support actually required: RS_MODAL_BLOCK_MIN */
 
     /* WHAT CHANCE ALONE PRODUCES AT THIS CONFIGURATION, which is the whole
      * point of item 80: at 48 looks it is a much larger block than at 128, and
@@ -2074,15 +2166,25 @@ typedef struct {
  * RS_SPECTRUM_LEAKAGE_BINS so that one mode's Hann skirt cannot be nominated as
  * a second mode. A bin's SUPPORT is the number of windows nominating it.
  *
- * THE THRESHOLD IS DERIVED, NOT TUNED. Under the null -- noise, no mode -- a
- * window's nominations fall anywhere in the admissible band, so a given bin is
- * nominated with probability p = M/K for M nominations over K bins, and its
- * support is Binomial(n_voting, p). 'support_min' is the smallest support at
- * which the EXPECTED NUMBER of bins clearing it, K * P(S >= support_min), drops
- * below one half. That is a family-wise budget over the band, so the
- * look-elsewhere cost this project has been caught by twice (items 49, 55) is
- * inside the threshold rather than left to the reader. It is reported as
- * 'expected_false' so a caller can see what it bought.
+ * THE SUPPORT THRESHOLD IS DERIVED, NOT TUNED -- AND IT NO LONGER GATES. Under
+ * the null -- noise, no mode -- a window's nominations fall anywhere in the
+ * admissible band, so a given bin is nominated with probability p = M/K for M
+ * nominations over K bins, and its support is Binomial(n_voting, p).
+ * 'support_min' is the smallest support at which the EXPECTED NUMBER of bins
+ * clearing it, K * P(S >= support_min), drops below one half: a family-wise
+ * budget over the band, reported beside 'expected_false' so a caller can see
+ * what it bought.
+ *
+ * It is right about chance and wrong about LOCALISATION, which is item 110 and
+ * is what item 109 was hunting. Being a fraction of the whole window grid, it
+ * asks a mode occupying four windows of 225 to appear in 34 of them; measured,
+ * the injected line reached 28 against a threshold of 34 and was refused before
+ * any ranking saw it, while holding a block of 13 against a chance model
+ * reaching 9. Admission is therefore RS_MODAL_BLOCK_MIN -- the block floor
+ * restated, so it refuses only what the block test refuses anyway -- and the
+ * family-wise work is left to the block's own Monte Carlo, which is drawn under
+ * the same rule and rises to match. The look-elsewhere cost this project has
+ * been caught by twice (items 49, 55) stays inside 'p_chance'.
  *
  * WHAT IT DOES NOT DO. It does not adjudicate. Support is agreement across
  * windows, and item 11 is unchanged: agreement is blind to anything the
@@ -2096,7 +2198,7 @@ typedef struct {
  * windows are not independent, so P(S >= s) understates the true tail; the
  * threshold is a principled ordering statistic, not a significance test.
  *
- * RANKED BY SHAPE, NOT BY SUPPORT, AND THAT IS THE WHOLE DIFFERENCE. Support
+ * ADMITTED BY SHAPE, NOT BY SUPPORT, AND THAT IS THE WHOLE DIFFERENCE. Support
  * alone was measured and it does not work: on item 69's record the true bin and
  * a noise bin both reached 12 of 49 windows, and ranking on support or on local
  * ratio picked the noise bin. Item 11 predicted it -- agreement is blind to
@@ -2111,15 +2213,35 @@ typedef struct {
  * windows nominating a real mode form a BLOCK; a noise line's nominating windows
  * are scattered over the scene because nothing ties them together.
  *
- * 'n_contiguous' is therefore the ranking key: the largest 4-connected block of
- * nominating windows on the window grid, with support and then local ratio as
- * tie-breaks. It is the same quantity rs_spectrum_consensus() reports as
+ * 'n_contiguous' is therefore the ADMISSION test: the largest 4-connected block
+ * of nominating windows on the window grid. It is the same quantity rs_spectrum_consensus() reports as
  * 'out_n_contiguous' and the same geometric floor applies -- windows are laid at
  * a stride of half their width, so a target resolvable at all falls inside a 2x2
  * block, and a largest block below four cannot describe a spatially resolved
  * mode whatever its support says. That floor comes from the window geometry, not
  * from a tuned constant, and it is applied here rather than merely warned about
  * because this function selects.
+ *
+ * BUT THE BLOCK ADMITS, AND IT ORDERS ONLY TOGETHER WITH STRENGTH (item 110).
+ * It was the sole ranking key for four items, and that is what lost item 109's
+ * target: the block measures how much GROUND a candidate covers, not how
+ * strongly anything is on it, so a diffuse trend field spread over a quarter of
+ * the scene outranks a bright localised target occupying four windows. Measured
+ * -- the injected line held block 13 at a median local ratio of 8.98 while three
+ * artefacts held block 14 at 4.5-5.5, so it lost by ONE WINDOW of extent while
+ * beating every rival two-to-one on strength. That is item 30's rule arriving in
+ * the ranking rather than in a gate: a LOCALISED target cannot win a contest
+ * scored on extent, and every fixture that made extent look like the right key
+ * moved the whole scene at once.
+ *
+ * Ranking on the ratio instead was then measured and is WORSE -- it hands the
+ * 2 mm injected synthetic fixture to seed 7's 1.512 Hz common-mode artefact,
+ * which is spectrally sharper than the true line on a fifth of the ground. So
+ * the modes are ordered by 'evidence', n_contiguous * log(median_ratio), which
+ * is what the exponential periodogram model gives when the evidence from each
+ * carrying window is added. Its derivation, and the two measurements that forced
+ * it, are on rs_mode_t.evidence. The gates are unchanged and are still what
+ * refuses; this only orders what survived them.
  *
  * THE BLOCK IS NORMALISED FOR CHANCE, WHICH IS WHAT ITEM 80 ADDS. The 2x2 floor
  * is a FLOOR AND NEVER A SEPARATOR (item 77): it is contingent on the look

@@ -945,6 +945,60 @@ resonarsat_status_t rs_spectrum_ps_window_opts(const rs_spectrum_t *spec,
 /* Defined below, beside the scene-derived null that also needs it. */
 static double rs_median_inplace(double *v, size_t n);
 
+/* The local background ratio for bin k: its power over the median of its own
+ * neighbourhood, with the Hann main lobe guarded out. Returns -1 when there are
+ * too few reference bins to call it an estimate of noise. 'ref' is scratch of at
+ * least RS_LOCAL_REF_BINS doubles, supplied by the caller so the inner loops
+ * allocate nothing.
+ *
+ * THE NEIGHBOURHOOD IS CLIPPED TO THE ADMISSIBLE BAND, SO THE EDGE BINS ARE
+ * SCORED AGAINST FEWER REFERENCES THAN THE MIDDLE, AND THAT IS A MEASURED BIAS
+ * THIS DOES NOT FIX (item 110). At RS_LOCAL_HALF_BINS 12 and a guard of 2, the
+ * first admissible bin gets 10 references where a mid-band bin gets 20. The
+ * median of 10 draws is about twice as variable as the median of 20, and this
+ * statistic is then MAXIMISED over the band, so the edges win the maximum out of
+ * proportion to their content. Measured on the item 109 collect: the first
+ * admissible bin held the largest block of nominating windows, 14 of 225, and
+ * both band edges were over-represented.
+ *
+ * THE OBVIOUS FIX IS WORSE AND THE TEST SUITE CAUGHT IT. Growing the
+ * neighbourhood outward on whichever side has bins, until every candidate has
+ * the same 20 references, does drop that block from 14 to 9 -- and it FAILS
+ * test_tracking's red-floor case, because on a floor rolling off as sinc^2 the
+ * extension reaches past the first null into the deep tail, depresses the median
+ * and inflates the very low-frequency bins it was meant to demote. That is the
+ * limit this header already records: a floor steeper than locally flat needs a
+ * NARROWER neighbourhood or a FITTED SLOPE, and reaching further is the opposite
+ * of both. Left as a known bias with a test standing against the wrong fix.
+ * `docs/CODE-REVIEW.md` carries what a real fix has to do.
+ *
+ * Reference bins are taken only from at or above 'k_lo': below it lies the Hann
+ * skirt of any residual trend (RS_SPECTRUM_LEAKAGE_BINS), which is not an
+ * estimate of this band's noise and would inflate every background near the
+ * floor.
+ *
+ * 'out_n_ref' receives how many references were found, for a caller that reports
+ * it; it may be NULL. It is set even on the refusal paths, because "too few
+ * reference bins" is the thing a caller wants to say. */
+static double rs_local_ratio(const double *P, size_t k, size_t k_lo,
+                             size_t n_freq, double *ref, size_t *out_n_ref)
+{
+    const size_t lo = (k > k_lo + RS_LOCAL_HALF_BINS) ? k - RS_LOCAL_HALF_BINS : k_lo;
+    const size_t hi = (k + RS_LOCAL_HALF_BINS + 1 < n_freq)
+                    ? k + RS_LOCAL_HALF_BINS + 1 : n_freq;
+    size_t n_ref = 0;
+    for (size_t j = lo; j < hi; j++) {
+        const size_t d = (j > k) ? j - k : k - j;
+        if (d <= RS_LOCAL_GUARD_BINS) continue;
+        ref[n_ref++] = P[j];
+    }
+    if (out_n_ref) *out_n_ref = n_ref;
+    if (n_ref < 4) return -1.0;
+    const double med = rs_median_inplace(ref, n_ref);
+    if (!(med > 0.0)) return -1.0;
+    return P[k] / med;
+}
+
 /* Does a displacement peak also appear in the amplitude spectrum? See microm.h,
  * which records that this does NOT separate the two on the fixture it was built
  * for, and why. Reported as a diagnostic; there is no threshold. */
@@ -1011,22 +1065,14 @@ resonarsat_status_t rs_spectrum_am_check(const rs_microm_t *m,
         P[j] = mag * mag / wp;
     }
 
+    /* The same statistic rs_spectrum_local_window() and rs_spectrum_modal_set()
+     * use, so a ratio quoted here is comparable with one quoted there. */
     const size_t k_lo = RS_SPECTRUM_LEAKAGE_BINS;
-    const size_t lo = (k > k_lo + RS_LOCAL_HALF_BINS) ? k - RS_LOCAL_HALF_BINS : k_lo;
-    const size_t hi = (k + RS_LOCAL_HALF_BINS + 1 < n_freq)
-                    ? k + RS_LOCAL_HALF_BINS + 1 : n_freq;
     size_t n_ref = 0;
-    for (size_t j = lo; j < hi; j++) {
-        const size_t d = (j > k) ? j - k : k - j;
-        if (d <= RS_LOCAL_GUARD_BINS) continue;
-        ref[n_ref++] = P[j];
-    }
-    if (n_ref >= 4) {
-        const double med = rs_median_inplace(ref, n_ref);
-        if (med > 0.0) {
-            out->am_ratio = P[k] / med;
-            out->ref_median = med;
-        }
+    const double r = rs_local_ratio(P, k, k_lo, n_freq, ref, &n_ref);
+    if (r > 0.0) {
+        out->am_ratio = r;
+        out->ref_median = P[k] / r;
     }
     out->bin = k;
     out->n_ref = n_ref;
@@ -1155,29 +1201,6 @@ resonarsat_status_t rs_spectrum_maxhold(rs_spectrum_t *spec,
     rs_fft_plan_destroy(plan);
     free(win); free(buf); free(hold);
     return RS_OK;
-}
-
-/* The local background ratio for bin k: its power over the median of its own
- * neighbourhood, with the Hann main lobe guarded out. Returns -1 when there are
- * too few reference bins to call it an estimate of noise. 'ref' is scratch of
- * at least 2*RS_LOCAL_HALF_BINS+1 doubles, supplied by the caller so the inner
- * loops allocate nothing. */
-static double rs_local_ratio(const double *P, size_t k, size_t k_lo,
-                             size_t n_freq, double *ref)
-{
-    const size_t lo = (k > k_lo + RS_LOCAL_HALF_BINS) ? k - RS_LOCAL_HALF_BINS : k_lo;
-    const size_t hi = (k + RS_LOCAL_HALF_BINS + 1 < n_freq)
-                    ? k + RS_LOCAL_HALF_BINS + 1 : n_freq;
-    size_t n_ref = 0;
-    for (size_t j = lo; j < hi; j++) {
-        const size_t d = (j > k) ? j - k : k - j;
-        if (d <= RS_LOCAL_GUARD_BINS) continue;
-        ref[n_ref++] = P[j];
-    }
-    if (n_ref < 4) return -1.0;
-    const double med = rs_median_inplace(ref, n_ref);
-    if (!(med > 0.0)) return -1.0;
-    return P[k] / med;
 }
 
 /* log(n!) by lgamma, for the binomial tail below. */
@@ -1346,17 +1369,26 @@ static double rs_parabolic_offset(const double *P, size_t k, size_t k_lo,
     return d;
 }
 
-/* Sort key for ranking modes: support first, then how far each stood above its
- * own background. */
+/* The ordering statistic for an admitted mode: its contiguous block times the
+ * log of how far it stood above its own background. See rs_mode_t.evidence. */
+static double rs_mode_evidence(const rs_mode_t *m)
+{
+    if (!(m->median_ratio > 1.0)) return 0.0;
+    return (double)m->n_contiguous * log(m->median_ratio);
+}
+
+/* Sort key for ranking the modes that have ALREADY been admitted: accumulated
+ * evidence first, then block, then support. See rs_mode_t.evidence in microm.h
+ * for the derivation and for the two measurements that forced it. */
 static int rs_cmp_mode(const void *a, const void *b)
 {
     const rs_mode_t *x = a, *y = b;
+    const double ex = rs_mode_evidence(x), ey = rs_mode_evidence(y);
+    if (ex != ey) return ex > ey ? -1 : 1;
     if (x->n_contiguous != y->n_contiguous)
         return x->n_contiguous > y->n_contiguous ? -1 : 1;
     if (x->n_support != y->n_support)
         return x->n_support > y->n_support ? -1 : 1;
-    if (x->median_ratio != y->median_ratio)
-        return x->median_ratio > y->median_ratio ? -1 : 1;
     return x->bin < y->bin ? -1 : (x->bin > y->bin);
 }
 
@@ -1384,7 +1416,7 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
     }
     const size_t n_bin = n_freq - k_lo;
 
-    double *ref     = malloc((2 * RS_LOCAL_HALF_BINS + 1) * sizeof *ref);
+    double *ref     = malloc(RS_LOCAL_REF_BINS * sizeof *ref);
     double *ratio   = malloc(n_freq * sizeof *ratio);
     size_t *support = calloc(n_freq, sizeof *support);
     /* Every window's ratio at every bin, so a mode's median can be taken over
@@ -1423,7 +1455,7 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
         const double *P = spec->psd + w * n_freq;
         int any = 0;
         for (size_t k = k_lo; k < n_freq; k++) {
-            ratio[k] = rs_local_ratio(P, k, k_lo, n_freq, ref);
+            ratio[k] = rs_local_ratio(P, k, k_lo, n_freq, ref, NULL);
             if (ratio[k] > 0.0) any = 1;
         }
         if (!any) continue;
@@ -1453,8 +1485,11 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
         if (n_pick > 0) { voting[w] = 1; n_voting++; }
     }
 
-    /* The threshold: the smallest support at which fewer than half a bin is
-     * expected to clear it by chance over the whole band. */
+    /* The binomial threshold: the smallest support at which fewer than half a
+     * bin is expected to clear it by chance over the whole band. It is REPORTED
+     * and no longer gates (item 110) -- see rs_modal_set_t.support_min for the
+     * measurement. Admission is RS_MODAL_BLOCK_MIN, which is the block floor
+     * restated, and the family-wise work is done by the block's own null. */
     const double p = (double)RS_MODAL_PER_WINDOW / (double)n_bin;
     size_t support_min = n_voting + 1;
     double expected = 0.0;
@@ -1471,9 +1506,13 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
     out->n_per_window = RS_MODAL_PER_WINDOW;
     out->support_min  = support_min;
     out->expected_false = expected;
+    out->admit_min    = RS_MODAL_BLOCK_MIN;
 
     /* What chance alone reaches at THIS configuration, which is the number the
-     * fixed floor could not know (items 77-78). */
+     * fixed floor could not know (items 77-78). It is drawn under the SAME
+     * admission rule the candidates face -- RS_MODAL_BLOCK_MIN, not the
+     * binomial 'support_min' -- so relaxing that rule raises these blocks to
+     * match instead of quietly loosening the test (item 110). */
     size_t *hist = calloc(spec->n_win + 1, sizeof *hist);
     if (!hist) {
         for (size_t k = 0; k < n_freq; k++) free(nom[k]);
@@ -1484,7 +1523,7 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
     }
     const resonarsat_status_t st_null =
         rs_modal_null(voting, spec->n_win, spec->n_win_az, spec->n_win_rg,
-                      k_lo, n_freq, support_min, RS_MODAL_NULL_TRIALS,
+                      k_lo, n_freq, RS_MODAL_BLOCK_MIN, RS_MODAL_NULL_TRIALS,
                       0x9E3779B97F4A7C15ULL, hist);
     if (st_null != RS_OK) {
         free(hist);
@@ -1517,8 +1556,11 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
     for (size_t k = k_lo; k < n_freq; k++) {
         if (out->n_mode >= RS_MODAL_MAX_MODES) break;
         /* Track the best refusal even when the support gate is what refused it,
-         * so the caller can say WHICH gate spoke. */
-        if (support[k] < support_min) {
+         * so the caller can say WHICH gate spoke. The floor is the geometric
+         * one: fewer nominating windows than RS_MODAL_BLOCK_MIN cannot form the
+         * block the next gate requires, so this refuses only what that gate
+         * would refuse anyway. */
+        if (support[k] < RS_MODAL_BLOCK_MIN) {
             if (!out->near_miss_had_support &&
                 support[k] > out->near_miss.n_support) {
                 out->near_miss.bin = k;
@@ -1543,7 +1585,7 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
          * whatever else is true; the chance model says a block this large is
          * what this configuration produces from nothing. Item 77: the geometric
          * bound is a floor, never a separator, so both apply. */
-        if (largest < 4 || p_chance > RS_MODAL_P_MAX) {
+        if (largest < RS_MODAL_BLOCK_MIN || p_chance > RS_MODAL_P_MAX) {
             if (largest > out->near_miss.n_contiguous ||
                 !out->near_miss_had_support) {
                 out->near_miss.bin = k;
@@ -1564,6 +1606,7 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
         m->n_contiguous = largest;
         m->median_ratio = rs_median_inplace(acc, support[k]);
         m->p_chance = p_chance;
+        m->evidence = rs_mode_evidence(m);
 
         /* Sub-bin frequency across the windows that nominated it. The mean is
          * the estimate, the spread is the honest uncertainty, and freq_se
@@ -1600,11 +1643,12 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
     free(voted); free(seen); free(stack); free(voting);
 
     if (n_mode == 0) {
-        rs_set_error("modal set: no bin was nominated by %zu of %zu windows in a "
+        rs_set_error("modal set: no bin was nominated by %u of %zu windows in a "
                      "block of %zu or more, so nothing recurs with a shape "
                      "chance does not reach here",
-                     support_min, n_voting,
-                     out->null_block_crit > 4 ? out->null_block_crit : 4);
+                     RS_MODAL_BLOCK_MIN, n_voting,
+                     out->null_block_crit > RS_MODAL_BLOCK_MIN
+                         ? out->null_block_crit : RS_MODAL_BLOCK_MIN);
         return RS_ERR_RANGE;
     }
     return RS_OK;
@@ -1635,7 +1679,7 @@ resonarsat_status_t rs_spectrum_local_window(const rs_spectrum_t *spec,
         return RS_ERR_RANGE;
     }
 
-    double *ref = malloc((2 * RS_LOCAL_HALF_BINS + 1) * sizeof *ref);
+    double *ref = malloc(RS_LOCAL_REF_BINS * sizeof *ref);
     if (!ref) {
         rs_set_error("local peak: out of memory");
         return RS_ERR_ALLOC;
@@ -1647,34 +1691,23 @@ resonarsat_status_t rs_spectrum_local_window(const rs_spectrum_t *spec,
     for (size_t w = 0; w < spec->n_win; w++) {
         const double *P = spec->psd + w * n_freq;
         for (size_t k = k_lo; k < n_freq; k++) {
-            /* The neighbourhood is clipped to the admissible band, so a
-             * candidate near either end is scored against fewer bins rather
-             * than against bins that do not exist or must not be read. */
-            const size_t lo = (k > k_lo + RS_LOCAL_HALF_BINS)
-                            ? k - RS_LOCAL_HALF_BINS : k_lo;
-            const size_t hi = (k + RS_LOCAL_HALF_BINS + 1 < n_freq)
-                            ? k + RS_LOCAL_HALF_BINS + 1 : n_freq;
+            /* One shared implementation, so this and the modal set's nomination
+             * cannot drift apart -- they were separate copies until item 110
+             * changed the neighbourhood in one place. Fewer than four reference
+             * bins is a background estimated from noise rather than an estimate
+             * of noise, and rs_local_ratio() refuses it. */
             size_t n_ref = 0;
-            for (size_t j = lo; j < hi; j++) {
-                const size_t d = (j > k) ? j - k : k - j;
-                if (d <= RS_LOCAL_GUARD_BINS) continue;
-                ref[n_ref++] = P[j];
-            }
-            /* Fewer than four reference bins is a background estimated from
-             * noise, not an estimate of noise. */
-            if (n_ref < 4) continue;
-            const double med = rs_median_inplace(ref, n_ref);
-            if (!(med > 0.0)) continue;
+            const double ratio = rs_local_ratio(P, k, k_lo, n_freq, ref, &n_ref);
+            if (!(ratio > 0.0)) continue;
 
             n_searched++;
-            const double ratio = P[k] / med;
             if (ratio > best) {
                 best = ratio;
                 out->window = w;
                 out->bin = k;
                 out->freq_hz = spec->freq[k];
                 out->ratio = ratio;
-                out->ref_median = med;
+                out->ref_median = P[k] / ratio;
                 out->n_ref = n_ref;
             }
         }

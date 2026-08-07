@@ -42,6 +42,51 @@ reader's memory model rather than to a flag.
 report geometry and timing, so it cannot describe a product larger than RAM --
 the one command whose entire job is to tell you what you have.
 
+## The local background is estimated from half as many bins at the band edges
+
+`rs_local_ratio()` (`src/core/spectrum.c:975`) clips its `±RS_LOCAL_HALF_BINS`
+neighbourhood to the admissible band, so the first admissible bin is scored
+against **10 reference bins where a mid-band bin gets 20**, and the same at
+Nyquist. The background is a MEDIAN, so halving the count roughly doubles its
+variance; the statistic is then maximised over every bin of every window, and a
+noisier denominator wins a maximum more often for no reason in the scene.
+
+**Measured** (item 110, `runs/kilauea/2026-08-07-nomination-fix/`): on the item
+109 collect the two frequencies `rs_spectrum_modal_set()` reported — bin 3 and
+bin 61 — are both inside the starved zone, and bin 3 held the largest block of
+nominating windows at 14 of 225. Replacing the clip with a neighbourhood that
+grows outward until every bin has 20 references drops that block to **9**.
+
+**Not fixed, and the obvious fix is the wrong one.** That extension fails
+`test_tracking`'s red-floor case (`tests/test_tracking.c:2300`): on a floor
+rolling off as sinc² it reaches past the first null into the deep tail, depresses
+the median and inflates the low-frequency bins it was meant to demote. The header
+for `rs_spectrum_local_window()` already names the remedy this needs and does not
+have — **a narrower neighbourhood or a fitted slope** — and reaching further is
+the opposite of both.
+
+A fix has to keep the reference count constant *without* enlarging the span the
+references are drawn from. The candidates not tried: fitting the background
+log-linearly across the neighbourhood and evaluating it at `k` (which
+extrapolates rather than extending, and works one-sided by construction), or
+normalising the ratio by the count so the maximum is comparable across bins.
+Either changes what every policy downstream nominates, so it needs item 110's
+two arms re-run.
+
+## Nothing in the test suite exercises `rs_spectrum_modal_set()`
+
+It is the function whose leading frequency `mmotion` reports, whose ordering
+`--stable` adjudicates, and the subject of items 70, 71, 77, 78, 80, 109 and 110
+— and `grep -rl modal tests/` returns nothing. Every claim about it in
+`FOLLOW-UPS.md` rests on run directories rather than on anything `ctest` would
+catch. Item 110 changed its sort key and the suite could not have noticed.
+
+What a test needs to pin, at minimum: that the admission gates and the ordering
+are separate (a hand-built spectrum with a strong 2x2 block and a weak large one
+must report the strong one, and must report NEITHER when both fail `p_chance`),
+and that `support_min` still tracks the bin count when the look count changes,
+which is item 77's failure.
+
 ## Reviews performed
 
 | date | commit | scope | outcome |

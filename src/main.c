@@ -2895,14 +2895,21 @@ static int rs_cmd_mmotion(int argc, char **argv)
             modal_lead_hz = ms.n_mode > 0 ? ms.mode[0].freq_hz : 0.0;
             printf("  modal set: %zu mode%s recurring in >= %zu of %zu voting "
                    "windows,\n"
-                   "           ranked by the size of their largest contiguous "
-                   "block of windows\n"
-                   "           (%zu nominations each over %zu admissible bins; "
-                   "%.2f bins expected\n"
-                   "            to clear that by chance, so the threshold is a "
-                   "family-wise budget)\n",
-                   ms.n_mode, ms.n_mode == 1 ? "" : "s", ms.support_min,
-                   ms.n_voting, ms.n_per_window, ms.n_bin, ms.expected_false);
+                   "           admitted by the size of their largest contiguous "
+                   "block, ranked by\n"
+                   "           that block times log of how far they stand above "
+                   "their own background\n"
+                   "           (%zu nominations each over %zu admissible bins. "
+                   "A scene-wide mode\n"
+                   "            would need support %zu for %.2f bins expected by "
+                   "chance -- that is\n"
+                   "            REPORTED, not required: item 110's localised "
+                   "target reached 28 of\n"
+                   "            225 against a threshold of 34 and its block said "
+                   "mode anyway)\n",
+                   ms.n_mode, ms.n_mode == 1 ? "" : "s", ms.admit_min,
+                   ms.n_voting, ms.n_per_window, ms.n_bin,
+                   ms.support_min, ms.expected_false);
             printf("           chance alone reaches block %zu here (%zu trials, "
                    "worst %zu), so the\n"
                    "           block a mode must beat is derived from this "
@@ -2910,11 +2917,11 @@ static int rs_cmd_mmotion(int argc, char **argv)
                    ms.null_block_crit, ms.n_trial, ms.null_block_max);
             for (size_t i = 0; i < ms.n_mode; i++)
                 printf("           %6.3f Hz (sub-bin %.3f +- %.3f)   block %3zu "
-                       "(p %.3f)   support %3zu/%zu   ratio %.1f\n",
+                       "(p %.3f)   support %3zu/%zu   ratio %.1f   ev %.1f\n",
                        ms.mode[i].freq_hz, ms.mode[i].freq_mean,
                        ms.mode[i].freq_sd, ms.mode[i].n_contiguous,
                        ms.mode[i].p_chance, ms.mode[i].n_support, ms.n_voting,
-                       ms.mode[i].median_ratio);
+                       ms.mode[i].median_ratio, ms.mode[i].evidence);
             printf("           The leading figure is the BIN CENTRE, which is what "
                    "every earlier\n"
                    "           measurement here is quoted at. The sub-bin +- is the "
@@ -2946,7 +2953,7 @@ static int rs_cmd_mmotion(int argc, char **argv)
                        "           needed. No frequency was carried widely enough "
                        "to test its shape.\n",
                        ms.near_miss.freq_hz, ms.near_miss.n_support,
-                       ms.n_voting, ms.support_min);
+                       ms.n_voting, ms.admit_min);
         }
     }
 

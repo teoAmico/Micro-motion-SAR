@@ -149,6 +149,7 @@ said, not better) and item 7's line numbers.
 | 105 | **refutes my own prediction** | no sub-look SCR penalty at REL 20; the floor falls as N^-0.36 and 256 looks beats 128 |
 | 106 | **corrects 104 and 70** | the transition is look-count independent; a real bridge HAS been measured, without corner reflectors |
 | 107 | **first blind discriminator** | require the frequency to survive a change of look count: false positives 12/12 -> 1/12, recall 6/6 |
+| 108 | **bounds 107** | it caught a motionless scene answering 0.997 Hz; but recall on a weak OFF-CENTRE target is untested and it abstains 3 of 8 |
 
 ---
 
@@ -9144,3 +9145,73 @@ the evidence file for the comparison to use.
 It refuses equal look counts as vacuous, a differing window grid, and an
 unreadable file; it warns when `df` differs, since that compares across DWELLS,
 which this item records as untested.
+
+
+---
+
+## 108. The stabilization test caught a false positive sitting exactly on the frequency being sought. Recall on a weak OFF-CENTRE target is another matter.
+
+Pre-registered at `25f7351`. Item 107 measured `--stable` on a whole-scene 2 mm
+synthetic injection; this puts it on a **localised point target 20 m off the grid
+origin, at 0.13-0.53 mm, on REAL Kilauea clutter**. The injection deposited into
+56645 of 56645 pulses, so nothing here is a placement failure.
+
+| collect | amp | modal @128 | modal @256 | verdict |
+|---|---|---|---|---|
+| C10 | 0.00 control | 10.148 | 15.971 | not comparable |
+| C10 | 0.13 | 0.499 | 15.971 | not comparable |
+| C10 | 0.26 | 0.499 | **0.998** | MOVED -> reject |
+| C10 | 0.53 | 0.499 | **0.998** | MOVED -> reject |
+| C14 | 0.00 control | **0.997** | 7.828 | MOVED -> reject |
+| C14 | 0.13 | 0.997 | 11.992 | not comparable |
+| C14 | 0.26 | **0.997** | **0.999** | **STABLE -> report** |
+| C14 | 0.53 | **0.997** | **0.999** | **STABLE -> report** |
+
+### The result that matters
+
+**C14's MOTIONLESS control reports 0.997 Hz at 128 looks.** The injected
+frequency is 1.00 Hz. On a real collect, at the look count this whole project has
+used throughout, a scene with **nothing in it** produced an answer
+indistinguishable from the signal being looked for -- 0.003 Hz away, well inside
+half a bin.
+
+**`--stable` rejected it**, because at 256 looks the same motionless scene says
+7.828 Hz.
+
+That is the clearest demonstration this project has of why a blind discriminator
+was needed. Every statistic in items 38-99 -- prominence, consensus, contiguity,
+the chance model, the modal set -- would have endorsed 0.997 Hz on that scene.
+
+**H3 passes**: both motionless controls are refused.
+
+### H1 passes as written, and the recall is still poor
+
+H1 required that no case recovered at BOTH look counts be called unstable. **No
+case was**, so H1 passes. But only **2 of 6 injected runs are reported**, and the
+reason is not the stabilization test:
+
+**C10 recovers at 256 looks and not at 128** (0.998 against 0.499) at both
+0.26 and 0.53 mm. Item 103 recovered the same amplitudes on the same collect at
+128 looks with the target at the GRID ORIGIN. The only change is
+`--inject-at 20,20`. That is items 40-41 again -- an off-centre target falls
+across four overlapping windows and its energy is split -- and it costs recall
+before `--stable` is consulted.
+
+### The abstention rate is a real weakness
+
+**Three of eight comparisons returned "not comparable"** because the 256-look
+answer landed above the 128-look Nyquist of 10.7 Hz. The test abstains rather
+than deciding whenever the higher-look run wanders out of the common band, and on
+real clutter it wanders there often. A pair of look counts closer together --
+128 and 192, say -- would share more band and abstain less; untested.
+
+### What transfers and what does not
+
+- **Specificity transfers to real clutter**, and does so on the hardest possible
+  example.
+- **Recall was never tested here**, because the off-centre placement removed the
+  signal at 128 looks before stability could be assessed. Item 107's 6-of-6
+  stands only for a centred, scene-wide, 2 mm injection.
+- The honest summary is that `--stable` is a **specificity instrument**. Nothing
+  measured so far says it preserves recall on a weak localised target, and item
+  108's own design prevented that question from being answered.

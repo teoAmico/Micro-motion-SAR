@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 107 items and their status.
+an index of all 108 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,26 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**THE STABILIZATION TEST CAUGHT A FALSE POSITIVE SITTING ON THE SOUGHT
+FREQUENCY** (item 108). Pre-registered at `25f7351`; `--stable` put on a
+LOCALISED point target 20 m off the origin at 0.13-0.53 mm on REAL Kilauea
+clutter. **C14's MOTIONLESS control reports 0.997 Hz at 128 looks against an
+injected 1.00 Hz** — on a real collect, at the look count used throughout this
+project, a scene with nothing in it gave an answer 0.003 Hz from the signal being
+sought. **`--stable` rejected it**, because the same scene says 7.828 Hz at 256
+looks. **Every statistic in items 38-99 would have endorsed it.** H3 passes: both
+motionless controls refused. **But recall is another matter and item 107's 6-of-6
+does NOT transfer**: only 2 of 6 injected runs report, because **C10 recovers at
+256 and not at 128** (0.998 against 0.499) at amplitudes item 103 recovered on
+the SAME collect with the target at the GRID ORIGIN — the only change is
+`--inject-at 20,20`, which is items 40-41's split across four overlapping
+windows, and it costs the signal before `--stable` is consulted. **Three of eight
+comparisons ABSTAINED** ("not comparable") because the 256-look answer landed
+above the 128-look Nyquist; closer look counts would share more band, untested.
+**Honest summary: `--stable` is a SPECIFICITY instrument.** Nothing measured says
+it preserves recall on a weak localised target, and item 108's own design
+prevented that question from being answered.
 
 **`--stable WINDOWS_CSV` IMPLEMENTS THE STABILIZATION TEST** (item 107,
 implemented). It compares this run against another run of **the same scene at a

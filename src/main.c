@@ -1398,6 +1398,84 @@ static size_t rs_load_twin_probe(const char *path, double **out, double **out_ps
     return n;
 }
 
+/* The per-window 'dominant_hz' column of another run of the SAME SCENE at a
+ * DIFFERENT LOOK COUNT, for the stabilization test below.
+ *
+ * WHY THIS EXISTS. Item 107: a real vibration sits at f Hz however the aperture
+ * is sliced, while an artefact produced by the slicing need not, so requiring a
+ * frequency to survive a change of look count separates them. Measured, that
+ * takes the false-positive rate on motionless clutter from item 96's 12 of 12 to
+ * 1 of 12 while keeping 6 of 6 injected scenes. It is the
+ * operational-modal-analysis STABILIZATION DIAGRAM with the look count standing
+ * in for model order -- item 70 identified the principle and substituted the
+ * spatial window, which is the wrong axis.
+ *
+ * WHY IT MATTERS MORE THAN THE OTHER CONTROLS HERE. `--null-static`, item 97's
+ * `--twin` and item 38's zero-amplitude control each need something a single
+ * real collect cannot supply: a simulated motionless realisation, a run
+ * differing in nothing but the motion, or the injection machinery. **This needs
+ * only the collect, processed twice.**
+ *
+ * Returns the number of windows read and writes a malloc'd array of their
+ * dominant frequencies to 'out'; 0 on failure with 'why' set. The other run's
+ * look count, bin spacing and look interval come back in 'out_looks', 'out_df'
+ * and 'out_dt' so the caller can refuse a comparison that is vacuous (equal look
+ * counts) or that crosses dwells (unequal df), which item 107 records as
+ * untested. */
+static size_t rs_load_stable(const char *path, double **out, size_t *out_looks,
+                             double *out_df, double *out_dt, double *out_modal,
+                             const char **why)
+{
+    *out = NULL; *out_looks = 0; *out_df = 0.0; *out_dt = 0.0; *out_modal = 0.0;
+    *why = "";
+    FILE *fh = fopen(path, "r");
+    if (!fh) { *why = "cannot be opened"; return 0; }
+
+    char line[8192];
+    int col_f = -1;
+    size_t cap = 64, n = 0;
+    double *v = malloc(cap * sizeof *v);
+    if (!v) { fclose(fh); *why = "out of memory"; return 0; }
+
+    while (fgets(line, sizeof line, fh)) {
+        if (line[0] == '#') {
+            const char *p;
+            if ((p = strstr(line, "looks=")))  *out_looks = (size_t)atol(p + 6);
+            if ((p = strstr(line, "df_hz=")))  *out_df = atof(p + 6);
+            if ((p = strstr(line, "dt_s=")))   *out_dt = atof(p + 5);
+            if ((p = strstr(line, "modal_lead_hz="))) *out_modal = atof(p + 14);
+            continue;
+        }
+        if (col_f < 0) {
+            char *save = NULL, *tok = strtok_r(line, ",\n\r", &save);
+            for (int i = 0; tok; i++, tok = strtok_r(NULL, ",\n\r", &save))
+                if (strcmp(tok, "dominant_hz") == 0) col_f = i;
+            if (col_f < 0) {
+                free(v); fclose(fh);
+                *why = "has no dominant_hz column";
+                return 0;
+            }
+            continue;
+        }
+        char *save = NULL, *tok = strtok_r(line, ",\n\r", &save);
+        double got = 0.0; int have = 0;
+        for (int i = 0; tok; i++, tok = strtok_r(NULL, ",\n\r", &save))
+            if (i == col_f) { got = atof(tok); have = 1; }
+        if (!have) continue;
+        if (n == cap) {
+            cap *= 2;
+            double *t = realloc(v, cap * sizeof *t);
+            if (!t) { free(v); fclose(fh); *why = "out of memory"; return 0; }
+            v = t;
+        }
+        v[n++] = got;
+    }
+    fclose(fh);
+    if (n == 0) { free(v); *why = "contains no data rows"; return 0; }
+    *out = v;
+    return n;
+}
+
 /* Run the full micro-motion chain on a phase-history file.
  *
  * Focus, decompose into sub-looks, track, and estimate spectra. Prints the
@@ -1416,6 +1494,7 @@ static int rs_cmd_mmotion(int argc, char **argv)
                "                          [--inject-vib FREQ_HZ[,AMP_MM[,REL]]]\n"
                "                          [--inject-at DX,DY] [--stft LOOKS]\n"
                "                          [--tfit MODES] [--twin WINDOWS_CSV]\n"
+               "                          [--stable WINDOWS_CSV]\n"
                "                          [--inject-wave FILE[,RATE_HZ[,AMP_MM[,REL]]]]\n"
                "                          [--stream N]\n"
                "                          [--estimator correlation|phase|splitband|argmax]\n"
@@ -2201,6 +2280,14 @@ static int rs_cmd_mmotion(int argc, char **argv)
      * A probe inside the Hann skirt is allowed -- naming a frequency is not
      * searching for one -- but it is not separable from a trend, so it is
      * flagged rather than refused. See rs_spectrum_prominence_at(). */
+    double modal_lead_hz = 0.0;   /* the modal set's leading frequency, for --stable */
+
+    /* --stable PATH keeps only frequencies that survive a change of look count;
+     * see rs_load_stable() and the report below. */
+    const char *stable_path = rs_opt(argc, argv, "--stable");
+    double *stable_f = NULL; size_t stable_n = 0, stable_looks = 0;
+    double stable_df = 0.0, stable_dt = 0.0, stable_fmax = 0.0, stable_modal = 0.0;
+
     /* --twin PATH differences this run against a previous one at the probed
      * frequency; see rs_load_twin_probe() and the report below. */
     const char *twin_path = rs_opt(argc, argv, "--twin");
@@ -2799,6 +2886,13 @@ static int rs_cmd_mmotion(int argc, char **argv)
         rs_modal_set_t ms;
         const resonarsat_status_t mst = rs_spectrum_modal_set(&spec, &ms);
         if (mst == RS_OK) {
+            /* Kept for the evidence file and for --stable: item 107's test is on
+             * THIS quantity, the modal set's leading frequency, and not on any
+             * one window's dominant_hz. The two differ -- verified, an injected
+             * scene whose modal answer is identical at both look counts can have
+             * its strongest-prominence WINDOW report 0.504 Hz at one and
+             * 2.571 Hz at the other. */
+            modal_lead_hz = ms.n_mode > 0 ? ms.mode[0].freq_hz : 0.0;
             printf("  modal set: %zu mode%s recurring in >= %zu of %zu voting "
                    "windows,\n"
                    "           ranked by the size of their largest contiguous "
@@ -2854,6 +2948,96 @@ static int rs_cmd_mmotion(int argc, char **argv)
                        ms.near_miss.freq_hz, ms.near_miss.n_support,
                        ms.n_voting, ms.support_min);
         }
+    }
+
+    /* --stable: load the other run and refuse the comparisons that mean nothing.
+     * See rs_load_stable() for the principle. */
+    if (stable_path) {
+        const char *why = "";
+        stable_n = rs_load_stable(stable_path, &stable_f, &stable_looks,
+                                  &stable_df, &stable_dt, &stable_modal, &why);
+        if (stable_n == 0) {
+            fprintf(stderr, "mmotion: --stable '%s' %s\n", stable_path, why);
+            rs_spectrum_free(&spec); rs_microm_free(&m);
+            rs_subap_stack_free(&stack); rs_cphd_free(&c);
+            return 1;
+        }
+        if (stable_n != spec.n_win) {
+            fprintf(stderr, "mmotion: --stable has %zu windows, this run has "
+                            "%zu -- the grids differ, so no window corresponds\n",
+                    stable_n, spec.n_win);
+            free(stable_f);
+            rs_spectrum_free(&spec); rs_microm_free(&m);
+            rs_subap_stack_free(&stack); rs_cphd_free(&c);
+            return 1;
+        }
+        if (stable_looks == stack.n_looks) {
+            fprintf(stderr, "mmotion: --stable was run at %zu looks and so is "
+                            "this -- the test is VACUOUS. The point is that an "
+                            "artefact of the SLICING moves when the slicing "
+                            "changes; two identical slicings cannot show it "
+                            "(FOLLOW-UPS.md item 107).\n", stable_looks);
+            free(stable_f);
+            rs_spectrum_free(&spec); rs_microm_free(&m);
+            rs_subap_stack_free(&stack); rs_cphd_free(&c);
+            return 1;
+        }
+        /* The comparison lives in the band BOTH runs can express. A frequency
+         * above the lower Nyquist has no counterpart to be stable against. */
+        const double nyq_here  = (stack.dt  > 0.0) ? 0.5 / stack.dt  : 0.0;
+        const double nyq_other = (stable_dt > 0.0) ? 0.5 / stable_dt : 0.0;
+        stable_fmax = (nyq_here < nyq_other) ? nyq_here : nyq_other;
+        if (stable_df > 0.0 && spec.df > 0.0 &&
+            fabs(stable_df - spec.df) > 1e-9 * spec.df)
+            printf("  WARNING: --stable was run at df %.6f Hz and this at %.6f -- "
+                   "a comparison\n"
+                   "           across DWELLS, which item 107 records as untested. "
+                   "Only the look\n"
+                   "           count was meant to change.\n",
+                   stable_df, spec.df);
+    }
+
+    /* The STABILIZATION TEST (item 107): keep only what survives a change of
+     * look count. Reported, and gating nothing, like every other statistic
+     * here -- but this is the only one that needs no twin, no null control and
+     * no ground truth. */
+    if (stable_f) {
+        const double half = 0.5 * spec.df;
+        size_t n_cmp = 0, n_stable = 0;
+        for (size_t w = 0; w < spec.n_win; w++) {
+            const double a = spec.dominant_freq[w], b = stable_f[w];
+            if (a > stable_fmax || b > stable_fmax) continue;   /* no counterpart */
+            n_cmp++;
+            if (fabs(a - b) <= half) n_stable++;
+        }
+        /* THE VERDICT IS ON THE MODAL SET'S LEADING FREQUENCY, which is the
+         * quantity item 107 measured 12-of-12 to 1-of-12 on. It is NOT the
+         * strongest-prominence window's dominant_hz: verified, an injected scene
+         * whose modal answer is 0.504 Hz at both look counts can have that
+         * window report 0.504 at one and 2.571 at the other, so comparing
+         * windows would reject a true recovery. */
+        const double fa = modal_lead_hz, fb = stable_modal;
+        const int have_both = (fa > 0.0 && fb > 0.0);
+        const int in_band = have_both && fa <= stable_fmax && fb <= stable_fmax;
+        const int sel_stable = in_band && fabs(fa - fb) <= half;
+        printf("  stabilization against %zu looks (this run %zu), common band "
+               "0 - %.3f Hz:\n"
+               "            modal set: %.3f Hz here, %.3f Hz there -> %s\n"
+               "            %zu of %zu comparable windows agree within half a "
+               "bin (%.4f Hz)\n"
+               "            A real vibration sits at the same Hz however the "
+               "aperture is sliced;\n"
+               "            an artefact of the slicing need not. This took a "
+               "motionless fixture\n"
+               "            from 12 of 12 false positives to 1 of 12 (item 107). "
+               "It gates nothing,\n"
+               "            and it is the only control here needing no twin and "
+               "no ground truth.\n",
+               stable_looks, stack.n_looks, stable_fmax, fa, fb,
+               !have_both ? "one run's modal set REFUSED -- no comparison"
+               : !in_band ? "OUTSIDE THE COMMON BAND -- not comparable"
+                          : (sel_stable ? "STABLE -> report" : "MOVED -> reject"),
+               n_stable, n_cmp, half);
     }
 
     /* The PREDICTED FLOOR, per window, from each window's own phase noise.
@@ -3378,6 +3562,9 @@ static int rs_cmd_mmotion(int argc, char **argv)
             fprintf(wf, "# consensus_hz=%.12g agree=%zu voting=%zu distinct=%zu "
                         "largest_block=%zu\n",
                     cons_hz, cons_agree, cons_vote, cons_distinct, cons_block);
+            /* The modal set's leading frequency, which is the quantity --stable
+             * compares (item 107). Zero when the modal set refused. */
+            fprintf(wf, "# modal_lead_hz=%.12g\n", modal_lead_hz);
             fprintf(wf, "# df_hz=%.12g quant_px=%.12g coherence_gate=%.12g "
                         "floor_px=%.12g n_win_az=%zu n_win_rg=%zu\n",
                     spec.df, spec.quant_px, q_min_rep, floor_rep,
@@ -3418,10 +3605,11 @@ static int rs_cmd_mmotion(int argc, char **argv)
                           ? " INSIDE_THE_HANN_SKIRT" : "");
             fprintf(wf, "window,iaz,irg,dominant_hz,prominence,quality,"
                         "excursion_px,snr,sigma_px,d_a,passed_gates,"
-                        "agrees_with_consensus,passed_cull%s%s%s\n",
+                        "agrees_with_consensus,passed_cull%s%s%s%s\n",
                     probe_hz > 0.0 ? ",probe_psd,probe_prominence" : "",
                     twin_probe ? ",twin_delta,twin_llr,twin_p" : "",
-                    (m.phase && c.lambda > 0.0) ? ",floor_mm" : "");
+                    (m.phase && c.lambda > 0.0) ? ",floor_mm" : "",
+                    stable_f ? ",stable_hz,stable" : "");
             for (size_t w = 0; w < spec.n_win; w++) {
                 const double exc = spec.excursion_px ? spec.excursion_px[w] : 0.0;
                 const int passed = (spec.quality[w] >= q_min_rep) &&
@@ -3473,6 +3661,12 @@ static int rs_cmd_mmotion(int argc, char **argv)
                     double f = 0.0;
                     rs_microm_floor(&m, c.lambda, w, &f, NULL);
                     fprintf(wf, ",%.12g", f * 1e3);
+                }
+                if (stable_f) {
+                    const double a = spec.dominant_freq[w], b = stable_f[w];
+                    const int cmp = (a <= stable_fmax && b <= stable_fmax);
+                    fprintf(wf, ",%.12g,%d", b,
+                            cmp ? (fabs(a - b) <= 0.5 * spec.df) : -1);
                 }
                 fputc('\n', wf);
             }

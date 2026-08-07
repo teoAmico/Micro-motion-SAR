@@ -9127,8 +9127,20 @@ this project, and it is the shape the problem demanded since item 11.
   convenience: a frequency reported above 128 looks' Nyquist has no counterpart
   to be stable against.
 
-### Next
+### Implemented
 
-It should be reported by the tool. The natural form follows `--twin`: take a
-second run's evidence file and report which frequencies survive, since the
-comparison is between two runs and a single invocation cannot make it.
+`mmotion --stable OTHER_WINDOWS_CSV`. Reproduces this item's values on seed 7 --
+motionless 1.512 -> 0.806 MOVED, injected 0.504 -> 0.504 STABLE.
+
+**One thing the implementation got wrong first, and it is the subtle part.** The
+verdict must be on the MODAL SET's leading frequency, not on the
+strongest-prominence window's `dominant_hz`. Those are different statistics:
+verified, the injected seed-7 scene whose modal answer is 0.504 Hz at both look
+counts has that window reporting 0.504 at 128 and **2.571 at 256**, so a
+window-level comparison rejects a true recovery. The first build did exactly
+that and called an injected scene unstable. `modal_lead_hz` is now written into
+the evidence file for the comparison to use.
+
+It refuses equal look counts as vacuous, a differing window grid, and an
+unreadable file; it warns when `df` differs, since that compares across DWELLS,
+which this item records as untested.

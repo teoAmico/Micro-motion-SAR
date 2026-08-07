@@ -169,6 +169,20 @@ or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
 
+**`--stable WINDOWS_CSV` IMPLEMENTS THE STABILIZATION TEST** (item 107,
+implemented). It compares this run against another run of **the same scene at a
+different look count** and reports what survives; `stable_hz` and `stable` join
+the per-window CSV. **The verdict is on the MODAL SET's leading frequency, NOT on
+any window's `dominant_hz`** — verified, an injected scene whose modal answer is
+0.504 Hz at both look counts can have its strongest window report 0.504 at one
+and 2.571 at the other, so comparing windows rejects true recoveries; the first
+implementation did exactly that and was wrong. Reproduces item 107's measured
+values on seed 7: motionless **1.512 -> 0.806 MOVED**, injected **0.504 -> 0.504
+STABLE**. **Refuses what it cannot test**: equal look counts (vacuous, with the
+reason), a different window grid, a missing or column-less file; warns when `df`
+differs because that is a comparison across DWELLS, untested. Frequencies above
+the lower run's Nyquist are marked NOT COMPARABLE rather than unstable.
+
 **A BLIND DISCRIMINATOR THAT WORKS: REQUIRE THE FREQUENCY TO SURVIVE A CHANGE OF
 LOOK COUNT** (item 107). Pre-registered at `f6ad9f4` with the prediction recorded
 first; both hypotheses pass. **False positives fall from item 96's 12 of 12 to

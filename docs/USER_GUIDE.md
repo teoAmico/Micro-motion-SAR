@@ -589,6 +589,46 @@ recovered against the periodogram's 3 of 12 on the same sweep, with both static
 controls still answering. It is opt-in and it is not a result. `--tfit` and
 `--stft` both replace the spectrum and cannot be combined.
 
+### The stabilization test
+
+`--stable OTHER_WINDOWS_CSV` compares this run against another run of **the same
+scene at a different look count**, and keeps only what survives:
+
+```
+  stabilization against 256 looks (this run 128), common band 0 - 3.226 Hz:
+            modal set: 0.504 Hz here, 0.504 Hz there -> STABLE -> report
+            5 of 20 comparable windows agree within half a bin (0.0252 Hz)
+```
+
+`stable_hz` and `stable` join the per-window CSV (1 stable, 0 moved, -1 not
+comparable).
+
+**Why it works.** A real vibration sits at the same Hz however the aperture is
+sliced; an artefact produced by the slicing need not. This is the
+operational-modal-analysis *stabilization diagram* with the look count standing
+in for model order. Measured, it takes a motionless fixture from **12 of 12 false
+positives to 1 of 12** while keeping **6 of 6** injected scenes
+(`FOLLOW-UPS.md` item 107).
+
+**Why it matters more than the other controls here.** `--null-static` needs a
+simulated motionless realisation; `--twin` needs a run differing in nothing but
+the motion; the zero-amplitude control needs the injection machinery. **This needs
+only the collect, processed twice** — so it is the only one available on a single
+real acquisition.
+
+**The verdict is on the MODAL SET's leading frequency**, not on any one window's
+`dominant_hz`. Those differ: an injected scene whose modal answer is 0.504 Hz at
+both look counts can have its strongest window report 0.504 at one and 2.571 at
+the other, so comparing windows would reject a true recovery.
+
+**It refuses what it cannot test:** equal look counts (vacuous), a different
+window grid, or a missing file. It warns when `df` differs, since that is a
+comparison across *dwells* rather than look counts, which item 107 records as
+untested. Frequencies above the lower run's Nyquist are marked not comparable
+rather than unstable.
+
+**It gates nothing**, like every other statistic here.
+
 ### The predicted floor
 
 Every phase-route run now prints the smallest displacement each window could

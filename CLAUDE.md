@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 108 items and their status.
+an index of all 109 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,28 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**THE SELECTION LOSES A LOCALISED TARGET ITS OWN EVIDENCE CARRIES BEST** (item
+109). Item 108's target sat on a window boundary; repeated at **+24 m, an exact
+window centre**, C14 now recovers **down to 0.13 mm** and `--stable` reports all
+three (**H4 passes** — it discards no true positive that reaches it; **H3 passes**
+— both controls refused), but C10 still fails at 128 looks, so **H1 FAILS** at 3
+of 6. **BOTH of my explanations were wrong.** Item 108 blamed the window boundary
+(items 40-41) — wrong, it fails identically on a centre. I then blamed LOCAL
+CLUTTER on CFAR reasoning — wrong, and measured: at the target window the floor
+is **0.0044 mm against the clutter's 0.5210** and `d_a` **0.056 against 0.574**,
+so the target dominates completely. **The real mechanism**: at 128 looks the
+injected 1.00 Hz has **15 windows and a largest block of 13**, the artefact
+0.665 has 11 and 4, and the REPORTED 0.499 has **7 and 6** — the injected line
+wins on BOTH of the modal set's stated criteria and is still not reported. **The
+loss is in the NOMINATION, not the ranking**: `rs_spectrum_modal_set()` nominates
+on `rs_local_ratio()`, scoring each peak against its own SPECTRAL neighbourhood,
+and a strong isolated line raises the background it is measured against through
+its own Hann skirt if `RS_LOCAL_GUARD_BINS` does not exclude enough of it — **so
+the cleaner the target, the worse it scores.** Items 7-9 and 30 said the tracker
+recovers what the selection discards; **this is the first time the discarding
+step has been named**, and it is where the next work belongs. No stabilization
+test can recover a frequency the selection never nominates.
 
 **THE STABILIZATION TEST CAUGHT A FALSE POSITIVE SITTING ON THE SOUGHT
 FREQUENCY** (item 108). Pre-registered at `25f7351`; `--stable` put on a

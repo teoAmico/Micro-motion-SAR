@@ -150,6 +150,7 @@ said, not better) and item 7's line numbers.
 | 106 | **corrects 104 and 70** | the transition is look-count independent; a real bridge HAS been measured, without corner reflectors |
 | 107 | **first blind discriminator** | require the frequency to survive a change of look count: false positives 12/12 -> 1/12, recall 6/6 |
 | 108 | **bounds 107** | it caught a motionless scene answering 0.997 Hz; but recall on a weak OFF-CENTRE target is untested and it abstains 3 of 8 |
+| 109 | **names the defect** | the injected line wins on support AND block and is still not reported: the loss is in the local-ratio NOMINATION |
 
 ---
 
@@ -9215,3 +9216,79 @@ real clutter it wanders there often. A pair of look counts closer together --
 - The honest summary is that `--stable` is a **specificity instrument**. Nothing
   measured so far says it preserves recall on a weak localised target, and item
   108's own design prevented that question from being answered.
+
+
+---
+
+## 109. The selection loses a localised target that its OWN evidence carries best. Both of my explanations were wrong.
+
+Pre-registered at `c3fb48d`. Item 108's target at +20 m sat exactly on a window
+boundary; this repeats it at **+24 m, an exact window centre** (index 10; centres
+fall every 8 m), changing nothing else.
+
+| collect | amp | @128 | @256 | verdict |
+|---|---|---|---|---|
+| C10 | 0.00 control | 10.148 | 15.971 | not comparable |
+| C10 | 0.13 | 0.499 | 0.998 | MOVED -> reject |
+| C10 | 0.26 | 0.499 | 0.998 | MOVED -> reject |
+| C10 | 0.53 | 0.499 | 0.998 | MOVED -> reject |
+| C14 | 0.00 control | 0.997 | 7.828 | MOVED -> reject |
+| C14 | 0.13 | **0.997** | **0.999** | **STABLE -> report** |
+| C14 | 0.26 | **0.997** | **0.999** | **STABLE -> report** |
+| C14 | 0.53 | **0.997** | **0.999** | **STABLE -> report** |
+
+**H1 FAILS** (3 of 6 recover at 128 looks, needed 4). **H3 passes** -- both
+controls refused. **H4 passes** -- every case recovered at both look counts is
+reported STABLE, so `--stable` does not discard true positives. C14 now recovers
+**down to 0.13 mm**, where at +20 m it could not be compared at all.
+
+### Both of my explanations were wrong, in order
+
+**Item 108 blamed the window boundary** (items 40-41's split across four
+overlapping windows). Wrong: C10 fails identically on an exact window centre.
+
+**I then blamed local clutter**, on the CFAR reasoning that detection depends on
+LOCAL clutter power rather than the scene mean, so a `rel` defined against the
+scene mean means nothing at a particular spot. **Also wrong**, and measured:
+
+```
+  C10, injected 0.53 mm at +24,+24
+     target window (10,10):  floor 0.0044 mm   quality 0.949   d_a 0.056
+     same window uninjected: floor 0.5210 mm   quality 0.769   d_a 0.574
+```
+
+The target **dominates its window completely** -- a floor 118x below the
+clutter's, `d_a` 0.056 against 0.574. Local clutter is not the problem.
+
+### What is actually happening
+
+At 128 looks, per-window `dominant_hz` across all 225 windows:
+
+```
+  injected 1.00 Hz    15 windows   largest 4-connected block 13
+  artefact 0.665 Hz   11 windows   largest block  4
+  REPORTED 0.499 Hz    7 windows   largest block  6
+```
+
+**The injected frequency wins on BOTH of the modal set's stated criteria** --
+most support and much the largest contiguous block, centred on the target -- and
+the modal set reports a frequency with half the support and half the block.
+
+So the loss is not in the ranking. It is in the **NOMINATION**:
+`rs_spectrum_modal_set()` does not nominate on `dominant_hz` but on
+`rs_local_ratio()`, each window's top peaks scored against their own **spectral
+neighbourhood**. A strong isolated line raises the very background it is measured
+against, through its own Hann skirt, if `RS_LOCAL_GUARD_BINS` does not exclude
+enough of it -- so the cleaner the target, the worse it scores.
+
+**That is a specific, testable defect and it is where the next work belongs.**
+Items 7-9 and 30 said "the tracker recovers it and the selection discards it";
+this is the first time the discarding step has been named.
+
+### What stands
+
+- `--stable` is vindicated on recall as far as it was tested: **H4 passes**, and
+  it kept every true positive that reached it, down to 0.13 mm.
+- Its specificity holds again, including C14's motionless 0.997 Hz.
+- **The recall problem is upstream of it**, in the modal set's nomination, and no
+  stabilization test can recover a frequency the selection never nominates.

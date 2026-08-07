@@ -153,6 +153,7 @@ said, not better) and item 7's line numbers.
 | 109 | **names the defect** | the injected line wins on support AND block and is still not reported: the loss is in the local-ratio NOMINATION |
 | 110 | **corrects 109 and fixes it** | not the guard band: the localised target is refused by the SUPPORT gate at 28 of 34, then out-ranked on EXTENT. 5 of 6 recover, false positives unchanged at 1/12 |
 | 111 | **fixes 110's leftovers** | the band-edge bias is real and measured (72% of maxima on 39% of the band); the fix is to NARROW not widen. Nothing lost, one artefact gone, abstentions 5/12 -> 3/12. Third defect named: median_ratio is a median over CHANCE nominators |
+| 112 | **first 6 of 6** | the ranking's strength term was a median over CHANCE nominators; over the mode's own block instead, recall 5/6 -> 6/6 and synthetic false positives 1/12 -> 0/12. Item 103's competition floor is a property of the SELECTION too |
 
 ---
 
@@ -9528,3 +9529,113 @@ fixed, not a different answer.
 1.00 Hz. Three items have now changed the selection around it and item 108 is
 exactly where it was: only `--stable` rejects it, on the strength of a 256-look
 answer of 9.327 Hz.
+
+---
+
+## 112. The ranking's strength term was measuring the background. Over the mode's own block instead, recall reaches 6 of 6 and the false positives fall to 0 of 12.
+
+Pre-registered at `eb0775f` with items 110 and 111's thresholds restated
+unchanged, and with a prediction that was a real one rather than a restatement --
+including the failure mode that was expected and did not happen.
+`runs/kilauea/2026-08-07-blockmedian/`,
+`runs/synthetic/2026-08-07-blockmedian-null/`.
+
+### The defect item 111 named
+
+`median_ratio` -- the strength term in `rs_mode_t.evidence` -- was the median
+over EVERY window that nominated the bin. Most of them nominated by chance. Each
+window picks `RS_MODAL_PER_WINDOW` bins wherever they fall, so every bin of a
+K-bin band collects about `n_win * M / K` nominations from noise alone: **22 of
+225 at the 65-bin operating point every figure in this file is quoted at**,
+against reported supports of 28 to 46. The statistic was therefore mostly
+background. Measured on that operating point, planting a line on 16 windows and
+varying only its amplitude:
+
+| plant gain | before | after |
+|---|---|---|
+| 40 | 5.97 | **14.48** |
+| 200 | 6.39 | **67.74** |
+
+**A factor of five in signal moved the old statistic by seven percent.**
+
+The fix is to take the median over the windows of the mode's LARGEST BLOCK,
+which is its measured footprint, so scattered chance nominators are excluded by
+construction. `nom[k]` is indexed by window rather than by nomination order, and
+`rs_largest_block()` returns the winning component's membership via one extra
+flood fill; the null's inner loop passes NULL and is unchanged.
+
+### Measured: the first 6 of 6
+
+**H1 passes at 6 of 6**, where items 110 and 111 both scored 5. **H3 passes
+2 of 2.** **H3b passes and improves: 0 of 12** motionless synthetic scenes
+survive against a bar of 1, with injected recall held at 6 of 6.
+
+| | before 110 | 110 | 111 | 112 |
+|---|---|---|---|---|
+| H1, 128-look modal answer correct | 3 of 6 | 5 of 6 | 5 of 6 | **6 of 6** |
+| H3 real controls refused | 2 of 2 | 2 of 2 | 2 of 2 | **2 of 2** |
+| H3b motionless synthetic | 1 of 12 | 1 of 12 | 1 of 12 | **0 of 12** |
+| injected synthetic recall | 6 of 6 | 6 of 6 | 6 of 6 | **6 of 6** |
+
+**H1 AND `--stable` NOW DIFFER AND MUST BE QUOTED SEPARATELY.** H1 is on the
+128-look modal answer. `--stable` then adjudicates it against the 256-look run
+and **abstains** on C10 at 0.13 mm, because that run's 256-look answer of
+19.631 Hz is above the 128-look Nyquist. So the SELECTION recovers 6 of 6 and
+the STABILIZATION TEST reports 5 of 6, and neither figure is the other. Every
+earlier item could quote one number because they agreed.
+
+### The predicted risk was the right one to name, and it did not happen
+
+The pre-registration recorded that removing the dilution raises EVERY
+candidate's strength, artefacts included, and named item 108's C14 motionless
+control -- a small, internally clean block -- as what could gain more than the
+injected line and fail H3. Measured, it gained **+0.4** where the injected runs
+gained **+7.6 to +14.9**:
+
+| | item 111 `ev` | item 112 `ev` |
+|---|---|---|
+| C14 motionless control 0.997 Hz | 28.0 | **28.4** |
+| C14 injected 0.13 / 0.26 / 0.53 mm | 42.3 / 46.7 / 46.7 | **49.9 / 58.6 / 61.6** |
+
+**Because that control's block is not internally clean** -- ratio 5.3, barely
+above the scene -- it gains nothing from a statistic that rewards a clean block.
+That is the intended mechanism visible in the one place it was predicted to
+misfire: an injected line's block is pure and an artefact's is not, and the old
+statistic could not separate them because it averaged both against the same
+chance background.
+
+### What moved, and the floor that moves with it
+
+The target's own ratio is what changed; the competition barely did. C10's
+injected line at 0.53 mm went from ratio **9.0 to 40.3**, at 0.26 mm from 4.5 to
+21.2, and **C10 now recovers at 0.13 mm** where it failed in items 109, 110 and
+111.
+
+| amp | C10 injected `ev` | C10 competition | C14 injected `ev` | C14 competition |
+|---|---|---|---|---|
+| 0.00 | -- | **18.6** | -- | **28.4** |
+| 0.13 | **21.6** | 18.6 | **49.9** | 26.9 |
+| 0.26 | **39.7** | 18.6 | **58.6** | 18.9 |
+| 0.53 | **48.1** | 19.2 | **61.6** | 23.7 |
+
+**THIS PUTS THE COMPETITION FLOOR BELOW ITEM 103's 0.13-0.26 mm, AND THAT
+REVISES WHAT THE FLOOR IS.** It is a property of the scene AND THE SELECTION
+together, not of the scene alone: item 103 measured it with the selection of the
+time, and three items of work on the selection moved it. **Do not quote
+0.13-0.26 mm as a scene property.** Item 103's three floors -- target, clutter,
+competition -- keep their meanings, but only the first two are scene properties.
+
+### Bounds
+
+- **C10 at 0.13 mm is recovered by the modal set and NOT adjudicated**, because
+  `--stable` abstains. It is not a detection.
+- **0 of 12 is not a zero false-positive rate.** Twelve realisations, wide
+  interval; one survivor would have been consistent with the same rate, and
+  three of the four measurements of this fixture found exactly one. What is fair
+  is that the rate did not rise and that seed 31, which survived three times, no
+  longer does.
+- Two real collects, one placement, one operating point, and the target was put
+  where it was found. **Still a selection result, not a detection.**
+- **Item 108 is untouched by four items of work.** C14's motionless control
+  still leads with 0.997 Hz against an injected 1.00 Hz, now at `ev` 28.4, and
+  `--stable` is still the only thing that rejects it.

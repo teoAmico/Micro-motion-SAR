@@ -751,9 +751,9 @@ ranked by how much evidence that block carries:
             225 against a threshold of 34 and its block said mode anyway)
            chance alone reaches block 7 here (1000 trials, worst 9), so the
            block a mode must beat is derived from this configuration, not fixed
-            0.504 Hz (sub-bin 0.502 +- 0.006)   block  30 (p 0.001)   support  35/49   ratio 24.6   ev 96.1
-            0.756 Hz (sub-bin 0.758 +- 0.020)   block  13 (p 0.001)   support  18/49   ratio 10.1   ev 30.1
-            1.563 Hz (sub-bin 1.554 +- 0.015)   block  10 (p 0.001)   support  11/49   ratio 17.0   ev 28.3
+            0.504 Hz (sub-bin 0.502 +- 0.006)   block  30 (p 0.001)   support  35/49   ratio 126.0   ev 145.1
+            0.756 Hz (sub-bin 0.758 +- 0.020)   block  13 (p 0.001)   support  18/49   ratio 11.3   ev 31.5
+            1.563 Hz (sub-bin 1.554 +- 0.015)   block  10 (p 0.001)   support  11/49   ratio 20.2   ev 30.0
             1.512 Hz (sub-bin 1.535 +- 0.004)   block   8 (p 0.005)   support   8/49   ratio 34.2   ev 28.3
 ```
 
@@ -787,15 +787,16 @@ a third of the ground. It is an **ordering** statistic only; overlapping windows
 are not independent looks, so do not exponentiate it or read it as a likelihood
 ratio.
 
-**One known weakness in `ratio`, so you do not over-read it** (item 111). It is
-the median over every window that nominated the bin — and each window nominates
-six bins wherever they fall, so on a 62-bin band about **22 of 225 windows
-nominate any given bin from noise alone**. A mode carried by a dozen windows
-therefore has its strength measured by a median that is mostly background:
-measured, planting a line at five times the amplitude moves `ratio` from 5.97 to
-6.39. It compresses the ranking rather than biasing it toward any frequency, so
-it costs resolution and not correctness. The fix — median over the largest block
-instead of over every nominator — is in `docs/CODE-REVIEW.md` and is not done.
+**`ratio` is the median over the windows of the mode's BLOCK, not over every
+window that nominated the bin** (item 112), and the difference is large. Each
+window nominates six bins wherever they fall, so on a 62-bin band about **22 of
+225 windows nominate any given bin from noise alone** — more than half the
+support of a typical reported mode. Summarising over all of them measured the
+background: planting a line at five times the amplitude moved the old figure
+from 5.97 to 6.39, **seven percent**. Over the block it moves from 14.48 to
+67.74. On the real collect the injected line's `ratio` went from 9.0 to 40.3 at
+the same amplitude while the competition barely moved, which is what took recall
+from 5 of 6 to 6 of 6.
 
 **The chance line is the one to read first.** That floor of 4 is a floor and
 never a separator (item 77): the number of admissible bins falls with the look

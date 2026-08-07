@@ -42,46 +42,11 @@ reader's memory model rather than to a flag.
 report geometry and timing, so it cannot describe a product larger than RAM --
 the one command whose entire job is to tell you what you have.
 
-## `median_ratio` is a median over CHANCE nominators, not over the mode
-
-`rs_spectrum_modal_set()` (`src/core/spectrum.c`) records every nominating
-window's local ratio in `nom[k]` and takes their median as `median_ratio`, which
-since item 110 is the strength term in the ranking key `rs_mode_t.evidence`.
-**Most of those nominators nominated by chance.**
-
-Every window nominates `RS_MODAL_PER_WINDOW` bins wherever they fall, so each bin
-of a `K`-bin band collects about `n_win * M / K` nominations from noise alone —
-**22 of 225 at the 65-bin operating point everything here is quoted at.** The
-supports actually reported on the item 109 collect run 28 to 46, against that
-chance floor of 21.8. So a mode carried by a dozen windows has its strength
-measured by a median that is mostly background, and the statistic is compressed
-toward the chance level exactly where it needs to discriminate.
-
-**Measured** (`tests/test_modalset.c` was written against this and had to be
-moved to a 257-bin band to get past it): on a 65-bin band, planting a line on 16
-windows at a gain of 40 and at a gain of 200 — a factor of five in the signal —
-moves `median_ratio` from 5.97 to 6.39. The plant is invisible to the statistic
-that is supposed to rank it. At 257 bins, where the chance floor is about 5, the
-same experiment moves it from 12.8 to 48.5.
-
-**The fix is to take the median over the windows in the LARGEST BLOCK** rather
-than over every nominator. The block is already computed and is the mode's
-measured footprint; scattered chance nominators are excluded by construction.
-That needs two small changes — `nom[k]` indexed by window rather than by
-nomination order, and `rs_largest_block()` returning its membership rather than
-only its size — and it changes `evidence`, so it needs item 110's two arms
-re-run behind a pre-registration. Not done.
-
-**Why this is not a reason to distrust item 110's result.** The dilution applies
-to every candidate in a scene equally, so it degrades the ranking's resolution
-rather than biasing it toward any frequency, and item 110's arms measured the
-ranking end to end at the operating point in use. It is a reason to expect the
-ranking to separate BETTER once fixed, not differently.
-
 ## Reviews performed
 
 | date | commit | scope | outcome |
 |---|---|---|---|
+| 2026-08-07 | `eb0775f` | The `median_ratio` dilution item 111 named and left | **Fixed, and it is what recall was waiting on.** The strength term in the ranking key was a median over every nominating window, and about 22 of 225 nominate any bin by chance at the operating point in use, so it measured the background: a factor of five in the planted signal moved it seven percent. Over the windows of the mode's own largest block it moves 4.7x, and on the real collect the injected line's ratio went 9.0 to 40.3 while the competition barely moved. **H1 reaches 6 of 6 for the first time, H3b falls to 0 of 12**, and seed 31 -- which had survived items 107, 110 and 111 -- is finally rejected. The pre-registered risk (removing the dilution raises artefacts too, and item 108's control is a clean small block) was measured and did not happen: that control gained +0.4 where the injections gained +7.6 to +14.9, because its block is not clean at all. Also revises item 103: the COMPETITION floor is a property of the scene and the selection together, not of the scene alone. |
 | 2026-08-07 | `19c488a` | Fixing the two defects item 110 left, and testing the function neither covered | **Both fixed, and a third found by the test.** The band-edge starvation was measured directly for the first time -- 200 realisations of noise containing nothing, recording which bin won the local-ratio maximum -- and the 39% of the band with a clipped neighbourhood took **72% of the maxima, 4.0x the per-bin rate**. The fix is the OPPOSITE of the one item 110 tried and reverted: narrowing every neighbourhood to the count the band floor can supply, rather than widening to the count mid-band has. Bias 4.0x -> 0.89x, and `test_tracking`'s red-floor case -- which killed the widening -- passes. `tests/test_modalset.c` now covers the function, reproducing item 109's geometry and item 107's so that reverting to either ranking key alone is caught in both directions; its calibration case gets 1 of 20 motionless scenes admitted against a nominal 5%. Writing it surfaced the `median_ratio` dilution above, which is left unfixed with its measurement. |
 | 2026-08-07 | `fce5869` | Item 109's named defect: `rs_local_ratio()`'s guard band | **The named defect is not the defect** — replicating the whole nomination offline from a `--shifts` dump (the replica reproduces the binary exactly) and sweeping `RS_LOCAL_GUARD_BINS` 2→8 never recovers the injected line, and the Hann-skirt argument does not apply at `--overlap 0` where the floor is flat. The target is lost **twice** instead: refused at the binomial support gate at 28 of a required 34, because that threshold is a fraction of the whole window grid; and then out-ranked on extent by artefacts covering one more window, while leading every rival two-to-one on strength. Both fixed and measured in item 110 — 5 of 6 recover against 3, false positives unchanged at 1 of 12. Two candidate fixes were written, measured and reverted, and both are recorded in the run's `PREREG.md`. Found two further defects left unfixed: the band-edge reference starvation below, and the total absence of any test over `rs_spectrum_modal_set()`. |
 | 2026-08-04 | `d1e1e2e` | Measuring the three-sided overlap trade together, and calibrating the local peak on real clutter | **Withdraws item 14's high-overlap advice.** Injection-versus-control separation is 35,676× at overlap 0 and 11× at 0.90, failing entirely at 0.95 — four orders of magnitude, on the setting every phase run here has used and the USER_GUIDE recommended. Also calibrated the local peak on nine disjoint grids of real desert (15.1–34.4, median 20.8) with no simulator, and recorded that nine controls give p_min = 0.10 rather than 0.05. |

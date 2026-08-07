@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 111 items and their status.
+an index of all 112 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -169,6 +169,40 @@ or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
 
+**THE RANKING'S STRENGTH TERM WAS MEASURING THE BACKGROUND** (item 112,
+implemented). `median_ratio` was the median over EVERY window that nominated a
+bin, and most nominate by chance: each window picks `RS_MODAL_PER_WINDOW` bins
+wherever they fall, so every bin of a K-bin band collects about `n_win * M / K`
+from noise alone -- **22 of 225 at the 65-bin operating point every figure here
+is quoted at**, against reported supports of 28-46. Measured, **a factor of five
+in signal moved it by seven percent** (5.97 to 6.39). Taken over the windows of
+the mode's own BLOCK -- its measured footprint -- the same experiment moves it
+**14.48 to 67.74**. **H1 reaches 6 of 6**, the first time, against 5 of 6 in
+items 110 and 111; **H3 2 of 2**; and **H3b falls to 0 of 12** motionless
+synthetic scenes against a bar of 1, with injected recall held at 6 of 6. Seed
+31, which survived items 107, 110 AND 111, is finally rejected.
+
+**H1 AND `--stable` NOW DIFFER AND MUST BE QUOTED SEPARATELY.** H1 is the
+128-look modal answer; `--stable` then adjudicates it and ABSTAINS on C10 at
+0.13 mm, whose 256-look answer is above the 128-look Nyquist. **The selection
+recovers 6 of 6 and the stabilization test reports 5 of 6.** Every earlier item
+could quote one number because they agreed.
+
+**The pre-registered risk was the right one and did not happen**: removing the
+dilution raises EVERY candidate, so item 108's C14 control was named in advance
+as what might gain most and fail H3. It gained **+0.4** where the injected runs
+gained **+7.6 to +14.9** -- because that control's block is NOT internally clean
+(ratio 5.3), so it gains nothing from a statistic that rewards a clean block.
+
+**THIS REVISES ITEM 103's COMPETITION FLOOR.** C10 now recovers at **0.13 mm**,
+below the 0.13-0.26 mm item 103 measured, because **the competition floor is a
+property of the scene AND THE SELECTION together** -- item 103 measured it with
+the selection of the time and three items of work moved it. Target and clutter
+floors remain scene properties; **the competition floor is not one.** Bounds:
+C10 at 0.13 mm is recovered by the modal set and NOT adjudicated; 0 of 12 is a
+rate on twelve realisations, not a zero. **Item 108 is untouched by four items
+of work.**
+
 **THE BAND-EDGE BIAS IS REAL, AND THE FIX IS TO NARROW THE NEIGHBOURHOOD**
 (item 111, implemented). Measured on **200 realisations of noise containing
 NOTHING**, recording which bin won `rs_local_ratio()`'s maximum: the 39% of the
@@ -190,20 +224,14 @@ fewer answers land on edge bins whose 256-look partner falls above the 128-look
 Nyquist. A discriminator that abstains less at the same false-positive rate is
 strictly better.
 
-**AND THE RANKING'S STRENGTH TERM IS A MEDIAN OVER CHANCE NOMINATORS** (item 111,
-NOT fixed). `tests/test_modalset.c` is the first test ever to touch
-`rs_spectrum_modal_set()` -- not one test contained the word "modal" before it,
-and `test_modalfit.c` is a different estimator despite the name. Writing it
-exposed this: every window nominates `RS_MODAL_PER_WINDOW` bins wherever they
-fall, so each bin collects about `n_win * M / K` nominations from noise alone --
-**22 of 225 at the 65-bin operating point everything here is quoted at**, against
-reported supports of 28-46. Measured, planting a line at gain 40 and at gain 200
-moves `median_ratio` from **5.97 to 6.39**: a factor of five in signal is nearly
-invisible to the statistic that ranks it. The fix is to take the median over the
-LARGEST BLOCK, the mode's measured footprint, instead of over every nominator;
-it changes `evidence` and needs item 110's two arms re-run. **It does not
-invalidate items 109-111** -- the dilution applies to every candidate equally, so
-it costs RESOLUTION rather than biasing toward a frequency.
+**`tests/test_modalset.c` IS THE FIRST TEST EVER TO TOUCH
+`rs_spectrum_modal_set()`** (item 111) -- not one test contained the word "modal"
+before it, and `test_modalfit.c` is a different estimator despite the name. It
+reproduces item 109's geometry and item 107's, so reverting to either ranking key
+alone is caught in BOTH directions, and its calibration case admits 1 of 20
+motionless scenes against a nominal 5%. **Writing it is what exposed item 112's
+defect**, which is the argument for it: the function had been the subject of
+seven items with no test at all.
 
 **A LOCALISED TARGET IS REFUSED BY THE SUPPORT GATE AND THEN OUT-RANKED ON
 EXTENT** (item 110, implemented; **corrects item 109**). Pre-registered at
@@ -1386,17 +1414,17 @@ catches that. Neither substitutes for the other.
 
 **`docs/HANDOFF.md` is the current state of play** — what the last session
 established, the one named defect to work on next, and the assets on disk. Read
-it before `FOLLOW-UPS.md`, which is 111 items and is the record rather than the
+it before `FOLLOW-UPS.md`, which is 112 items and is the record rather than the
 plan.
 
 The short version: the tracker recovers signals the SELECTION discards, and item
 110 found where — a localised target is refused by the modal set's binomial
 SUPPORT gate (28 of a required 34) and, had it been admitted, out-ranked on
-EXTENT by artefacts covering one more window. Both are fixed and item 109's
-guard-band diagnosis is withdrawn. Item 111 then removed the band-edge bias that
-was manufacturing the artefacts it lost to, and named the next defect. Still
-open: item 108's false positive, which nothing but `--stable` rejects, and item
-111's `median_ratio` dilution.
+EXTENT by artefacts covering one more window. Item 111 removed the band-edge
+bias manufacturing the artefacts it lost to; item 112 stopped the strength term
+measuring the background. **Recall is now 6 of 6 and the synthetic
+false-positive rate 0 of 12.** Still open: item 108's false positive, which four
+items of work have not moved and nothing but `--stable` rejects.
 
 ## State of the work
 

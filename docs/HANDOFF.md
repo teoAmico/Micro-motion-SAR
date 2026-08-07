@@ -1,61 +1,55 @@
-# Handoff — 2026-08-07 (third pass)
+# Handoff — 2026-08-07 (fourth pass)
 
 State of play at commit `HEAD`, written so a new session can pick up without
-re-reading 111 follow-up items. **Read `CLAUDE.md` first; this is the delta.**
+re-reading 112 follow-up items. **Read `CLAUDE.md` first; this is the delta.**
 
 Tree is clean, 23/23 tests pass, ASAN clean, nothing running in the background.
 
 ---
 
-## 1. Start here: three items closed, two defects named
+## 1. Start here: the selection thread is closed
 
-**Items 109 → 110 → 111 are one thread and it is now resolved.** Item 109 said
-`rs_local_ratio()`'s guard band lost a localised target. That was wrong — the
-third wrong explanation of one failure. Item 110 found the target was lost
-**twice**: refused at the binomial `support_min` gate (28 of a required 34,
-because that threshold is a fraction of the whole window grid), and then
-out-ranked on **extent** by artefacts covering one more window. Item 111 removed
-the **band-edge bias** that was manufacturing those artefacts.
+**Items 109 → 110 → 111 → 112 are one thread and it has arrived somewhere.**
 
-| | before 110 | item 110 | item 111 |
-|---|---|---|---|
-| H1 recovery (real, 128 looks) | 3 of 6 | 5 of 6 | **5 of 6** |
-| H3 real controls refused | 2 of 2 | 2 of 2 | **2 of 2** |
-| H3b motionless synthetic | 1 of 12 | 1 of 12 | **1 of 12** |
-| injected synthetic recall | 6 of 6 | 6 of 6 | **6 of 6** |
-| synthetic abstentions | 4 of 12 | 5 of 12 | **3 of 12** |
+| | before 110 | 110 | 111 | 112 |
+|---|---|---|---|---|
+| H1, 128-look modal answer correct | 3 of 6 | 5 of 6 | 5 of 6 | **6 of 6** |
+| H3 real controls refused | 2 of 2 | 2 of 2 | 2 of 2 | **2 of 2** |
+| H3b motionless synthetic | 1 of 12 | 1 of 12 | 1 of 12 | **0 of 12** |
+| injected synthetic recall | 6 of 6 | 6 of 6 | 6 of 6 | **6 of 6** |
 
-**What item 111 bought is decisiveness, not rate.** The band-edge bias was
-measured on 200 realisations of noise containing nothing: 39% of the band took
-**72% of the maxima**, 4.0x the per-bin rate. Fixing it made the 10.148 Hz
-artefact that led C10's motionless control vanish — it was bin 61, inside the
-starved zone — and dropped abstentions from 5 of 12 to 3 of 12, because fewer
-answers land on edge bins whose 256-look partner falls above the 128-look
-Nyquist.
+Three defects, each found only after the previous fix:
 
-**The fix direction is the lesson.** Widening every neighbourhood to the count
-mid-band has is the obvious fix, it equalises the count, and `test_tracking`'s
-red-floor case kills it: on a floor rolling off as sinc² it reaches past the
-first null. **Narrowing to the count the band FLOOR can supply** equalises the
-count the other way and never enlarges the span. The header had said a steep
-floor needs a narrower neighbourhood since item 47.
+1. **Admission** (110) — the binomial `support_min` is a fraction of the whole
+   window grid, so a localised mode could not reach it: 28 of a required 34.
+   Admission is now the 2×2 block floor, with the chance model drawn under the
+   same rule.
+2. **The band-edge bias** (111) — the local background was estimated from 10
+   reference bins at the band edges against 20 mid-band, and 39% of the band took
+   **72% of the maxima** on scenes containing nothing. Fixed by NARROWING every
+   neighbourhood, not widening; widening fails `test_tracking`'s red-floor case.
+3. **The strength term** (112) — `median_ratio` was a median over every
+   nominator, and ~22 of 225 nominate any bin by chance, so **a factor of five in
+   signal moved it by 7%**. Over the mode's own block instead it moves 4.7×.
 
-### The two named defects, in the order I would take them
+### Two things to quote carefully
 
-1. **`median_ratio` is a median over CHANCE nominators** (item 111, measured, not
-   fixed). Every window nominates `RS_MODAL_PER_WINDOW` bins wherever they fall,
-   so each bin collects ~`n_win * M / K` nominations from noise alone — **22 of
-   225 at the 65-bin operating point**, against reported supports of 28-46.
-   Planting a line at gain 40 and at gain 200 moves `median_ratio` from **5.97
-   to 6.39**: a factor of five in signal, nearly invisible to the statistic that
-   ranks it. Fix: median over the **largest block**, the mode's measured
-   footprint, not over every nominator. Needs `nom[k]` indexed by window and
-   `rs_largest_block()` returning membership. Changes `evidence`, so it needs
-   both arms re-run behind a pre-registration.
-2. **Item 108's false positive.** C14's motionless control leads with
-   **0.997 Hz at `ev` 28.0** against an injected 1.00 Hz. Three items have now
-   changed the selection around it and it has not moved; only `--stable` rejects
-   it, on a 256-look answer of 9.327 Hz.
+- **H1 and `--stable` now differ.** H1 is the 128-look modal answer, 6 of 6.
+  `--stable` adjudicates it and abstains on C10 at 0.13 mm (its 256-look answer
+  is above the 128-look Nyquist), so the stabilization test reports 5 of 6.
+  Earlier items could quote one number because they agreed.
+- **Item 103's competition floor is NOT a scene property.** C10 now recovers at
+  0.13 mm, below the 0.13–0.26 mm item 103 measured, because the floor depends on
+  the selection as well as the scene. Target and clutter floors are scene
+  properties; the competition floor is not.
+
+### The one thing four items have not moved
+
+**Item 108's false positive.** C14's motionless control leads with **0.997 Hz at
+`ev` 28.4** against an injected 1.00 Hz. Its block is 17 windows and its ratio
+only 5.3 — it is diffuse, not a clean scatterer — and `--stable` is still the
+only thing that rejects it, on a 256-look answer of 9.327 Hz. **This is the
+sharpest open problem here.**
 
 ---
 
@@ -69,6 +63,7 @@ floor needs a narrower neighbourhood since item 47.
 | `mmotion --stable CSV` | keeps only frequencies surviving a change of **look count** | 107, 109 |
 | `rs_mode_t.evidence` | `n_contiguous * log(median_ratio)`, the modal set's ranking key; `ev` in the report | 110 |
 | `tests/test_modalset.c` | the first test over `rs_spectrum_modal_set()`; pins admission against ranking in both directions | 111 |
+| block-median `median_ratio` | strength summarised over the mode's footprint, not over every nominator | 112 |
 | `rs_transient_fit()` / `--tfit` | damped-sinusoid fit with onsets; works, changes nothing at chain level | 81 |
 | `docs/PREREGISTRATION.md` | the form; `tools/new-run.sh` seeds `PREREG.md` per run | 92 |
 
@@ -147,8 +142,8 @@ the run are how three wrong explanations got caught.**
 
 ## 7. Open, in the order I would take them
 
-1. **`median_ratio`'s chance dilution** and **item 108's false positive** — both
-   in §1 above, with their measurements.
+1. **Item 108's false positive** — §1 above. Four items of selection work have
+   not touched it.
 2. **Item 98's remaining two**: the CCD *double change map* (two twins), and
    Bayer & Seljak's self-calibrating look-elsewhere correction, which needs no
    Monte Carlo and works per window where `p_chance` works on the block.

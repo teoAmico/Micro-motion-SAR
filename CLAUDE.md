@@ -1324,6 +1324,19 @@ Agreement catches noise that is independent across windows; an artefact produced
 processing appears identically in every window and scores 100%. Only a null control
 catches that. Neither substitutes for the other.
 
+## Start here
+
+**`docs/HANDOFF.md` is the current state of play** — what the last session
+established, the one named defect to work on next, and the assets on disk. Read
+it before `FOLLOW-UPS.md`, which is 109 items and is the record rather than the
+plan.
+
+The short version: the tracker recovers signals the SELECTION discards, and item
+109 finally names the discarding step — `rs_spectrum_modal_set()` nominates via
+`rs_local_ratio()`, whose local background a strong isolated line inflates
+through its own Hann skirt. The injected line wins on both stated ranking
+criteria and is still not reported.
+
 ## State of the work
 
 **`--estimator phase` now recovers** on synthetic fixtures: slope 1.008, rms 0.0070 Hz

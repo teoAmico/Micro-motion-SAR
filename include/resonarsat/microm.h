@@ -2054,7 +2054,13 @@ typedef struct {
     double freq_mean;     /* sub-bin frequency, mean over nominating windows */
     double freq_sd;       /* their dispersion, Hz -- SPREAD, not a standard error */
     double freq_se;       /* freq_sd / sqrt(n_eff), n_eff = n_support/4 (see below) */
-    double p_chance;      /* P(a chance run reaches this block), Monte Carlo */
+    /* P(a chance run reaches this EVIDENCE), by a permutation that preserves
+     * the spatial correlation of overlapping windows (item 113). Before that it
+     * was P(reaching this BLOCK) under an independent draw, and both halves of
+     * that were wrong: the statistic ignored strength, and the null ignored the
+     * correlation. A p quoted from before item 113 is a different quantity and
+     * is anti-conservative by roughly an order of magnitude. */
+    double p_chance;
 } rs_mode_t;
 
 /* Most modes reported. A structure's low-order modes are what a dwell this
@@ -2137,11 +2143,18 @@ typedef struct {
     size_t admit_min;     /* support actually required: RS_MODAL_BLOCK_MIN */
 
     /* WHAT CHANCE ALONE PRODUCES AT THIS CONFIGURATION, which is the whole
-     * point of item 80: at 48 looks it is a much larger block than at 128, and
-     * a fixed floor cannot know that. */
+     * point of item 80: at 48 looks it reaches much further than at 128, and a
+     * fixed floor cannot know that.
+     *
+     * SINCE ITEM 113 THESE ARE EVIDENCE, NOT BLOCK SIZE, and the null that
+     * produces them PRESERVES THE SPATIAL CORRELATION window overlap creates.
+     * The independent draw they replace was measured anti-conservative by an
+     * order of magnitude -- a motionless real collect reached block 17 where the
+     * independent null's own 300-trial maximum was 9, and quoted it at p = 0.001
+     * against an honest 0.013. See rs_modal_null(). */
     size_t n_trial;       /* Monte Carlo trials run */
-    size_t null_block_crit; /* smallest block with p <= RS_MODAL_P_MAX */
-    size_t null_block_max;  /* largest block any trial reached */
+    double null_ev_crit;  /* smallest evidence with p <= RS_MODAL_P_MAX */
+    double null_ev_max;   /* largest evidence any trial reached */
 
     /* THE CLOSEST THING TO A MODE THAT WAS REFUSED, and why a refusal here is
      * diagnosable where a bare "nothing recurs" is not. A candidate can fail

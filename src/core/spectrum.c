@@ -1308,39 +1308,77 @@ static unsigned long long rs_modal_rand(unsigned long long *state)
     return x * 2685821657736338717ULL;
 }
 
-/* THE CHANCE MODEL FOR THE BLOCK. See microm.h: the 2x2 geometric floor is
- * contingent on the look count, because the look count sets the bin count and
- * the bin count sets how often windows agree by accident.
+/* THE CHANCE MODEL, AS A PERMUTATION THAT PRESERVES THE SPATIAL CORRELATION.
  *
- * Draws 'n_trial' realisations in which every voting window re-nominates
- * RS_MODAL_PER_WINDOW bins uniformly over [k_lo, n_freq) under the same leakage
- * separation the real nomination uses, and records each trial's LARGEST block
- * among bins clearing 'support_min' -- a max statistic, so the look-elsewhere
- * cost is inside it. Writes the counts into 'hist', indexed by block size and
- * of length n_win + 1; the caller turns that into a tail probability.
+ * WHY THE OLD ONE WAS INVALID, AND IT IS A PUBLISHED FAILURE MODE (item 113).
+ * The previous null had every voting window re-nominate its bins INDEPENDENTLY
+ * and uniformly. Windows are laid at a stride of half their width, so
+ * neighbours share half their pixels and track the same dominant scatterer --
+ * item 41 measured overlapping windows returning BIT-IDENTICAL series -- and
+ * their nominations are therefore strongly correlated. Measured on a real
+ * motionless collect: an adjacent pair shares 2.37 of 6 nominations against
+ * 0.71 for a random pair. Under the true null a contiguous block is far larger
+ * than an independent draw predicts, so the independent model understates it and
+ * the p-value is ANTI-CONSERVATIVE:
  *
- * 'voting' is the real mask of which windows nominated anything, not a count:
- * the windows that fall silent are a property of the scene, and drawing the
- * null over a different set of grid positions would compare the candidate's
- * shape against a differently-shaped lattice.
+ *     independent draw (the old null)   median block  6, p95  8, max  9
+ *     correlation-preserving (this)     median block 11, p95 15, max 20
+ *     OBSERVED, motionless real collect              17
  *
- * Returns RS_ERR_ALLOC if its scratch cannot be had, in which case 'hist' is
- * untouched and the caller must not read a p-value from it. */
-static resonarsat_status_t rs_modal_null(const unsigned char *voting, size_t n_win,
+ * A block of 17 was quoted at p = 0.001 when its honest p is 0.013, and that one
+ * scene had EIGHT bins clearing p <= 0.05 where the family-wise design intends
+ * 0.05 in total. That is item 108's false positive -- a motionless scene leading
+ * with 0.997 Hz against a sought 1.00 Hz -- and its cause.
+ *
+ * This is Eklund, Nichols & Knutsson (PNAS 2016), "Cluster failure: why fMRI
+ * inferences for spatial extent have inflated false-positive rates": parametric
+ * cluster-extent inference is invalid because the assumed spatial
+ * autocorrelation is wrong, while a NONPARAMETRIC PERMUTATION gives nominal
+ * rates. The window grid is their voxel grid, window overlap is their smoothing,
+ * and 'n_contiguous' is their cluster extent.
+ *
+ * HOW THIS DRAWS. Each trial keeps every window's OWN observed nomination
+ * pattern and its ratios, and gives each 2x2 TILE of windows an independent
+ * circular shift of the admissible band. Within a tile the correlation is
+ * preserved exactly as observed, because the same shift moves all four windows
+ * together; across tiles it is destroyed, which is what the null needs. The 2x2
+ * tile is the geometry, not a tuning knob: it is the same half-width stride the
+ * block floor comes from and the same n_eff = n_support/4 that 'freq_se' uses.
+ *
+ * WHAT IT MEASURES IS THE MASS, NOT THE EXTENT. Each trial's statistic is the
+ * largest EVIDENCE reached by any bin -- block times log of the block's median
+ * ratio -- because that is what admission is tested against. The literature is
+ * explicit that cluster MASS is the more powerful statistic and that extent
+ * loses exactly the case this project cares about, a small but intense cluster
+ * (Zhang, Nichols & Johnson 2009; Hayasaka & Nichols 2004). Item 108's false
+ * positive is the LARGEST block in its scene and nearly the WEAKEST mass, so
+ * extent cannot separate it at any threshold and mass can.
+ *
+ * Writes each trial's statistic into 'stat', of length n_trial; the caller sorts
+ * it into a critical value and per-mode p. Returns RS_ERR_ALLOC if its scratch
+ * cannot be had, in which case 'stat' is untouched.
+ *
+ * 'voted' and 'nom' are the OBSERVED nominations and their ratios, indexed
+ * [bin][window]; 'admit_min' is the support a bin needs before its shape is
+ * measured at all. */
+static resonarsat_status_t rs_modal_null(const unsigned char *voted,
+                                         double *const *nom, size_t n_win,
                                          size_t naz, size_t nrg,
                                          size_t k_lo, size_t n_freq,
-                                         size_t support_min, size_t n_trial,
-                                         unsigned long long seed, size_t *hist)
+                                         size_t admit_min, size_t n_trial,
+                                         unsigned long long seed, double *stat)
 {
     const size_t n_bin = n_freq - k_lo;
     size_t *support      = calloc(n_freq, sizeof *support);
-    unsigned char *voted = calloc(n_freq * n_win, sizeof *voted);
+    unsigned char *tv    = calloc(n_freq * n_win, sizeof *tv);
+    double *tnom         = malloc(n_freq * n_win * sizeof *tnom);
     unsigned char *seen  = malloc(n_win * sizeof *seen);
     size_t *stack        = malloc(n_win * sizeof *stack);
-    size_t *pick         = malloc(RS_MODAL_PER_WINDOW * sizeof *pick);
-    unsigned char *col   = calloc(n_win, sizeof *col);
-    if (!support || !voted || !seen || !stack || !pick || !col) {
-        free(support); free(voted); free(seen); free(stack); free(pick); free(col);
+    unsigned char *block = malloc(n_win * sizeof *block);
+    double *acc          = malloc(n_win * sizeof *acc);
+    if (!support || !tv || !tnom || !seen || !stack || !block || !acc) {
+        free(support); free(tv); free(tnom); free(seen); free(stack);
+        free(block); free(acc);
         rs_set_error("modal null: out of memory");
         return RS_ERR_ALLOC;
     }
@@ -1348,42 +1386,55 @@ static resonarsat_status_t rs_modal_null(const unsigned char *voting, size_t n_w
     unsigned long long st = seed ? seed : 1ULL;
     for (size_t t = 0; t < n_trial; t++) {
         memset(support, 0, n_freq * sizeof *support);
-        memset(voted, 0, n_freq * n_win * sizeof *voted);
-        for (size_t w = 0; w < n_win; w++) {
-            if (!voting[w]) continue;
-            size_t n_pick = 0;
-            /* Rejection sampling against the leakage separation. The attempt cap
-             * matters: with a narrow band and six picks the draw can genuinely
-             * run out of room, and a window that nominates fewer bins is the
-             * honest outcome rather than a hang. */
-            for (size_t attempt = 0; attempt < 64 && n_pick < RS_MODAL_PER_WINDOW;
-                 attempt++) {
-                const size_t k = k_lo + (size_t)(rs_modal_rand(&st) % (unsigned long long)n_bin);
-                int blocked = 0;
-                for (size_t i = 0; i < n_pick; i++) {
-                    const size_t d = (k > pick[i]) ? k - pick[i] : pick[i] - k;
-                    if (d < RS_SPECTRUM_LEAKAGE_BINS) { blocked = 1; break; }
+        memset(tv, 0, n_freq * n_win * sizeof *tv);
+        /* One shift per 2x2 tile, applied to every window the tile holds. */
+        for (size_t r0 = 0; r0 < nrg; r0 += 2) {
+            for (size_t a0 = 0; a0 < naz; a0 += 2) {
+                const size_t sh =
+                    (size_t)(rs_modal_rand(&st) % (unsigned long long)n_bin);
+                for (size_t r = r0; r < r0 + 2 && r < nrg; r++) {
+                    for (size_t a = a0; a < a0 + 2 && a < naz; a++) {
+                        const size_t w = r * naz + a;
+                        if (w >= n_win) continue;
+                        for (size_t k = k_lo; k < n_freq; k++) {
+                            if (!voted[k * n_win + w]) continue;
+                            const size_t k2 = k_lo + (k - k_lo + sh) % n_bin;
+                            tv[k2 * n_win + w] = 1;
+                            tnom[k2 * n_win + w] = nom[k][w];
+                            support[k2]++;
+                        }
+                    }
                 }
-                if (blocked) continue;
-                pick[n_pick++] = k;
-                support[k]++;
-                voted[k * n_win + w] = 1;
             }
         }
-        size_t largest = 0;
+        double best = 0.0;
         for (size_t k = k_lo; k < n_freq; k++) {
-            if (support[k] < support_min) continue;
-            const unsigned char *v = voted + k * n_win;
-            for (size_t i = 0; i < n_win; i++) col[i] = v[i];
-            const size_t b = rs_largest_block(col, n_win, naz, nrg, seen, stack,
-                                              NULL);
-            if (b > largest) largest = b;
+            if (support[k] < admit_min) continue;
+            const size_t b = rs_largest_block(tv + k * n_win, n_win, naz, nrg,
+                                              seen, stack, block);
+            if (b < RS_MODAL_BLOCK_MIN) continue;
+            size_t n_acc = 0;
+            for (size_t w = 0; w < n_win; w++)
+                if (block[w]) acc[n_acc++] = tnom[k * n_win + w];
+            if (n_acc == 0) continue;
+            const double med = rs_median_inplace(acc, n_acc);
+            if (!(med > 1.0)) continue;
+            const double ev = (double)b * log(med);
+            if (ev > best) best = ev;
         }
-        hist[largest]++;
+        stat[t] = best;
     }
 
-    free(support); free(voted); free(seen); free(stack); free(pick); free(col);
+    free(support); free(tv); free(tnom); free(seen); free(stack);
+    free(block); free(acc);
     return RS_OK;
+}
+
+/* Ascending comparator for the null's statistics. */
+static int rs_cmp_stat(const void *a, const void *b)
+{
+    const double x = *(const double *)a, y = *(const double *)b;
+    return (x < y) ? -1 : (x > y);
 }
 
 /* The sub-bin position of a peak at bin k, by parabolic interpolation of the
@@ -1550,13 +1601,16 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
     out->expected_false = expected;
     out->admit_min    = RS_MODAL_BLOCK_MIN;
 
-    /* What chance alone reaches at THIS configuration, which is the number the
+    /* What chance alone reaches at THIS configuration, which is the number a
      * fixed floor could not know (items 77-78). It is drawn under the SAME
-     * admission rule the candidates face -- RS_MODAL_BLOCK_MIN, not the
-     * binomial 'support_min' -- so relaxing that rule raises these blocks to
-     * match instead of quietly loosening the test (item 110). */
-    size_t *hist = calloc(spec->n_win + 1, sizeof *hist);
-    if (!hist) {
+     * admission rule the candidates face, and since item 113 by a permutation
+     * that PRESERVES the spatial correlation window overlap creates -- see
+     * rs_modal_null(), where the independent draw it replaced is measured to be
+     * anti-conservative by an order of magnitude. The statistic is the same
+     * EVIDENCE the candidates are judged on, so the comparison is like for
+     * like. */
+    double *null_ev = malloc(RS_MODAL_NULL_TRIALS * sizeof *null_ev);
+    if (!null_ev) {
         for (size_t k = 0; k < n_freq; k++) free(nom[k]);
         free(ref); free(ratio); free(support); free(acc); free(pick); free(nom);
         free(voted); free(seen); free(stack); free(block); free(voting);
@@ -1564,36 +1618,27 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
         return RS_ERR_ALLOC;
     }
     const resonarsat_status_t st_null =
-        rs_modal_null(voting, spec->n_win, spec->n_win_az, spec->n_win_rg,
+        rs_modal_null(voted, nom, spec->n_win, spec->n_win_az, spec->n_win_rg,
                       k_lo, n_freq, RS_MODAL_BLOCK_MIN, RS_MODAL_NULL_TRIALS,
-                      0x9E3779B97F4A7C15ULL, hist);
+                      0x9E3779B97F4A7C15ULL, null_ev);
     if (st_null != RS_OK) {
-        free(hist);
+        free(null_ev);
         for (size_t k = 0; k < n_freq; k++) free(nom[k]);
         free(ref); free(ratio); free(support); free(acc); free(pick); free(nom);
         free(voted); free(seen); free(stack); free(block); free(voting);
         return st_null;                     /* rs_modal_null set the message */
     }
     out->n_trial = RS_MODAL_NULL_TRIALS;
-    /* Upper tail of the null: tail[b] trials reached a block of b or more. */
-    size_t *tail = calloc(spec->n_win + 2, sizeof *tail);
-    if (!tail) {
-        free(hist);
-        for (size_t k = 0; k < n_freq; k++) free(nom[k]);
-        free(ref); free(ratio); free(support); free(acc); free(pick); free(nom);
-        free(voted); free(seen); free(stack); free(block); free(voting);
-        rs_set_error("modal set: out of memory");
-        return RS_ERR_ALLOC;
+    /* Sorted ascending, so the critical value is a quantile and a candidate's p
+     * is a tail count. */
+    qsort(null_ev, RS_MODAL_NULL_TRIALS, sizeof *null_ev, rs_cmp_stat);
+    out->null_ev_max = null_ev[RS_MODAL_NULL_TRIALS - 1];
+    out->null_ev_crit = null_ev[RS_MODAL_NULL_TRIALS - 1];
+    for (size_t i = 0; i < RS_MODAL_NULL_TRIALS; i++) {
+        const double p_i = (double)(1 + (RS_MODAL_NULL_TRIALS - i))
+                         / (double)(1 + RS_MODAL_NULL_TRIALS);
+        if (p_i <= RS_MODAL_P_MAX) { out->null_ev_crit = null_ev[i]; break; }
     }
-    for (size_t b = spec->n_win + 1; b > 0; b--) tail[b - 1] = tail[b] + hist[b - 1];
-    out->null_block_crit = spec->n_win + 1;
-    for (size_t b = 0; b <= spec->n_win; b++) {
-        if (hist[b] > 0) out->null_block_max = b;
-        if (out->null_block_crit > spec->n_win &&
-            (double)(1 + tail[b]) / (double)(1 + RS_MODAL_NULL_TRIALS) <= RS_MODAL_P_MAX)
-            out->null_block_crit = b;
-    }
-    free(hist);
 
     for (size_t k = k_lo; k < n_freq; k++) {
         if (out->n_mode >= RS_MODAL_MAX_MODES) break;
@@ -1613,55 +1658,68 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
             continue;
         }
 
-        /* The largest 4-connected block of nominating windows. This is the mode
-         * SHAPE test: a structure occupies contiguous ground, a noise line does
-         * not. */
+        /* The largest 4-connected block of nominating windows, and the mode's
+         * strength over THAT block (item 112). Both are needed before the mode
+         * can be judged, because since item 113 what is judged is their
+         * PRODUCT. */
         const unsigned char *v = voted + k * spec->n_win;
         const size_t largest = rs_largest_block(v, spec->n_win, spec->n_win_az,
                                                 spec->n_win_rg, seen, stack,
                                                 block);
-        const double p_chance = (double)(1 + tail[largest])
+        size_t n_acc = 0;
+        for (size_t w = 0; w < spec->n_win; w++)
+            if (block[w]) acc[n_acc++] = nom[k][w];
+        rs_mode_t cand;
+        memset(&cand, 0, sizeof cand);
+        cand.n_contiguous = largest;
+        cand.median_ratio = (n_acc > 0) ? rs_median_inplace(acc, n_acc) : 0.0;
+        cand.evidence = rs_mode_evidence(&cand);
+        /* One-sided tail of the permutation null, by count. */
+        size_t ge = 0;
+        for (size_t i = RS_MODAL_NULL_TRIALS; i > 0; i--) {
+            if (null_ev[i - 1] < cand.evidence) break;
+            ge++;
+        }
+        const double p_chance = (double)(1 + ge)
                               / (double)(1 + RS_MODAL_NULL_TRIALS);
 
-        /* Two gates, and they are different in kind. The 2x2 geometric floor
-         * says a block this small cannot DESCRIBE a spatially resolved mode
-         * whatever else is true; the chance model says a block this large is
-         * what this configuration produces from nothing. Item 77: the geometric
-         * bound is a floor, never a separator, so both apply. */
+        /* TWO GATES, DIFFERENT IN KIND, AND THE SECOND TESTS MASS (item 113).
+         * The 2x2 geometric floor says a block this small cannot DESCRIBE a
+         * spatially resolved mode whatever else is true. The chance model then
+         * asks whether this much EVIDENCE -- extent times strength -- is what
+         * the configuration produces from nothing, under a null that preserves
+         * the correlation window overlap creates.
+         *
+         * Testing the extent alone was measured to fail in both directions.
+         * Item 108's motionless false positive holds the LARGEST block in its
+         * scene and nearly the WEAKEST mass, so no extent threshold separates
+         * it; and a small intense cluster -- the injected target, block 13 at
+         * ratio 40 -- is exactly the case the cluster-inference literature
+         * records extent losing and mass keeping. Item 77's warning survives
+         * unchanged: the geometric bound is a floor, never a separator. */
         if (largest < RS_MODAL_BLOCK_MIN || p_chance > RS_MODAL_P_MAX) {
-            if (largest > out->near_miss.n_contiguous ||
+            if (cand.evidence > out->near_miss.evidence ||
                 !out->near_miss_had_support) {
                 out->near_miss.bin = k;
                 out->near_miss.freq_hz = spec->freq[k];
                 out->near_miss.n_support = support[k];
                 out->near_miss.n_contiguous = largest;
+                out->near_miss.median_ratio = cand.median_ratio;
+                out->near_miss.evidence = cand.evidence;
                 out->near_miss.p_chance = p_chance;
                 out->near_miss_had_support = 1;
             }
             continue;
         }
 
-        /* THE MEDIAN IS OVER THE BLOCK, NOT OVER EVERY NOMINATOR (item 112).
-         * Most nominators nominated by chance: each window picks
-         * RS_MODAL_PER_WINDOW bins wherever they fall, so every bin of a K-bin
-         * band collects about n_win * M / K nominations from noise alone -- 22
-         * of 225 at the 65-bin operating point, against reported supports of 28
-         * to 46. Taking the median over all of them measured the background and
-         * not the mode: planting a line at five times the amplitude moved this
-         * number from 5.97 to 6.39. The block is the mode's measured footprint,
-         * so summarising over it excludes the scattered chance nominators by
-         * construction. */
-        size_t n_acc = 0;
-        for (size_t w = 0; w < spec->n_win; w++)
-            if (block[w]) acc[n_acc++] = nom[k][w];
         rs_mode_t *m = &out->mode[out->n_mode++];
         m->bin = k;
         m->freq_hz = spec->freq[k];
         m->n_support = support[k];
         m->n_contiguous = largest;
-        m->median_ratio = (n_acc > 0) ? rs_median_inplace(acc, n_acc) : 0.0;
+        m->median_ratio = cand.median_ratio;
+        m->evidence = cand.evidence;
         m->p_chance = p_chance;
-        m->evidence = rs_mode_evidence(m);
 
         /* Sub-bin frequency across the windows that nominated it. The mean is
          * the estimate, the spread is the honest uncertainty, and freq_se
@@ -1689,7 +1747,7 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
             m->freq_mean = spec->freq[k];
         }
     }
-    free(tail);
+    free(null_ev);
     qsort(out->mode, out->n_mode, sizeof out->mode[0], rs_cmp_mode);
 
     const size_t n_mode = out->n_mode;
@@ -1699,11 +1757,11 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
 
     if (n_mode == 0) {
         rs_set_error("modal set: no bin was nominated by %u of %zu windows in a "
-                     "block of %zu or more, so nothing recurs with a shape "
-                     "chance does not reach here",
-                     RS_MODAL_BLOCK_MIN, n_voting,
-                     out->null_block_crit > RS_MODAL_BLOCK_MIN
-                         ? out->null_block_crit : RS_MODAL_BLOCK_MIN);
+                     "block of %u or more carrying evidence above %.1f, so "
+                     "nothing recurs with a shape and a strength chance does "
+                     "not reach here",
+                     RS_MODAL_BLOCK_MIN, n_voting, RS_MODAL_BLOCK_MIN,
+                     out->null_ev_crit);
         return RS_ERR_RANGE;
     }
     return RS_OK;

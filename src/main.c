@@ -2910,11 +2910,15 @@ static int rs_cmd_mmotion(int argc, char **argv)
                    ms.n_mode, ms.n_mode == 1 ? "" : "s", ms.admit_min,
                    ms.n_voting, ms.n_per_window, ms.n_bin,
                    ms.support_min, ms.expected_false);
-            printf("           chance alone reaches block %zu here (%zu trials, "
-                   "worst %zu), so the\n"
-                   "           block a mode must beat is derived from this "
-                   "configuration, not fixed\n",
-                   ms.null_block_crit, ms.n_trial, ms.null_block_max);
+            printf("           chance alone reaches evidence %.1f here (%zu "
+                   "trials, worst %.1f), so what\n"
+                   "           a mode must beat is derived from this "
+                   "configuration, not fixed. The null\n"
+                   "           SHIFTS 2x2 TILES of windows, preserving the "
+                   "correlation that window\n"
+                   "           overlap creates -- an independent draw understates "
+                   "it about tenfold\n",
+                   ms.null_ev_crit, ms.n_trial, ms.null_ev_max);
             for (size_t i = 0; i < ms.n_mode; i++)
                 printf("           %6.3f Hz (sub-bin %.3f +- %.3f)   block %3zu "
                        "(p %.3f)   support %3zu/%zu   ratio %.1f   ev %.1f\n",
@@ -2939,14 +2943,16 @@ static int rs_cmd_mmotion(int argc, char **argv)
             if (ms.near_miss_had_support)
                 printf("           the closest was %.3f Hz, nominated by %zu of "
                        "%zu windows in a\n"
-                       "           largest block of %zu (p %.3f against chance, "
-                       "which reaches %zu\n"
-                       "           here). Enough windows carry it; its shape is "
-                       "one this\n"
-                       "           configuration produces from nothing.\n",
+                       "           largest block of %zu at evidence %.1f (p %.3f "
+                       "against chance,\n"
+                       "           which reaches %.1f here). Enough windows carry "
+                       "it; the shape and\n"
+                       "           strength together are what this configuration "
+                       "produces from nothing.\n",
                        ms.near_miss.freq_hz, ms.near_miss.n_support,
                        ms.n_voting, ms.near_miss.n_contiguous,
-                       ms.near_miss.p_chance, ms.null_block_crit);
+                       ms.near_miss.evidence,
+                       ms.near_miss.p_chance, ms.null_ev_crit);
             else if (ms.near_miss.n_support > 0)
                 printf("           the closest was %.3f Hz at %zu of %zu windows, "
                        "short of the %zu\n"

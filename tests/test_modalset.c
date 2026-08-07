@@ -131,8 +131,8 @@ int main(void)
         RS_CHECK_OK(rs_spectrum_modal_set(&s, &ms));
 
         printf("    support_min (binomial, reported) %zu, admit_min %zu, "
-               "chance block %zu\n", ms.support_min, ms.admit_min,
-               ms.null_block_crit);
+               "chance evidence %.1f\n", ms.support_min, ms.admit_min,
+               ms.null_ev_crit);
         /* Admission is the block floor, NOT the binomial threshold, and the two
          * differ -- which is the whole of item 110's first half. */
         RS_CHECK(ms.admit_min == RS_MODAL_BLOCK_MIN);

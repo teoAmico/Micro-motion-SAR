@@ -148,6 +148,7 @@ said, not better) and item 7's line numbers.
 | 104 | **answers the reach question** | recovery needs 20-26 dB SCR; the field's own validations put a corner reflector on the structure |
 | 105 | **refutes my own prediction** | no sub-look SCR penalty at REL 20; the floor falls as N^-0.36 and 256 looks beats 128 |
 | 106 | **corrects 104 and 70** | the transition is look-count independent; a real bridge HAS been measured, without corner reflectors |
+| 107 | **first blind discriminator** | require the frequency to survive a change of look count: false positives 12/12 -> 1/12, recall 6/6 |
 
 ---
 
@@ -9060,3 +9061,74 @@ Item 70 cites the EVACES 2025 conference version of the same campaign at
 and **up to 0.88**. **Quote the journal figures, not the conference ones** -- and
 item 70's use of 0.47 as "what validated means there" is no longer the best
 available number.
+
+
+---
+
+## 107. A BLIND DISCRIMINATOR THAT WORKS: require the frequency to survive a change of LOOK COUNT. False positives 12/12 -> 1/12, recall 6/6.
+
+Pre-registered at `f6ad9f4`, with the prediction recorded before running. **Both
+hypotheses pass.**
+
+### The idea, and why it is not new but was aimed at the wrong axis
+
+The operational-modal-analysis STABILIZATION DIAGRAM: *"spurious modes will vary
+and physical modes will remain quite constant at different model orders"*. Item
+70 identified that principle and substituted the SPATIAL WINDOW for model order.
+**That is the wrong axis.** The analogue of model order is a PROCESSING parameter
+that changes what the estimator fits, and in this chain that is the **number of
+sub-looks**: a real vibration sits at f Hz however the aperture is sliced, while
+an artefact produced by the slicing need not.
+
+Item 106 measured this by accident -- a motionless scene's artefact moved from
+0.665 to 1.331 Hz, exactly twice, the same fraction of Nyquist.
+
+### The result
+
+Twelve motionless scenes and six injected ones, each processed at **128 and 256
+looks**, nothing else changed. A scene reports only if the two answers agree
+within half a bin.
+
+```
+  H1  motionless scenes still reporting:   1 of 12    (item 96 measured 12 of 12)
+  H2  injected scenes still reporting:     6 of 6
+```
+
+Of the eleven rejected statics, **seven moved within the band** (by 0.15 to
+2.07 Hz) and **four moved out of it entirely** -- 0.756 to 4.284 Hz, 1.714 to
+5.544, 2.369 to 3.730, 0.151 to 5.292. Every injected scene reported **0.504 Hz
+at both look counts, to three decimals**.
+
+### Why this matters more than anything else in items 96-106
+
+**It needs no twin, no null control and no ground truth.** Every discriminator
+that has worked here needed something a single real collect cannot supply:
+
+- `--null-static` needs a simulated motionless realisation of the same scene;
+- item 97's `--twin` needs a run differing in nothing but the motion, which on
+  real data does not exist;
+- item 38's zero-amplitude control needs the injection machinery.
+
+**This needs only the collect, processed twice.** That is the first blind test in
+this project, and it is the shape the problem demanded since item 11.
+
+### What it does not establish
+
+- **The injected fixture is the easy case.** `--clutter-vib` at 2 mm moves the
+  WHOLE scene coherently. A real structure is weaker, localised, and item 104
+  says it must also clear 20-26 dB. H2's 6 of 6 is not a claim about real
+  structures.
+- **One static survived** -- seed 17 at 1.210 Hz on both. The false-positive rate
+  is 1 in 12, not zero, and 12 realisations bound it no better than that.
+- **`df` was identical at both look counts** because `df = 1/T` and the dwell was
+  fixed; only Nyquist changed. A comparison across different DWELLS is a
+  different test and is untested.
+- Restricting to the common band 0.151-3.2 Hz is part of the rule, not a
+  convenience: a frequency reported above 128 looks' Nyquist has no counterpart
+  to be stable against.
+
+### Next
+
+It should be reported by the tool. The natural form follows `--twin`: take a
+second run's evidence file and report which frequencies survive, since the
+comparison is between two runs and a single invocation cannot make it.

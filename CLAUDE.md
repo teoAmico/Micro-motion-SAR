@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 106 items and their status.
+an index of all 107 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,29 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**A BLIND DISCRIMINATOR THAT WORKS: REQUIRE THE FREQUENCY TO SURVIVE A CHANGE OF
+LOOK COUNT** (item 107). Pre-registered at `f6ad9f4` with the prediction recorded
+first; both hypotheses pass. **False positives fall from item 96's 12 of 12 to
+1 of 12, and all 6 injected scenes survive.** Twelve motionless scenes and six
+injected, each processed at **128 and 256 looks** with nothing else changed; a
+scene reports only if the two answers agree within half a bin. Seven statics
+moved within the band (0.15-2.07 Hz) and four moved out of it; every injected
+scene gave **0.504 Hz at both counts, to three decimals**. **This is the OMA
+STABILIZATION DIAGRAM — "spurious modes vary, physical modes stay constant across
+model orders" — with the LOOK COUNT as model order. Item 70 identified the
+principle and substituted the SPATIAL WINDOW, which is the wrong axis**; the
+analogue of model order is a processing parameter that changes what the estimator
+fits. **Why it matters more than anything in items 96-106: it needs NO TWIN, NO
+NULL CONTROL and NO GROUND TRUTH** — only the collect, processed twice — where
+`--null-static`, item 97's `--twin` and item 38's zero-amplitude control each
+need something a single real collect cannot supply. **Bounds**: the injected
+fixture is whole-scene `--clutter-vib` at 2 mm, the easy case, so 6 of 6 is not a
+claim about real structures; one static survived, so the rate is 1 in 12 and not
+zero; `df` was identical at both counts because the dwell was fixed, so a
+comparison across different DWELLS is untested; and the rule includes restricting
+to the common band, since a frequency above the lower count's Nyquist has nothing
+to be stable against.
 
 **THE TRANSITION IS LOOK-COUNT INDEPENDENT, AND A REAL BRIDGE HAS BEEN MEASURED
 WITHOUT CORNER REFLECTORS** (item 106). Pre-registered at `833c160`: the

@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 104 items and their status.
+an index of all 105 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,25 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**THE PREDICTED SUB-LOOK SCR PENALTY IS NOT THERE** (item 105). I reasoned from
+the literature that N sub-looks each carry `B/N` of the bandwidth, so each cell
+holds N times more clutter and costs ~21 dB at 128 looks — which would have
+explained item 104's 11-17 dB gap against PS-InSAR's ~9 dB (`D_A <= 0.25`).
+**Measured, it is absent**: with a fixed target the phase sd is **FLAT at
+0.006-0.008 rad from 32 to 256 looks**, where a real penalty would move it by
+9 dB. The floor instead FALLS as **N^-0.36** against N^-0.50 for pure averaging,
+so more looks is simply better: **0.0036 mm at 32 looks, 0.0017 mm at 256**, with
+the scene's clutter floor falling 1.01 to 0.40 mm alongside. **N = 16 fails for
+an unrelated reason** — 9 bins of which 3 are leakage, so prominence is bounded
+near 6 and the statistic is starved; its 1.353 rad sd is the SCENE's, because the
+target was never selected. **The 11-17 dB gap is therefore UNEXPLAINED**, and two
+untested possibilities remain: the penalty may bite only at low REL where the
+target stops dominating its enlarged cell (one sweep away), or the comparison
+with PS-InSAR may be meaningless because it estimates slow deformation over many
+passes while this estimates a spectrum inside one dwell. **Practical finding: the
+look count has been fixed at 128 throughout this file for reasons never measured,
+and 256 gives a 23% lower floor** at a sub-aperture response of 0.999.
 
 **RECOVERY NEEDS 20-26 dB OF SIGNAL-TO-CLUTTER, AND THE FIELD PUTS A CORNER
 REFLECTOR ON THE STRUCTURE** (item 104). Pre-registered at `c0de7f5`; only the

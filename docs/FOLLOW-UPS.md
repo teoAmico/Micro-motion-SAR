@@ -146,6 +146,7 @@ said, not better) and item 7's line numbers.
 | 102 | **kills the Kilauea test** | the floor is predictable from an uninjected run; real Kilauea is 0.53 mm, 306x above the best truth |
 | 103 | **corrects 102** | the floor is PER-TARGET: three floors 34x apart, and the operative one is competition with the scene's artefact |
 | 104 | **answers the reach question** | recovery needs 20-26 dB SCR; the field's own validations put a corner reflector on the structure |
+| 105 | **refutes my own prediction** | no sub-look SCR penalty at REL 20; the floor falls as N^-0.36 and 256 looks beats 128 |
 
 ---
 
@@ -8920,3 +8921,64 @@ signal-to-clutter. On a real structure that means a corner reflector, or a
 structure that happens to contain one -- which is what item 15's
 one-dominant-scatterer-per-cell precondition has been saying in other words since
 the beginning.
+
+
+---
+
+## 105. The predicted sub-look SCR penalty is NOT THERE, and more looks lowers the floor.
+
+Item 104 measured that recovery needs 20-26 dB of signal-to-clutter, against
+PS-InSAR's standard `D_A <= 0.25` which corresponds to about 9 dB. I proposed a
+mechanism for the 11-17 dB gap from the literature -- *"at higher resolution and
+shorter wavelength, small scatterers show higher signal-to-clutter ratio"* -- on
+the reasoning that N sub-looks each carry `B/N` of the bandwidth, so each
+resolution cell is N times larger and holds N times more clutter, costing ~21 dB
+at 128 looks.
+
+**The measurement refutes it.** One real collect, one fixed target (REL 20,
+0.26 mm, 1.00 Hz), look count swept, everything else held:
+
+| N | bins | target floor | phase sd | scene median floor | response |
+|---|---|---|---|---|---|
+| 16 | 9 | 1.2206 mm | 1.353 rad | 1.0063 mm | -0.5 dB |
+| 32 | 17 | 0.0036 mm | 0.006 rad | 0.8705 mm | -0.5 dB |
+| 64 | 33 | 0.0028 mm | 0.006 rad | 0.6968 mm | -0.1 dB |
+| 128 | 65 | 0.0022 mm | 0.007 rad | 0.5400 mm | -0.0 dB |
+| 256 | 129 | **0.0017 mm** | 0.008 rad | **0.3980 mm** | -0.0 dB |
+
+**The target's phase sd is FLAT at 0.006-0.008 rad from 32 looks to 256.** If the
+sub-look SCR penalty existed at this brightness it would rise by 9 dB over that
+range and it does not move at all. The floor instead FALLS as `N^-0.36`, against
+`N^-0.50` for pure averaging -- so there is a small penalty, far too small to be
+the 21 dB I predicted, and more looks is straightforwardly better here.
+
+**The scene's clutter floor falls too**, 1.01 to 0.40 mm, which is the same
+averaging gain acting on the clutter.
+
+### N = 16 fails for an unrelated reason and must not be read as the penalty
+
+At 16 looks the spectrum has **9 bins, of which 3 are unreportable leakage**, so
+prominence is bounded near 6 and the statistic is starved before any question of
+noise arises. Its phase sd of 1.353 rad is the *scene's*, because the target was
+never selected -- the reported frequency is the uninjected artefact at 0.499 Hz.
+That is a bin-count failure, not an SCR failure.
+
+### What this leaves, and what it costs to say honestly
+
+The 11-17 dB gap between this method's requirement and PS-InSAR's is **not
+explained**. The sub-look resolution argument was the natural candidate and it is
+measurably absent at REL 20. Two possibilities remain and neither is tested:
+
+- the penalty exists but only bites at LOW REL, where the target no longer
+  dominates its enlarged cell -- item 104's transition would then move with N,
+  which is one sweep away;
+- the gap is not about SCR at all but about what the two methods measure: PS-InSAR
+  estimates a slow deformation over many passes, this estimates a spectrum inside
+  one 6 s dwell, and the comparison of their thresholds may be meaningless.
+
+**The practical finding stands on its own**: on this collect, more looks lowers
+the floor monotonically to 256, the sub-aperture response is already 0.999 there,
+and the only cost paid is Nyquist rising past anything of interest. **Item 13's
+advice concerns OVERLAP, not look count, and nothing here contradicts it** -- but
+the look count has been fixed at 128 throughout this file for reasons that were
+never measured, and at 256 the floor is 23% lower.

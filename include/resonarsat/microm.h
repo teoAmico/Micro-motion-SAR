@@ -1595,23 +1595,28 @@ typedef struct {
  * sensitivity in FOLLOW-UPS item 47. */
 #define RS_LOCAL_HALF_BINS 12u
 
-/* The MOST reference bins a candidate can be scored against -- a mid-band bin's
- * count, and the size every scratch buffer for the statistic needs. Bins near
- * either end of the band get fewer, because the neighbourhood is clipped rather
- * than extended.
+/* How many reference bins EVERY candidate is scored against, and so also the
+ * size of the scratch buffer the statistic needs.
  *
- * THAT CLIPPING IS A MEASURED BIAS AND IT IS STILL HERE (item 110). The
- * background is a median, and the median of ten draws is about twice as variable
- * as the median of twenty; the statistic is then MAXIMISED over the band, so a
- * bin scored against fewer references wins the maximum more often for no reason
- * in the scene. Measured on item 109's collect the first admissible bin held the
- * largest block of nominating windows, 14 of 225, with both band edges
- * over-represented -- and making the count constant by growing the neighbourhood
- * outward drops it to 9. It is NOT fixed that way: on a floor rolling off as
- * sinc^2 the extension reaches past the first null and inflates the low bins
- * instead, which test_tracking's red-floor case catches. See rs_local_ratio()
- * and `docs/CODE-REVIEW.md`. */
-#define RS_LOCAL_REF_BINS (2u * (RS_LOCAL_HALF_BINS - RS_LOCAL_GUARD_BINS))
+ * IT IS THE COUNT BEING CONSTANT THAT MATTERS, AND THE VALUE IS THE ONE THE BAND
+ * FLOOR CAN SUPPLY (item 110). The background is a median, and the median of ten
+ * draws is about twice as variable as the median of twenty; the statistic is
+ * then MAXIMISED over the band, so any bin scored against fewer references wins
+ * the maximum more often for no reason in the scene. The earlier form clipped a
+ * fixed +-RS_LOCAL_HALF_BINS interval at the band edges, giving the first
+ * admissible bin ten references against a mid-band bin's twenty. Measured on 200
+ * realisations of noise with nothing in them, the 39% of the band with a starved
+ * neighbourhood took **72% of the maxima**, a per-bin rate of 2.98% against
+ * 0.75% -- and both frequencies item 109's report named sit in that zone.
+ *
+ * So the count is levelled DOWN, to what the bin at the floor has room for:
+ * RS_LOCAL_HALF_BINS - RS_LOCAL_GUARD_BINS references, all on one side there and
+ * split either side elsewhere. Levelling UP was tried first and is wrong -- it
+ * makes the neighbourhood reach past a red floor's first null and fails
+ * test_tracking's red-floor case. Narrowing costs a little precision in the
+ * background estimate and buys a statistic that means the same thing at every
+ * frequency, which is what a maximum over the band requires. */
+#define RS_LOCAL_REF_BINS (RS_LOCAL_HALF_BINS - RS_LOCAL_GUARD_BINS)
 
 /* Find the strongest peak measured against ITS OWN neighbourhood rather than
  * against the whole spectrum.

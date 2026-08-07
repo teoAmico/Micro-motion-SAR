@@ -951,31 +951,38 @@ static double rs_median_inplace(double *v, size_t n);
  * least RS_LOCAL_REF_BINS doubles, supplied by the caller so the inner loops
  * allocate nothing.
  *
- * THE NEIGHBOURHOOD IS CLIPPED TO THE ADMISSIBLE BAND, SO THE EDGE BINS ARE
- * SCORED AGAINST FEWER REFERENCES THAN THE MIDDLE, AND THAT IS A MEASURED BIAS
- * THIS DOES NOT FIX (item 110). At RS_LOCAL_HALF_BINS 12 and a guard of 2, the
- * first admissible bin gets 10 references where a mid-band bin gets 20. The
- * median of 10 draws is about twice as variable as the median of 20, and this
- * statistic is then MAXIMISED over the band, so the edges win the maximum out of
- * proportion to their content. Measured on the item 109 collect: the first
- * admissible bin held the largest block of nominating windows, 14 of 225, and
- * both band edges were over-represented.
+ * EVERY BIN IS SCORED AGAINST THE SAME NUMBER OF REFERENCES, TAKEN AS THE
+ * NEAREST AVAILABLE ONES OUTSIDE THE GUARD, AND THE COUNT IS WHAT MATTERS
+ * (item 110). The earlier form took a fixed +-RS_LOCAL_HALF_BINS interval and
+ * CLIPPED it at the band edges, so the first admissible bin was scored against
+ * 10 references where a mid-band bin got 20. The median of 10 draws is about
+ * twice as variable as the median of 20; this statistic is then MAXIMISED over
+ * the band, so the noisier denominators won the maximum out of proportion to
+ * their content. Measured on scenes containing NOTHING -- 200 realisations of
+ * flat unit-mean noise, the argmax bin recorded each time:
  *
- * THE OBVIOUS FIX IS WORSE AND THE TEST SUITE CAUGHT IT. Growing the
- * neighbourhood outward on whichever side has bins, until every candidate has
- * the same 20 references, does drop that block from 14 to 9 -- and it FAILS
- * test_tracking's red-floor case, because on a floor rolling off as sinc^2 the
- * extension reaches past the first null into the deep tail, depresses the median
- * and inflates the very low-frequency bins it was meant to demote. That is the
- * limit this header already records: a floor steeper than locally flat needs a
- * NARROWER neighbourhood or a FITTED SLOPE, and reaching further is the opposite
- * of both. Left as a known bias with a test standing against the wrong fix.
- * `docs/CODE-REVIEW.md` carries what a real fix has to do.
+ *     starved bins   24 of 62 (39% of the band)   took 72% of the maxima
+ *     per-bin rate   2.98% starved  against  0.75% full   -- 4.0x
+ *
+ * and the two frequencies item 109's report actually named, its first
+ * admissible bin and bin 61, are both in that starved zone.
+ *
+ * THE FIX IS A NARROWER NEIGHBOURHOOD, NOT A WIDER ONE, and getting that
+ * backwards is how the first attempt failed. Growing outward until every bin has
+ * TWENTY references equalises the count and FAILS test_tracking's red-floor
+ * case, because on a floor rolling off as sinc^2 the extension reaches past the
+ * first null into the deep tail, depresses the median and inflates the very low
+ * bins it was meant to demote. Requiring the count every bin can supply --
+ * RS_LOCAL_REF_BINS, which is what the band floor itself has room for -- is a
+ * strict NARROWING: the span never exceeds RS_LOCAL_HALF_BINS anywhere, and
+ * mid-band it shrinks to about +-7. A narrower neighbourhood is also what this
+ * header has said a steep floor needs since item 47.
  *
  * Reference bins are taken only from at or above 'k_lo': below it lies the Hann
  * skirt of any residual trend (RS_SPECTRUM_LEAKAGE_BINS), which is not an
  * estimate of this band's noise and would inflate every background near the
- * floor.
+ * floor. The neighbourhood at the floor is therefore one-sided -- one-sided and
+ * the same length as everywhere else, which is the property that matters.
  *
  * 'out_n_ref' receives how many references were found, for a caller that reports
  * it; it may be NULL. It is set even on the refusal paths, because "too few
@@ -983,14 +990,11 @@ static double rs_median_inplace(double *v, size_t n);
 static double rs_local_ratio(const double *P, size_t k, size_t k_lo,
                              size_t n_freq, double *ref, size_t *out_n_ref)
 {
-    const size_t lo = (k > k_lo + RS_LOCAL_HALF_BINS) ? k - RS_LOCAL_HALF_BINS : k_lo;
-    const size_t hi = (k + RS_LOCAL_HALF_BINS + 1 < n_freq)
-                    ? k + RS_LOCAL_HALF_BINS + 1 : n_freq;
     size_t n_ref = 0;
-    for (size_t j = lo; j < hi; j++) {
-        const size_t d = (j > k) ? j - k : k - j;
-        if (d <= RS_LOCAL_GUARD_BINS) continue;
-        ref[n_ref++] = P[j];
+    for (size_t d = RS_LOCAL_GUARD_BINS + 1;
+         d <= RS_LOCAL_HALF_BINS && n_ref < RS_LOCAL_REF_BINS; d++) {
+        if (k >= k_lo + d)                          ref[n_ref++] = P[k - d];
+        if (n_ref < RS_LOCAL_REF_BINS && k + d < n_freq) ref[n_ref++] = P[k + d];
     }
     if (out_n_ref) *out_n_ref = n_ref;
     if (n_ref < 4) return -1.0;

@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 105 items and their status.
+an index of all 106 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,29 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**THE TRANSITION IS LOOK-COUNT INDEPENDENT, AND A REAL BRIDGE HAS BEEN MEASURED
+WITHOUT CORNER REFLECTORS** (item 106). Pre-registered at `833c160`: the
+brightness transition at **256 looks is identical to 128**, collect for collect
+(C10 recovers only at REL 20, C14 at 20 and 10). **The sub-look SCR penalty is
+dead in every regime tested** and the 11-17 dB gap against PS-InSAR is not about
+sub-look resolution. Kept detail: the uninjected artefact MOVES with look count
+and differently per collect — **C10 goes 0.665 to 1.331 Hz, exactly 2x and the
+same fraction of Nyquist, so it is periodic in LOOK INDEX (16 looks per cycle);
+C14 goes 0.499 to 20.486 Hz**, band floor to near Nyquist. Two motionless scenes,
+two mechanisms. **CORRECTION TO ITEM 104**: Lotti et al., *Monitoring Bridge
+Vibrations via Spaceborne SAR Micro-Doppler* (Struct. Control Health Monit.,
+publ. 13 Jan 2026, open access) measures the **South Portland Street Suspension
+Bridge** from two Umbra-04 spotlights against **synchronous** ground truth, with
+**NO corner reflectors** — because *"the bridge is highly reflective... due to its
+steel structure and the presence of sharp features and corners"*. Peak LOS
+velocities **0.5-2 mm/s**, frequencies **1.5-2 Hz**, velocity error **~1 mm/s**,
+**spectral correlation up to 0.88**, `df` **0.06 Hz from 16 s**. **So a real
+structure CAN supply the 20-26 dB itself if it is steel with sharp corners** —
+item 104's requirement stands, its pessimism does not. **This also updates item
+70**, which quotes the EVACES 2025 conference version at `df` 0.138 Hz and
+Pearson 0.33-0.47; the journal figures are **0.06 Hz and up to 0.88**, and those
+are the ones to quote.
 
 **THE PREDICTED SUB-LOOK SCR PENALTY IS NOT THERE** (item 105). I reasoned from
 the literature that N sub-looks each carry `B/N` of the bandwidth, so each cell

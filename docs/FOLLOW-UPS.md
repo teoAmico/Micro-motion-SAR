@@ -147,6 +147,7 @@ said, not better) and item 7's line numbers.
 | 103 | **corrects 102** | the floor is PER-TARGET: three floors 34x apart, and the operative one is competition with the scene's artefact |
 | 104 | **answers the reach question** | recovery needs 20-26 dB SCR; the field's own validations put a corner reflector on the structure |
 | 105 | **refutes my own prediction** | no sub-look SCR penalty at REL 20; the floor falls as N^-0.36 and 256 looks beats 128 |
+| 106 | **corrects 104 and 70** | the transition is look-count independent; a real bridge HAS been measured, without corner reflectors |
 
 ---
 
@@ -8982,3 +8983,80 @@ and the only cost paid is Nyquist rising past anything of interest. **Item 13's
 advice concerns OVERLAP, not look count, and nothing here contradicts it** -- but
 the look count has been fixed at 128 throughout this file for reasons that were
 never measured, and at 256 the floor is 23% lower.
+
+
+---
+
+## 106. The transition does NOT move with look count, and a real bridge HAS been measured without corner reflectors.
+
+Two results. The first closes item 105's last open possibility; the second
+corrects item 104.
+
+### The brightness transition is identical at 256 looks
+
+Pre-registered at `833c160`, identical to item 104 except `--n 256`:
+
+| REL | C10 at 128 | C10 at 256 | C14 at 128 | C14 at 256 |
+|---|---|---|---|---|
+| 20 | recovered | **recovered** | recovered | **recovered** |
+| 10 | artefact | **artefact** | recovered | **recovered** |
+| 5 | artefact | **artefact** | artefact | **artefact** |
+| 2 | artefact | **artefact** | artefact | **artefact** |
+| 1 | artefact | **artefact** | artefact | **artefact** |
+
+**Unchanged, collect for collect.** H1 fails exactly as pre-registered, so the
+sub-look SCR penalty does not bite at low REL either. **It is dead in every
+regime tested**, and the 11-17 dB gap against PS-InSAR's threshold is not about
+sub-look resolution.
+
+### The artefact is not at a fixed frequency
+
+A detail worth keeping: the uninjected control's reported frequency **moves with
+the look count**, differently per collect.
+
+```
+  C10   0.665 Hz at 128 looks -> 1.331 Hz at 256   -- exactly 2x, the same
+                                                      FRACTION of Nyquist (1/16)
+  C14   0.499 Hz at 128 looks -> 20.486 Hz at 256  -- band floor to near Nyquist
+```
+
+C10's artefact is periodic in LOOK INDEX rather than in time -- sixteen looks per
+cycle at both settings. C14's is not, and moves somewhere else entirely. **Two
+motionless scenes, two different mechanisms**, which is consistent with item 96's
+finding that each realisation invents its own frequency and adds that the
+invention is not even of one kind.
+
+### The literature correction: item 104 is out of date
+
+Item 104 said the field's validated results put a corner reflector on the
+structure, and that infrastructure measurement remained future work. That was
+true of Vattulainen et al.'s metrological assessment. **It is no longer true of
+the field.**
+
+Lotti et al., *Monitoring Bridge Vibrations via Spaceborne SAR Micro-Doppler*
+(Structural Control and Health Monitoring, accepted 4 Dec 2025, published
+13 Jan 2026, open access) measures a **real full-scale structure**:
+
+- **South Portland Street Suspension Bridge, Glasgow**, two Umbra-04 spotlight
+  acquisitions, validated against **synchronous** ground truth.
+- **No corner reflectors.** The paper's reason is the answer to the question item
+  104 left open: *"the bridge is highly reflective in SAR images due to its steel
+  structure and the presence of sharp features and corners, enhancing its
+  visibility in the reflectivity map."*
+- Peak LOS velocities **0.5-2 mm/s**, dominant frequencies **1.5-2 Hz**,
+  **velocity error of order 1 mm/s**, **spectral correlation with ground truth up
+  to 0.88**, and **frequency resolution 0.06 Hz from a 16 s acquisition**.
+- It positions the corner-reflector-on-a-shaker work as the PRIOR art it goes
+  beyond.
+
+**So a real structure can supply the 20-26 dB itself, if it is steel with sharp
+corners.** Item 104's requirement stands; its pessimism about who can meet it
+does not.
+
+### This also updates item 70
+
+Item 70 cites the EVACES 2025 conference version of the same campaign at
+`df` 0.138 Hz and Pearson **0.33-0.47**. The journal version reports **0.06 Hz**
+and **up to 0.88**. **Quote the journal figures, not the conference ones** -- and
+item 70's use of 0.47 as "what validated means there" is no longer the best
+available number.

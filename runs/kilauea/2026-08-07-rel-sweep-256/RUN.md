@@ -8,16 +8,27 @@
 
 ## Collect
 
-```
-(fill in: file, size, dwell, pulses, range bins)
-```
+Two complete Kilauea Capella spotlights, 6.0 s seconds-matched truncation,
+**256 looks**. Naples segment 02 at a fixed 0.26 mm and 1.00 Hz; only REL varies.
 
 ## Commands
 
-```sh
-(paste each command verbatim, including every option)
-```
+See `relsweep256.sh`. Pre-registered in `PREREG.md` at commit 833c160.
 
 ## Result
 
-*To be completed. A null result stays here rather than being deleted.*
+**H1 FAILS, exactly as pre-registered.** The brightness transition is identical
+at 256 looks and at 128: C10 recovers only at REL 20, C14 at REL 20 and 10.
+
+The sub-look SCR penalty therefore does not bite at low REL either, and is dead
+in every regime tested. The 11-17 dB gap against PS-InSAR is not about sub-look
+resolution.
+
+A detail kept: the uninjected control's frequency MOVES with look count, and
+differently per collect. C10 goes 0.665 -> 1.331 Hz, exactly 2x and the same
+fraction of Nyquist, so its artefact is periodic in LOOK INDEX rather than in
+time -- sixteen looks per cycle at both settings. C14 goes 0.499 -> 20.486 Hz,
+band floor to near Nyquist, which is not the same behaviour at all.
+
+Full write-up, and a literature correction to items 104 and 70, in
+`docs/FOLLOW-UPS.md` item 106.

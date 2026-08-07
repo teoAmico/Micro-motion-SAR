@@ -13,7 +13,7 @@ Read `README.md` and `docs/FOLLOW-UPS.md` before changing anything in the tracki
 spectrum stages. `FOLLOW-UPS.md` is the record of what has been tried and disproven,
 including entries that withdraw earlier entries; none of it is recoverable from the
 code, and several conclusions in it reversed after further measurement. It opens with
-an index of all 113 items and their status.
+an index of all 114 items and their status.
 
 `docs/CODE-REVIEW.md` is the companion: defects found by READING the code against its
 own documentation rather than by measuring it, each with file:line and what a fix has
@@ -168,6 +168,42 @@ at full bandwidth" on an FX product needs the window applied AFTER the transform
 or a streaming read. Related: **`info` loads the whole signal array**, so it
 cannot describe a product larger than RAM — 282,972 x 27,650 is 62.6 GB, and the
 Kilauea collects fail it on a 24 GB machine.
+
+**ITEM 108 IS REFUSED, AND NO PERMUTATION NULL ON THE NOMINATIONS CAN BE EXACT**
+(item 114, implemented). Item 113's residual guess -- correlation reaching beyond
+the 2x2 tile -- was **WRONG and measured wrong before anything was built on it**:
+shared nominations run 6.00 / **2.16** / 0.59 at separations 0 / 1 / 2 against a
+random-pair baseline of 0.63, so **correlation is confined to ADJACENT windows**,
+exactly the pixel-sharing range of a 32 px window at stride 16. Fourth wrong
+explanation in this arc, first caught in advance.
+
+**The real residual is that ANY FIXED PARTITION destroys correlation across its
+own boundaries** -- half of all adjacent pairs straddle one, so the tile-shift
+null reproduces only **66%** of observed adjacent sharing. Jittering the origin
+gives 63%; a boundary-free field reproduces it only as it becomes GLOBALLY
+CONSTANT (95% at copy probability 0.99), which preserves the structure the null
+exists to destroy. **At short range the mechanical correlation and the structure
+under test are the same thing.**
+
+**So bracket it.** The SHIFT draw under-correlates (66%) and gives an optimistic
+p; the DILATE draw makes a 2x2 tile share one member's nominations, each window
+keeping its OWN typical ratio, over-correlates (152%) and gives a conservative
+one. Both reported; **admission gates on the conservative end**, so the
+family-wise rate is controlled at or below nominal by construction.
+
+**MEASURED: the collect that has led with 0.997 Hz against a sought 1.00 Hz since
+item 108 now returns "nothing recurs".** That artefact's p across four items:
+**0.001 -> 0.010 -> 0.342**. Both real motionless controls refused BY THE CHAIN,
+not by `--stable`. **H1 5 of 6, H3b 0 of 12 with recall 6 of 6, and 8 of 12
+motionless synthetic scenes silent** against item 96's 12-of-12 answer rate.
+**Every pre-registered prediction was correct**, including which recall point
+would be lost.
+
+**Two costs. C10 at 0.13 mm is refused** (p 0.942; item 113 had it at exactly
+0.050 and called it the threshold, not a recovery). **And NOT PREDICTED:
+`--stable` reportable falls 5 of 6 to 3 of 6** -- it rejects nothing, but the
+256-look runs now REFUSE, so there is no partner to compare against. A more
+specific chain gives the stabilization test less to work with.
 
 **THE CHANCE MODEL ASSUMED WINDOWS NOMINATE INDEPENDENTLY, AND 50% OVERLAP MAKES
 NEIGHBOURS CORRELATED** (item 113, implemented; **this is item 108's cause**).
@@ -1456,7 +1492,7 @@ catches that. Neither substitutes for the other.
 
 **`docs/HANDOFF.md` is the current state of play** — what the last session
 established, the one named defect to work on next, and the assets on disk. Read
-it before `FOLLOW-UPS.md`, which is 113 items and is the record rather than the
+it before `FOLLOW-UPS.md`, which is 114 items and is the record rather than the
 plan.
 
 The short version: the tracker recovers signals the SELECTION discards, and item
@@ -1464,11 +1500,12 @@ The short version: the tracker recovers signals the SELECTION discards, and item
 SUPPORT gate (28 of a required 34) and, had it been admitted, out-ranked on
 EXTENT by artefacts covering one more window. Item 111 removed the band-edge
 bias manufacturing the artefacts it lost to; item 112 stopped the strength term
-measuring the background; item 113 replaced a null that assumed independent
-windows where overlap makes them correlated. **Recall is 6 of 6, the synthetic
-false-positive rate 0 of 12, and every injected run now admits exactly one
-mode.** Item 108's false positive survives at p 0.010 rather than 0.001 --
-improved tenfold, not solved, and still rejected only by `--stable`.
+measuring the background; items 113-114 replaced a null that assumed independent
+windows where overlap makes them correlated, and bracketed what no permutation
+null can compute exactly. **Item 108's false positive is now REFUSED by the
+chain at p 0.342**, both real motionless controls are silent, 8 of 12 motionless
+synthetic scenes return nothing, and recall is 5 of 6 on real data and 6 of 6 on
+synthetic.
 
 ## State of the work
 

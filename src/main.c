@@ -2910,15 +2910,18 @@ static int rs_cmd_mmotion(int argc, char **argv)
                    ms.n_mode, ms.n_mode == 1 ? "" : "s", ms.admit_min,
                    ms.n_voting, ms.n_per_window, ms.n_bin,
                    ms.support_min, ms.expected_false);
-            printf("           chance alone reaches evidence %.1f here (%zu "
-                   "trials, worst %.1f), so what\n"
-                   "           a mode must beat is derived from this "
-                   "configuration, not fixed. The null\n"
-                   "           SHIFTS 2x2 TILES of windows, preserving the "
-                   "correlation that window\n"
-                   "           overlap creates -- an independent draw understates "
-                   "it about tenfold\n",
-                   ms.null_ev_crit, ms.n_trial, ms.null_ev_max);
+            printf("           chance reaches evidence %.1f to %.1f here (%zu "
+                   "trials each, worst %.1f).\n"
+                   "           TWO nulls, because neither is exact and they "
+                   "BRACKET the truth: both\n"
+                   "           shift 2x2 tiles of windows to keep the "
+                   "correlation window overlap\n"
+                   "           creates, one keeping each window's own "
+                   "nominations and one forcing\n"
+                   "           the whole tile to share. A mode is admitted on "
+                   "the CONSERVATIVE end\n",
+                   ms.null_ev_crit, ms.null_ev_crit_max, ms.n_trial,
+                   ms.null_ev_max);
             for (size_t i = 0; i < ms.n_mode; i++)
                 printf("           %6.3f Hz (sub-bin %.3f +- %.3f)   block %3zu "
                        "(p %.3f-%.3f)   support %3zu/%zu   ratio %.1f   "

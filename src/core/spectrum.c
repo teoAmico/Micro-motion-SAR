@@ -1683,18 +1683,36 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
     out->n_trial = RS_MODAL_NULL_TRIALS;
     qsort(null_ev, RS_MODAL_NULL_TRIALS, sizeof *null_ev, rs_cmp_stat);
     qsort(null_hi, RS_MODAL_NULL_TRIALS, sizeof *null_hi, rs_cmp_stat);
-    out->null_ev_max = null_hi[RS_MODAL_NULL_TRIALS - 1];
-    out->null_ev_crit = null_ev[RS_MODAL_NULL_TRIALS - 1];
-    out->null_ev_crit_max = null_hi[RS_MODAL_NULL_TRIALS - 1];
+    out->null_ev_max = null_ev[RS_MODAL_NULL_TRIALS - 1] >
+                       null_hi[RS_MODAL_NULL_TRIALS - 1]
+                     ? null_ev[RS_MODAL_NULL_TRIALS - 1]
+                     : null_hi[RS_MODAL_NULL_TRIALS - 1];
+    double crit_lo = null_ev[RS_MODAL_NULL_TRIALS - 1];
+    double crit_hi = null_hi[RS_MODAL_NULL_TRIALS - 1];
     for (size_t i = 0; i < RS_MODAL_NULL_TRIALS; i++) {
         const double p_i = (double)(1 + (RS_MODAL_NULL_TRIALS - i))
                          / (double)(1 + RS_MODAL_NULL_TRIALS);
         if (p_i <= RS_MODAL_P_MAX) {
-            out->null_ev_crit = null_ev[i];
-            out->null_ev_crit_max = null_hi[i];
+            crit_lo = null_ev[i];
+            crit_hi = null_hi[i];
             break;
         }
     }
+    /* WHICH DRAW IS THE CONSERVATIVE ONE IS NOT FIXED, so it is taken per scene
+     * rather than assumed. The dilated draw perturbs two things at once -- it
+     * forces total within-tile sharing, which RAISES blocks, and it replaces
+     * each window's ratio with that window's own typical one, which can LOWER
+     * the mass -- so it is not monotone in correlation and on some scenes it
+     * lands BELOW the shift draw. Measured, on the 2 mm synthetic fixture the
+     * two criticals are 54.0 and 42.9 the "wrong" way round while on the real
+     * collect they are 23.3 and 37.7 the expected way. Gating on the dilated
+     * draw unconditionally would therefore be ANTI-conservative wherever it
+     * comes out lower. Taking the larger of the two is valid whichever it is:
+     * both are approximations of the same null, and admitting only what clears
+     * the higher bar controls the family-wise rate at or below nominal under
+     * either. */
+    out->null_ev_crit = crit_lo < crit_hi ? crit_lo : crit_hi;
+    out->null_ev_crit_max = crit_lo > crit_hi ? crit_lo : crit_hi;
 
     for (size_t k = k_lo; k < n_freq; k++) {
         if (out->n_mode >= RS_MODAL_MAX_MODES) break;
@@ -1740,10 +1758,13 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
             if (null_hi[i - 1] < cand.evidence) break;
             ge_hi++;
         }
-        const double p_chance = (double)(1 + ge)
-                              / (double)(1 + RS_MODAL_NULL_TRIALS);
-        const double p_max = (double)(1 + ge_hi)
-                           / (double)(1 + RS_MODAL_NULL_TRIALS);
+        const double p_a = (double)(1 + ge)
+                         / (double)(1 + RS_MODAL_NULL_TRIALS);
+        const double p_b = (double)(1 + ge_hi)
+                         / (double)(1 + RS_MODAL_NULL_TRIALS);
+        /* The bracket, ordered per scene -- see the note on null_ev_crit. */
+        const double p_chance = p_a < p_b ? p_a : p_b;
+        const double p_max    = p_a > p_b ? p_a : p_b;
 
         /* TWO GATES, DIFFERENT IN KIND, AND THE SECOND TESTS MASS (item 113).
          * The 2x2 geometric floor says a block this small cannot DESCRIBE a

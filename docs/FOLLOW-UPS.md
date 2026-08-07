@@ -155,6 +155,7 @@ said, not better) and item 7's line numbers.
 | 111 | **fixes 110's leftovers** | the band-edge bias is real and measured (72% of maxima on 39% of the band); the fix is to NARROW not widen. Nothing lost, one artefact gone, abstentions 5/12 -> 3/12. Third defect named: median_ratio is a median over CHANCE nominators |
 | 112 | **first 6 of 6** | the ranking's strength term was a median over CHANCE nominators; over the mode's own block instead, recall 5/6 -> 6/6 and synthetic false positives 1/12 -> 0/12. Item 103's competition floor is a property of the SELECTION too |
 | 113 | **fixes 108's cause** | the null assumed windows nominate independently where 50% overlap makes neighbours correlated -- Eklund/Nichols/Knutsson's published cluster-failure mode. Permutation null on cluster MASS: injected runs admit ONE mode, item 96's 100% answer rate broken, 108's p 0.001 -> 0.010 but not refused |
+| 114 | **REFUSES item 108** | correlation is confined to ADJACENT windows, so 113's residual guess was wrong; the real one is that any fixed partition loses correlation at its boundaries and no permutation null can be exact. Bracket p between two nulls, gate on the conservative: item 108 refused at p 0.342, recall 5/6, 8/12 motionless scenes silent |
 
 ---
 
@@ -9757,3 +9758,103 @@ brackets the truth between. `--stable` is still what rejects it.
   them; read the `REFUSED` column.
 - Two real collects, one placement, one operating point. **Still a selection
   result, not a detection.**
+
+---
+
+## 114. A permutation null on the nominations CANNOT be made exact. Bracket it instead, gate on the conservative end, and item 108 is finally refused.
+
+Pre-registered at `6fb1cb4`. **Every prediction recorded there was correct**,
+including the exact recall figure and which point would be lost.
+`runs/kilauea/2026-08-07-bracket/`, `runs/synthetic/2026-08-07-bracket-null/`.
+
+### Item 113's stated residual was WRONG, and measuring first is what caught it
+
+Item 113 supposed the correlation between windows reached beyond the 2x2 tile its
+null decorrelates. Measured on the motionless C14 collect, shared nominations by
+window separation:
+
+| separation | 0 | 1 | 2 | 3-7 | random pair |
+|---|---|---|---|---|---|
+| shared of 6 | 6.00 | **2.16** | 0.59 | 0.57-0.63 | 0.63 |
+
+**The correlation is confined to ADJACENT windows and is at the random-pair
+baseline by separation 2** -- exactly the pixel-sharing range of a 32 px window
+at stride 16. The 2x2 tile was the right scale all along. That is the fourth
+wrong explanation caught in this arc, and the first one caught *before* anything
+was built on it.
+
+### The real residual, and why it cannot be removed
+
+**Any FIXED partition destroys the correlation across its own boundaries.** Half
+of all adjacent pairs straddle one, so item 113's tile-shift null reproduces only
+**66%** of the observed adjacent sharing and is still anti-conservative.
+Measured attempts to close it:
+
+| construction | reproduces observed d=1 sharing |
+|---|---|
+| fixed 2x2 tiling (item 113) | 66% |
+| jittered tile origin | 63% |
+| boundary-free field, copy probability 0.8 | 67% |
+| ... 0.95 | 86% |
+| ... 0.99 | 95% |
+
+A boundary-free shift field only reproduces the observed correlation as it
+becomes **globally constant** -- which preserves the very structure the null
+exists to destroy. **A permutation null on the nominations cannot be made exact**,
+because at short range the mechanical correlation and the structure under test
+are the same thing.
+
+### So bracket it
+
+Two nulls bound the truth from both sides. The **shift** draw keeps each window's
+own nominations and under-correlates at 66% of observed, giving an optimistic p.
+The **dilate** draw makes the whole 2x2 tile share one member's nomination
+pattern -- each window keeping its own typical ratio, because borrowing the
+source's would manufacture a uniformly clean block no real scene produces -- and
+over-correlates at 152%, giving a conservative one. Both are reported; **admission
+gates on the conservative end**, so the family-wise rate is controlled at or
+below nominal by construction.
+
+### Measured: item 108 is refused
+
+**H4 passes.** The collect that has led with 0.997 Hz against a sought 1.00 Hz
+since item 108 now returns **nothing recurs across the windows**:
+
+```
+the closest was 0.997 Hz, nominated by 35 of 225 windows in a
+largest block of 17 at evidence 28.4 (p 0.342 against chance,
+which reaches 37.7 here).
+```
+
+That artefact's p across four items: **0.001 -> 0.010 -> 0.342.** C10's
+motionless control is refused at both look counts, its best candidate at p 0.999.
+
+**H3 2 of 2, both by the CHAIN rather than by `--stable`. H1 5 of 6 against a
+bar of 4. H3b 0 of 12 with injected recall 6 of 6**, and **8 of 12 motionless
+synthetic scenes now refuse outright** against item 113's 4 and item 96's 0.
+**Item 96 measured 12 of 12 motionless scenes returning a confident frequency;
+two thirds are now silent, with no null control.**
+
+| p bracket | verdict |
+|---|---|
+| C14 motionless (item 108) 0.342 | refused |
+| C10 motionless 0.999 | refused |
+| C10 injected 0.13 mm 0.942 | refused |
+| C10 injected 0.26 mm **0.001-0.043** | admitted, and the width is the honest statement |
+| C10 injected 0.53 mm 0.001-0.012 | admitted |
+| C14 injected 0.13-0.53 mm 0.001-0.006 | admitted |
+
+### Costs, and one of them was not predicted
+
+- **H1 is 5 of 6.** C10 at 0.13 mm is refused at p 0.942. Item 113 had it at
+  exactly p = 0.050 and called it "the threshold, not a recovery"; the
+  conservative null puts it firmly on the chance side. Predicted, and priced.
+- **NOT PREDICTED: `--stable` reportable falls from 5 of 6 to 3 of 6.** It
+  rejects nothing -- the **256-look runs now refuse**, so there is no second
+  answer to compare against. C10 at 0.26 and C14 at 0.13 both recover correctly
+  at 128 and lose their partner. A more specific chain gives the stabilization
+  test less to work with, and that trade is now on the record.
+- The synthetic arm shows **no** recall cost and the real arm does. Read them
+  together; the synthetic injection is 2 mm, 6.9x that fixture's floor.
+- Two real collects, one placement, one operating point, target put where it was
+  found. **Still a selection result, not a detection.**

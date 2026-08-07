@@ -2003,7 +2003,16 @@ typedef struct {
     double freq_hz;       /* the BIN CENTRE, unchanged since item 70 */
     size_t n_support;     /* windows that listed it among their own peaks */
     size_t n_contiguous;  /* largest 4-connected block of those windows */
-    double median_ratio;  /* median local ratio across those windows */
+    /* Median local ratio across the windows of THAT BLOCK, not across every
+     * window that nominated the bin (item 112). Most nominators nominate by
+     * chance -- each window picks RS_MODAL_PER_WINDOW bins wherever they fall,
+     * so every bin of a K-bin band collects about n_win * M / K of them from
+     * noise alone, 22 of 225 at the 65-bin operating point against reported
+     * supports of 28 to 46. Summarising over all of them measured the
+     * background: planting a line at FIVE TIMES the amplitude moved this number
+     * from 5.97 to 6.39. The block is the mode's measured footprint, so the
+     * scattered chance nominators are excluded by construction. */
+    double median_ratio;
 
     /* THE ORDERING STATISTIC: n_contiguous * log(median_ratio), zero when the
      * median ratio does not exceed 1.

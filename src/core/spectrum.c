@@ -1232,37 +1232,68 @@ static double rs_binom_tail(size_t n, double p, size_t s)
     return sum > 1.0 ? 1.0 : sum;
 }
 
+/* One 4-connected flood fill from 'start' over the naz x nrg window grid,
+ * visiting set windows of 'v' that 'seen' has not already claimed. Returns the
+ * component's size and, when 'mask' is non-NULL, sets its members there. Split
+ * out of rs_largest_block() so that finding the largest component and recovering
+ * WHICH windows it holds are the same traversal written once. */
+static size_t rs_flood(const unsigned char *v, size_t n_win,
+                       size_t naz, size_t nrg, size_t start,
+                       unsigned char *seen, size_t *stack, unsigned char *mask)
+{
+    size_t top = 0, size = 0;
+    stack[top++] = start; seen[start] = 1;
+    while (top > 0) {
+        const size_t cur = stack[--top];
+        size++;
+        if (mask) mask[cur] = 1;
+        const size_t ia = (naz > 0) ? cur % naz : cur;
+        const size_t ir = (naz > 0) ? cur / naz : 0;
+        const long da[4] = { -1, 1, 0, 0 }, dr[4] = { 0, 0, -1, 1 };
+        for (int d = 0; d < 4; d++) {
+            const long a2 = (long)ia + da[d], r2 = (long)ir + dr[d];
+            if (a2 < 0 || r2 < 0 || (size_t)a2 >= naz || (size_t)r2 >= nrg)
+                continue;
+            const size_t nb = (size_t)r2 * naz + (size_t)a2;
+            if (nb >= n_win || seen[nb] || !v[nb]) continue;
+            seen[nb] = 1; stack[top++] = nb;
+        }
+    }
+    return size;
+}
+
 /* The largest 4-connected block of set windows in 'v', by flood fill over the
  * naz x nrg window grid. This is the mode SHAPE measure: a structure occupies
  * contiguous ground, a noise line does not. 'seen' and 'stack' are scratch of
  * n_win each, supplied by the caller because the null below calls this tens of
- * thousands of times and must allocate nothing inside its loop. */
+ * thousands of times and must allocate nothing inside its loop.
+ *
+ * 'mask', when non-NULL, receives the MEMBERSHIP of that largest block and not
+ * merely its size -- it is cleared first, so a caller may pass the same buffer
+ * repeatedly. That membership is the mode's measured footprint, and item 112
+ * needs it: a mode's strength has to be summarised over the windows that carry
+ * it rather than over every window that happened to nominate the bin. Recovering
+ * it costs one extra fill from the winning component's start, which is cheap
+ * beside the search that found it and keeps the null's inner loop -- which
+ * passes NULL -- exactly as it was. */
 static size_t rs_largest_block(const unsigned char *v, size_t n_win,
                                size_t naz, size_t nrg,
-                               unsigned char *seen, size_t *stack)
+                               unsigned char *seen, size_t *stack,
+                               unsigned char *mask)
 {
     memset(seen, 0, n_win * sizeof *seen);
-    size_t largest = 0;
+    size_t largest = 0, best_start = n_win;
     for (size_t start = 0; start < n_win; start++) {
         if (!v[start] || seen[start]) continue;
-        size_t top = 0, size = 0;
-        stack[top++] = start; seen[start] = 1;
-        while (top > 0) {
-            const size_t cur = stack[--top];
-            size++;
-            const size_t ia = (naz > 0) ? cur % naz : cur;
-            const size_t ir = (naz > 0) ? cur / naz : 0;
-            const long da[4] = { -1, 1, 0, 0 }, dr[4] = { 0, 0, -1, 1 };
-            for (int d = 0; d < 4; d++) {
-                const long a2 = (long)ia + da[d], r2 = (long)ir + dr[d];
-                if (a2 < 0 || r2 < 0 || (size_t)a2 >= naz || (size_t)r2 >= nrg)
-                    continue;
-                const size_t nb = (size_t)r2 * naz + (size_t)a2;
-                if (nb >= n_win || seen[nb] || !v[nb]) continue;
-                seen[nb] = 1; stack[top++] = nb;
-            }
+        const size_t size = rs_flood(v, n_win, naz, nrg, start, seen, stack, NULL);
+        if (size > largest) { largest = size; best_start = start; }
+    }
+    if (mask) {
+        memset(mask, 0, n_win * sizeof *mask);
+        if (best_start < n_win) {
+            memset(seen, 0, n_win * sizeof *seen);
+            rs_flood(v, n_win, naz, nrg, best_start, seen, stack, mask);
         }
-        if (size > largest) largest = size;
     }
     return largest;
 }
@@ -1344,7 +1375,8 @@ static resonarsat_status_t rs_modal_null(const unsigned char *voting, size_t n_w
             if (support[k] < support_min) continue;
             const unsigned char *v = voted + k * n_win;
             for (size_t i = 0; i < n_win; i++) col[i] = v[i];
-            const size_t b = rs_largest_block(col, n_win, naz, nrg, seen, stack);
+            const size_t b = rs_largest_block(col, n_win, naz, nrg, seen, stack,
+                                              NULL);
             if (b > largest) largest = b;
         }
         hist[largest]++;
@@ -1423,23 +1455,29 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
     double *ref     = malloc(RS_LOCAL_REF_BINS * sizeof *ref);
     double *ratio   = malloc(n_freq * sizeof *ratio);
     size_t *support = calloc(n_freq, sizeof *support);
-    /* Every window's ratio at every bin, so a mode's median can be taken over
-     * the windows that actually nominated it rather than over all of them. */
+    /* Scratch for the ratios a mode's median is taken over. */
     double *acc     = malloc(spec->n_win * sizeof *acc);
     size_t *pick    = malloc(RS_MODAL_PER_WINDOW * sizeof *pick);
+    /* [n_freq][n_win] the ratio each window scored a bin at, INDEXED BY WINDOW
+     * so that an entry can be looked up for a named window rather than only
+     * iterated in nomination order. Item 112 needs that: the median is taken
+     * over the windows of the mode's block, which is a set of window indices.
+     * Only entries whose 'voted' flag is set have been written. */
     double **nom    = calloc(n_freq, sizeof *nom);
     /* [n_freq][n_win] which windows nominated each bin, so a candidate's
      * SHAPE on the window grid can be measured and not just its count. */
     unsigned char *voted = calloc(n_freq * spec->n_win, sizeof *voted);
     unsigned char *seen  = malloc(spec->n_win * sizeof *seen);
     size_t *stack   = malloc(spec->n_win * sizeof *stack);
+    /* Membership of the winning block, refilled per candidate (item 112). */
+    unsigned char *block = malloc(spec->n_win * sizeof *block);
     /* Which windows nominated anything, so the chance model below draws over
      * the same grid positions rather than over an equally-sized different set. */
     unsigned char *voting = calloc(spec->n_win, sizeof *voting);
     if (!ref || !ratio || !support || !acc || !pick || !nom || !voted ||
-        !seen || !stack || !voting) {
+        !seen || !stack || !block || !voting) {
         free(ref); free(ratio); free(support); free(acc); free(pick); free(nom);
-        free(voted); free(seen); free(stack); free(voting);
+        free(voted); free(seen); free(stack); free(block); free(voting);
         rs_set_error("modal set: out of memory");
         return RS_ERR_ALLOC;
     }
@@ -1448,7 +1486,7 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
         if (!nom[k]) {
             for (size_t j = 0; j < k; j++) free(nom[j]);
             free(ref); free(ratio); free(support); free(acc); free(pick); free(nom);
-            free(voted); free(seen); free(stack); free(voting);
+            free(voted); free(seen); free(stack); free(block); free(voting);
             rs_set_error("modal set: out of memory");
             return RS_ERR_ALLOC;
         }
@@ -1481,7 +1519,7 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
                 best = k; best_r = ratio[k];
             }
             if (best == n_freq) break;
-            nom[best][support[best]] = best_r;
+            nom[best][w] = best_r;
             support[best]++;
             voted[best * spec->n_win + w] = 1;
             pick[n_pick++] = best;
@@ -1521,7 +1559,7 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
     if (!hist) {
         for (size_t k = 0; k < n_freq; k++) free(nom[k]);
         free(ref); free(ratio); free(support); free(acc); free(pick); free(nom);
-        free(voted); free(seen); free(stack); free(voting);
+        free(voted); free(seen); free(stack); free(block); free(voting);
         rs_set_error("modal set: out of memory");
         return RS_ERR_ALLOC;
     }
@@ -1533,7 +1571,7 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
         free(hist);
         for (size_t k = 0; k < n_freq; k++) free(nom[k]);
         free(ref); free(ratio); free(support); free(acc); free(pick); free(nom);
-        free(voted); free(seen); free(stack); free(voting);
+        free(voted); free(seen); free(stack); free(block); free(voting);
         return st_null;                     /* rs_modal_null set the message */
     }
     out->n_trial = RS_MODAL_NULL_TRIALS;
@@ -1543,7 +1581,7 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
         free(hist);
         for (size_t k = 0; k < n_freq; k++) free(nom[k]);
         free(ref); free(ratio); free(support); free(acc); free(pick); free(nom);
-        free(voted); free(seen); free(stack); free(voting);
+        free(voted); free(seen); free(stack); free(block); free(voting);
         rs_set_error("modal set: out of memory");
         return RS_ERR_ALLOC;
     }
@@ -1580,7 +1618,8 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
          * not. */
         const unsigned char *v = voted + k * spec->n_win;
         const size_t largest = rs_largest_block(v, spec->n_win, spec->n_win_az,
-                                                spec->n_win_rg, seen, stack);
+                                                spec->n_win_rg, seen, stack,
+                                                block);
         const double p_chance = (double)(1 + tail[largest])
                               / (double)(1 + RS_MODAL_NULL_TRIALS);
 
@@ -1602,13 +1641,25 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
             continue;
         }
 
-        for (size_t i = 0; i < support[k]; i++) acc[i] = nom[k][i];
+        /* THE MEDIAN IS OVER THE BLOCK, NOT OVER EVERY NOMINATOR (item 112).
+         * Most nominators nominated by chance: each window picks
+         * RS_MODAL_PER_WINDOW bins wherever they fall, so every bin of a K-bin
+         * band collects about n_win * M / K nominations from noise alone -- 22
+         * of 225 at the 65-bin operating point, against reported supports of 28
+         * to 46. Taking the median over all of them measured the background and
+         * not the mode: planting a line at five times the amplitude moved this
+         * number from 5.97 to 6.39. The block is the mode's measured footprint,
+         * so summarising over it excludes the scattered chance nominators by
+         * construction. */
+        size_t n_acc = 0;
+        for (size_t w = 0; w < spec->n_win; w++)
+            if (block[w]) acc[n_acc++] = nom[k][w];
         rs_mode_t *m = &out->mode[out->n_mode++];
         m->bin = k;
         m->freq_hz = spec->freq[k];
         m->n_support = support[k];
         m->n_contiguous = largest;
-        m->median_ratio = rs_median_inplace(acc, support[k]);
+        m->median_ratio = (n_acc > 0) ? rs_median_inplace(acc, n_acc) : 0.0;
         m->p_chance = p_chance;
         m->evidence = rs_mode_evidence(m);
 
@@ -1644,7 +1695,7 @@ resonarsat_status_t rs_spectrum_modal_set(const rs_spectrum_t *spec,
     const size_t n_mode = out->n_mode;
     for (size_t k = 0; k < n_freq; k++) free(nom[k]);
     free(ref); free(ratio); free(support); free(acc); free(pick); free(nom);
-    free(voted); free(seen); free(stack); free(voting);
+    free(voted); free(seen); free(stack); free(block); free(voting);
 
     if (n_mode == 0) {
         rs_set_error("modal set: no bin was nominated by %u of %zu windows in a "
